@@ -481,27 +481,35 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 
 ``` java
-public static int getTextColorForBackground(int bg) {
-        double r = Color.red(bg) / 255d;
-        if(r <= 0.03928) {
-            r = r / 12.92;
-        } else {
-            r = Math.pow((r + 0.055) / 1.055, 2.4);
-        }
-        double g = Color.green(bg) / 255d;
-        if(g <= 0.03928) {
-            g = g / 12.92;
-        } else {
-            g = Math.pow((g + 0.055) / 1.055, 2.4);
-        }
-        double b = Color.blue(bg) / 255d;
-        if(b <= 0.03928) {
-            b = b / 12.92;
-        } else {
-            b = Math.pow((b + 0.055) / 1.055, 2.4);
-        }
-        return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.35 ? Color.BLACK : Color.WHITE;
-    
+public static void addRoundedBackgroundSpan(Editable editable, String subsequence, int bg) {
+        final int start = editable.length();
+        editable.append(" ");
+        editable.append(subsequence);
+        editable.append(" ");
+        editable.setSpan(
+                new RoundedBackgroundEndSpan(bg, false),
+                start,
+                start + 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        editable.setSpan(
+                new BackgroundColorSpan(bg),
+                start,
+                editable.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        editable.setSpan(
+                new ForegroundColorSpan(
+                        TextUtils.getTextColorForBackground(bg)
+                ),
+                start,
+                editable.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        editable.setSpan(
+                new RoundedBackgroundEndSpan(bg, true),
+                editable.length() - 1,
+                editable.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
 ```
 
 ``` java
