@@ -482,3 +482,5 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java"
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/SpanCache.java $cache$"
