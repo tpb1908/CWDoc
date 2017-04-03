@@ -481,6 +481,8 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 ## My Application Structure
 
 
+``` Java
+
 package com.tpb.mdtext;
 
 import android.support.annotation.NonNull;
@@ -663,7 +665,7 @@ public class Markdown {
                     else if(!url.startsWith("http://") && !url.startsWith("https://")) offset = 0;
                     if(offset != -1) {
                         s =
-                                s.substring(0, srcStart) +
+                           va.util.List; import java.util.Map; import java.util     s.substring(0, srcStart) +
                                         "https://raw.githubusercontent.com/" +
                                         fullRepoName +
                                         "/master/" + url.substring(offset) +
@@ -900,3 +902,4 @@ public class Markdown {
     }
 
 }
+```
