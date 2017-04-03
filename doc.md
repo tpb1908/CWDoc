@@ -6,9 +6,45 @@
 
 #### Git
 
+The Git version control system was developed by Linus Torvalds in 2005 and  is designed for nonlinear distributed development, whereby multiple developers work on multiple different tasks concurrently.
+
+Git is used to store snapshots of a project, and store them as unique versions.
+Git makes it easy both to rollback changes to a previous state, and to merge the project with changes made to it elsewhere.
+
+
+##### Storage
+
+Git acts as a content-addressable filesystem.
+When content is inserted into the system, the return value is a key which can later be used to retrieve the content.
+
+The key returned is a 40 character (160 bit) SHA-1 checksum of the content and its header.
+The probability of a collision occuring across n unique objects is 0.5 * n<sup>2</sup> /2^160.
+In order to achieve a 1% probability of collision 1.7x10<sup>23</sup> objects are required, which is effectively impossible.
+
+In order to store a file system strucutre, Git uses tree objects.
+Each node in the tree is constructed of four elements:
+
+- The unix file permissions
+- A pointer to either a blob or another tree
+- The hash of the object pointed to
+- The filename
+
+
+# Explain commits and then how a commit object works
+
+##### Commits
+
+When using Git it is the responsibility of the user to periodically tell Git to store their project.
+
+This is done by making a commit.
+
+
+Each developer maintains a local copy of the full development history, and changes are copied from one repository to another.
+
+
 #### GitHub
 
-GitHub is hosting service for Git repositories, and the largest host of source code in the world. The Git version control system around which GitHub is based was developed by Linus Torvalds in 2005 and  is designed for nonlinear distributed development, whereby multiple developers work on multiple different tasks concurrently.
+GitHub is hosting service for Git repositories, and the largest host of source code in the world. 
 
 GitHub adds numerous features on top of the Git system.
 
@@ -106,9 +142,45 @@ Numbered list:
 A [link](http://example.com).
 ```
 
+will be formatted as
+
+# Heading level 1
+
+## Sub-heading
+
+### Another deeper heading
+ 
+Paragraphs are separated
+by a blank line.
+
+Two spaces at the end of a line leave a  
+line break.
+
+Text attributes _italic_, *italic*, __bold__, **bold**, `monospace`.
+
+Horizontal rule:
+
+---
+
+Bullet list:
+
+  * item 1
+  * item 2
+  * item 3
+
+Numbered list:
+
+  1. item 1
+  2. item 2
+  3. item 3
+
+A [link](http://example.com).
+
 GitHub uses its own markdown structure with some extra features.
 
-Dashes can be used to create lists:
+##### Lists
+
+ Dashes can be used to create lists:
 
 ```
 - Item 1
@@ -138,11 +210,128 @@ creates
   - Item 2 depth 2
 - Item 2 
 
+##### Images
+
+Images can be inserted inline
+
+
+```
+![Image description](image_url)
+```
+
+should load and display the image
+
+further, 
+
+```
+![Image description](relative_path)
+```
+
+should attempt to load the image from the current repository.
+
+##### Blockquotes
+
+Blockquotes are displayed in the same way as a HTML blockquote tag
+
+```
+> Some quoted text
+> across 
+> multiple lines
+```
+
+> Some quoted text  
+> across  
+> multiple lines
+
+##### Strikethroughs
+
+Placing two tildes on either side of a sequence will draw a stirkethrough through it
+
+```
+~~text~~
+```
+
+will be displayed as
+
+~~text~~
+
+##### References
+
+Issue references
+
+A # followed by the number of an issue within the repository will be shown as a link to that issue
+
+User references
+
+An @ followed by a username will be shown as a link to that user
+
+
+##### Emoji
+
+Emoji names wrapped in colons are converted to emoji characters
+
+```
+:camel:
+```
+
+is displayed as the emoji character 🐫
+
+
+##### Code 
+
+Code can be inserted between triple backquotes 
+
+```
+
+ ``` Language
+
+ Some code
+
+ ```
+
+```
+
+Will display the code without applying any other formatting
+
+``` C
+float Q_rsqrt( float number )
+{
+	long i;
+	float x2, y;
+	const float threehalfs = 1.5F;
+
+	x2 = number * 0.5F;
+	y  = number;
+	i  = * ( long * ) &y;                       // evil floating point bit level hacking
+	i  = 0x5f3759df - ( i >> 1 );               // what the fuck? 
+	y  = * ( float * ) &i;
+	y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+//	y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+
+	return y;
+}
+```
+##### HTML
+
+The HTML tags which correspond to each of the markdown features can be used in place of the markdown characters.
+
+There are also further tags which do not have a markdown equivalance:
+
+The sup and sub tags display text as <sup>super</sup> and <sub>sub</sub> script respectively.
+
+The font tag can be used to choose a text color and face
+
+```<font color="red" face="impact">Formatted text</font>```
+
+gives <font color="red" face="impact">Formatted text</font>
+
+# Design
+
 ## Android Application Structure
 
 ### Activities
 
-The Android developer documentation defines an```Activity``` as ‘a single, focused thing that the user can do.’.
+The Android developer documentation defines an ```Activity``` as ‘a single, focused thing that the user can do.’.
 The ```Activity``` class is responsible for creating the window in which an application's UI is placed.
 
 When an ```Activity``` is launched, the Android system first calls the ```onCreate``` method, in which the ```Activity``` should create its view tree (if applicable) and perform any setup that it needs to.

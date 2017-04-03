@@ -68,16 +68,75 @@ Each item within a column is either a card, which is simply a string of markdown
 
 #### Markdown
 
+Markdown is a markup language with plain text syntax.
 
+Markdown doesn't have a common standard, however there are some universal rules.
 
+```
+# Heading level 1
 
+## Sub-heading
 
-
-
-
+### Another deeper heading
  
+Paragraphs are separated
+by a blank line.
 
+Two spaces at the end of a line leave a  
+line break.
 
+Text attributes _italic_, *italic*, __bold__, **bold**, `monospace`.
+
+Horizontal rule:
+
+---
+
+Bullet list:
+
+  * item 1
+  * item 2
+  * item 3
+
+Numbered list:
+
+  1. item 1
+  2. item 2
+  3. item 3
+
+A [link](http://example.com).
+```
+
+GitHub uses its own markdown structure with some extra features.
+
+Dashes can be used to create lists:
+
+```
+- Item 1
+- Item 2
+- Item 3
+```
+
+creates
+
+- Item 1
+- Item 2
+- Item 3
+
+Nested lists are also supported
+
+```
+- Item 1
+  - Item 1 depth 2
+  - Item 2 depth 2
+- Item 2 
+```
+
+creates
+
+- Item 1
+  - Item 1 depth 2
+  - Item 2 depth 2
+- Item 2 
 
 ## Android Application Structure
 
@@ -479,52 +538,3 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 ## My Application Structure
 
-
-``` java
-public static void addRoundedBackgroundSpan(Editable editable, String subsequence, int bg) {
-        final int start = editable.length();
-        editable.append(" ");
-        editable.append(subsequence);
-        editable.append(" ");
-        editable.setSpan(
-                new RoundedBackgroundEndSpan(bg, false),
-                start,
-                start + 1,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        editable.setSpan(
-                new BackgroundColorSpan(bg),
-                start,
-                editable.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        editable.setSpan(
-                new ForegroundColorSpan(
-                        TextUtils.getTextColorForBackground(bg)
-                ),
-                start,
-                editable.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-
-        editable.setSpan(
-                new RoundedBackgroundEndSpan(bg, true),
-                editable.length() - 1,
-                editable.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    }
-```
-
-``` java
-package com.tpb.mdtext;
-
-import android.text.SpannableString;
-
-/**
- * Created by theo on 06/03/17.
- */
-
-public interface SpanCache {
-
-    void cache(SpannableString text);
-
-}
-
-```
