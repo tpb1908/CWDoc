@@ -477,7 +477,6 @@ Each method takes a ```TAG``` string which is used to identify the source of the
  - WTF (What a terrible failure) Used to report an exception that should never happen.
 
 
-
 ## My Application Structure
 
 
