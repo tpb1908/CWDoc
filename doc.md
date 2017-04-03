@@ -68,16 +68,75 @@ Each item within a column is either a card, which is simply a string of markdown
 
 #### Markdown
 
+Markdown is a markup language with plain text syntax.
 
+Markdown doesn't have a common standard, however there are some universal rules.
 
+```
+# Heading level 1
 
+## Sub-heading
 
-
-
-
+### Another deeper heading
  
+Paragraphs are separated
+by a blank line.
 
+Two spaces at the end of a line leave a  
+line break.
 
+Text attributes _italic_, *italic*, __bold__, **bold**, `monospace`.
+
+Horizontal rule:
+
+---
+
+Bullet list:
+
+  * item 1
+  * item 2
+  * item 3
+
+Numbered list:
+
+  1. item 1
+  2. item 2
+  3. item 3
+
+A [link](http://example.com).
+```
+
+GitHub uses its own markdown structure with some extra features.
+
+Dashes can be used to create lists:
+
+```
+- Item 1
+- Item 2
+- Item 3
+```
+
+creates
+
+- Item 1
+- Item 2
+- Item 3
+
+Nested lists are also supported
+
+```
+- Item 1
+  - Item 1 depth 2
+  - Item 2 depth 2
+- Item 2 
+```
+
+creates
+
+- Item 1
+  - Item 1 depth 2
+  - Item 2 depth 2
+- Item 2 
 
 ## Android Application Structure
 
@@ -479,7 +538,3 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 ## My Application Structure
 
-
-#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static void addRoundedBackgroundSpan$"
-
-#import "markdowntextview/src/main/java/com/tpb/mdtext/SpanCache.java $cache$"
