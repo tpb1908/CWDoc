@@ -480,3 +480,4 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 ## My Application Structure
 
+#import markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java
