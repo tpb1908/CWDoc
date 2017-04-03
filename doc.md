@@ -480,6 +480,6 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 ## My Application Structure
 
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $getTextColorForBackground$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static int getTextColorForBackground$"
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/SpanCache.java $cache$"

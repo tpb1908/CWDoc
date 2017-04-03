@@ -481,20 +481,7 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 
 ``` java
-getTextColorForBackground(bg)
-                ),
-                start,
-                editable.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-
-        editable.setSpan(
-                new RoundedBackgroundEndSpan(bg, true),
-                editable.length() - 1,
-                editable.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    }
-
-    public static int getTextColorForBackground(int bg) {
+public static int getTextColorForBackground(int bg) {
         double r = Color.red(bg) / 255d;
         if(r <= 0.03928) {
             r = r / 12.92;
