@@ -1,17 +1,17 @@
  
-## Analysis
+# Analysis
 
-### Background
+## Background
 
 
-#### Git
+### Git
 
 The Git version control system was developed by Linus Torvalds in 2005 and  is designed for nonlinear distributed development, whereby multiple developers work on multiple different tasks concurrently.
 
 Git is used to store snapshots of a project, and store them as unique versions.
 Git makes it easy both to rollback changes to a previous state, and to merge the project with changes made to it elsewhere.
 
-##### Storage
+#### Storage
 
 Git acts as a content-addressable filesystem.
 When content is inserted into the system, the return value is a key which can later be used to retrieve the content.
@@ -29,31 +29,31 @@ Each node in the tree is constructed of four elements:
 - The filename
 
 
-##### Repositories
+#### Repositories
 
 Each project is stored in a repository.
 A repository contains a set of commit objects, and a set of references to commit objects, called heads.
 
-##### Commits
+#### Commits
 
 A commit object contains:
 - A set of files, describing the project state at the time of the commit
 - References to parent commit objects
 - An SHA1 checksum which uniquely identifies the commit object
 
-##### Heads
+#### Heads
 
 A head is a reference to a commit object.
 Each head has a name, with the default name being 'master'.
 A repository can contain any number of heads, but at any one time there is only a single current head.
 
-##### Branches
+#### Branches
 
 Every branch has a head and every head has a branch. The only difference between the two is that while a branch refers to a head and the entire history of ancestor commits preceding it, a head is used to refer to a single commit object, the most recent commit in a branch.
 
 When the user switches branches their current head pointer is changed to point to the branches head, and all of their working files are rewritten to match those at that head commit.
 
-##### Merging
+#### Merging
 
 When work has been completed on one branch, the changes need to be brought into another branch in order to allow others to use the changes.
 
@@ -74,13 +74,13 @@ When asked to merge a branch 'changed' into a branch 'other' Git:
         - Inform the user of the problem without creating a commit
 
 
-#### GitHub
+### GitHub
 
 GitHub is hosting service for Git repositories, and the largest host of source code in the world. 
 
 GitHub adds numerous features on top of the Git system.
 
-##### Issues
+#### Issues
 
 Issues are a tracker system for ‘tasks, enhancements, and bugs’.
 Each repository has its own Issues section. Within the issues section of a repository each issue has its own content. The screenshot below shows the issues section for a repository.
@@ -106,7 +106,7 @@ The comments section consists of a mixed feed of comments and events as shown be
 
 ![Issue comments](http://imgur.com/06VkP61.png)
 
-##### Pull requests
+#### Pull requests
 
 A pull request is effectively a subclass of issue.
 A pull request is designed to notify users about changes which you have made to a repository.
@@ -114,7 +114,7 @@ A pull request is designed to notify users about changes which you have made to 
 As a pull request follows the issue model it has the same comments section as an issue.
 The primary difference is that a pull request also references any number of commits which can be merged into the repository.
 
-##### Projects
+#### Projects
 
 'Projects' were introduced in September 2016.
 The aim of projects is to integrate the planning of a project and its features into the development process, as such projects are closely linked with the issue system.
@@ -135,7 +135,7 @@ Each column has a title and can be reordered within the project.
 Each item within a column is either a card, which is simply a string of markdown up to 250 characters in length, or a reference to an issue, which displays a link to the issue, its state, labels, and assignees.
 
 
-##### Integrations
+#### Integrations
 
 Integrations are designed to extend GitHub's functionality.
 An integration can be installed to a users account or to a single repository, allowing it hook access.
@@ -150,7 +150,7 @@ Continuous integration is a practice where checked in code is verified against a
 Continuous integrations are often used as checks on pull requests. If a check fails the pull request will not be merged.
 
 
-#### Markdown
+### Markdown
 
 Markdown is a markup language with plain text syntax.
 
@@ -226,7 +226,7 @@ A [link](http://example.com).
 
 GitHub uses its own markdown structure with some extra features.
 
-##### Lists
+#### Lists
 
  Dashes can be used to create lists:
 
@@ -258,7 +258,7 @@ creates
   - Item 2 depth 2
 - Item 2 
 
-##### Images
+#### Images
 
 Images can be inserted inline
 
@@ -277,7 +277,7 @@ further,
 
 should attempt to load the image from the current repository.
 
-##### Blockquotes
+#### Blockquotes
 
 Blockquotes are displayed in the same way as a HTML blockquote tag
 
@@ -291,7 +291,7 @@ Blockquotes are displayed in the same way as a HTML blockquote tag
 > across  
 > multiple lines
 
-##### Strikethroughs
+#### Strikethroughs
 
 Placing two tildes on either side of a sequence will draw a stirkethrough through it
 
@@ -303,7 +303,7 @@ will be displayed as
 
 ~~text~~
 
-##### References
+#### References
 
 Issue references
 
@@ -314,7 +314,7 @@ User references
 An @ followed by a username will be shown as a link to that user
 
 
-##### Emoji
+#### Emoji
 
 Emoji names wrapped in colons are converted to emoji characters
 
@@ -325,7 +325,7 @@ Emoji names wrapped in colons are converted to emoji characters
 is displayed as the emoji character 🐫
 
 
-##### Code 
+#### Code 
 
 Code can be inserted between triple backquotes 
 
@@ -359,7 +359,7 @@ float Q_rsqrt( float number )
 	return y;
 }
 ```
-##### HTML
+#### HTML
 
 The HTML tags which correspond to each of the markdown features can be used in place of the markdown characters.
 
@@ -374,7 +374,7 @@ The font tag can be used to choose a text color and face
 gives <font color="red" face="impact">Formatted text</font>
 
 
-### Identification of the problem
+## Identification of the problem
 
 In July 2012, GitHub released an offical app for Android.
 
@@ -384,14 +384,160 @@ In July 2012, GitHub released an offical app for Android.
 
 
 GitHub later dropped support for their app in favour of a mobile website with severely limited features.
+GitHub's mobile website allows viewing most important information about a repository, as well as creating comments on issues and commits, however it has no editing functionality for content which has already been created.
+Some areas, such as the projects section, are entirely missing from the mobile website.
 
 The source of the original app has been used to continue support for a number of similar apps, however they have the same limitations as the original app as they are built on a 5 year old codebase.
 Further, the maintainers of some of the most used GitHub apps have recently dropped their support.
 
+### Users
+
+According to GitHub's 2016 statistics there are 5.8 million active GitHub users with over 19.4 million repositories.
+
+As GitHub is designed for groups of developers to collaborate it is reasonable to assume that GitHub's users would make use of a method for keeping track of their projects without having access to a computer.
 
 
+### Proposition and objectives
+
+I will develop a GitHub client for Android to implement the features of the GitHub website.
+
+In order to be more useful than GitHub's mobile website, and other clients, an Android client must implement most of the functionality of the desktop website.
 
 
+The client must implement the following features:
+
+- Sign in
+    - Allow the user to log in to GitHub with their credentials
+    - Store the authentication token received from GitHub
+- Users
+    - Display available information about a user
+        - Name
+        - Avatar
+        - Join date
+        - Contributions in graphical form
+        - Statistics on contributions
+    - Repositories
+        - List the repositories that a user has created
+        - List private repositories for the authenticated user
+        - Display the repository primary language
+        - Display the last time that the repository was updated
+        - Display the number of users that have starred or forked the repository
+        - Allow a user to pin a repository to the top of their repository list
+    - Stars
+        - Display the list of repositories that a user has starred
+    - Gists
+        - Display the gists that a user has created
+        - Display private gists for the authenticated user
+    - Following
+        - Display the users that a user is following
+    - Followers
+        - Display the users that are following a user
+    - Events
+        - Display the events relevant to a user
+        - Display private events for the authenticated user
+
+- Repositories
+    - Display information about the repository
+        - Repository size
+        - Number of issues
+        - Number of forks
+        - Number of stars
+        - The repositories license type
+        - Display the text of the license
+    - Repository files
+        - Display the repositories file tree
+        - Allow viewing the file tree for different branches
+        - Display files within the repository
+    - README
+        - Display the README in a suitable format for a mobile device
+    - Commits
+        - List the commits made to a repository
+        - Allow selecting the branch for which to show commits
+        - List the user that made the commit, and the commit message
+    - Issues
+       - List the issues made on a repository
+       - Display information about each issue
+           - The issue state
+           - The issue number
+           - The user that opened the issue
+           - The user that closed the issue (If closed)
+           - The date at which the issue was opened
+           - The user(s) assigned to the issue
+           - The tag(s) added to the issue
+           - The number of comments made on the issue
+        - Allow filtering the issues list
+            - By state 
+                - Open
+                - Closed
+                - Any
+            - By labels
+            - By assignee
+        - Allow searching the issues list
+            - Real time searching
+            - Fuzzy string comparison
+        - Allow toggling issue state
+        - Allow editing issues (See issues section)
+        - Allow creating issues (See issues section)
+    - Projects
+        - List the projects made on a repository
+        - Display information about each project
+            - Name
+            - Description
+            - State
+                - Open
+                - Closed
+            - Last update date
+        - Allow toggling project state
+        - Allow deleting projects
+        - Allowing editing projects and their descriptions
+- Issues
+    - Display information about the issue
+        - Title
+        - Number
+        - State
+        - Body
+        - User that opened the issue
+        - Date that the issue was opened
+        - User(s) assigned to the issue
+        - Labels added to the issue
+        - Display the list of events which have occured on the issue
+            - Closed - When the issue was closed, and the commit if it was closed from a commit message
+            - Reopened- When the issue was re-opened, and by whom
+            - Subscribed- When a user subscribed to the issue, and who subscribed
+            - Merged- When the issue (A pull request) was merged, the commit, and the user that merged the issue
+            - Referenced- When the issue was referenced from a commit message, and the commit
+            - Mentioned- When a user was mentioned in the body, and the user that was mentioned
+            - Assigned- When a user was assigned to the issue, the user that was assigned, and by whom
+            - Unassigned- When a user was unassinged from the issue, the user that was unassigned, and by whom
+            - Labeled- When a label was added to the issue, and by whom
+            - Unlabeled- When a label was removed from the issue, and by whom
+            - Milestoned- When the issue was added to a milestone, and by whom
+            - Demilestoned- When the issue was added to a milestone, and by whom
+            - Renamed- When the issue was renamed, the old and new names, and the user that renamed the issue
+            - Locked- When the issue was locked, and by whom
+            - Unlocked- When the issue was unlocked, and by whom
+            - Head ref deleted- When the pull request's branch was deleted
+            - Head ref restored- When the pull request's branch was restored
+            - Review requested- When a user was requested to review the pull request, and by whom
+            - Review request dismissed- When a review request was dismissed, and by whom
+            - Review request removed- When a request for a user to review the pull request was dismissed, and by whom
+            - Added to project- When the issue was added a project board
+            - Moved columns in project- When the issue was moved between columns in a project board
+            - Removed from project- When the issue was removed from a project board
+            - Converted note to issue- When the issue was created by conversion of a project note to an issue
+    - Comments
+        - Display the list of comments on the issue
+            - The user that created the comment
+            - The date that the comment was created
+            - The comment body
+        - Allow editing of comments made by the authenticated user
+        - Allow creation of comments by the authenticated user
+    - Allow editing of
+        - The issue title
+        - The issue body
+        - The issue assignee(s)
+        - The issue label(s)
+        
 
 
 

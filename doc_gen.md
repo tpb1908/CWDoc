@@ -11,7 +11,6 @@ The Git version control system was developed by Linus Torvalds in 2005 and  is d
 Git is used to store snapshots of a project, and store them as unique versions.
 Git makes it easy both to rollback changes to a previous state, and to merge the project with changes made to it elsewhere.
 
-
 ##### Storage
 
 Git acts as a content-addressable filesystem.
@@ -19,7 +18,7 @@ When content is inserted into the system, the return value is a key which can la
 
 The key returned is a 40 character (160 bit) SHA-1 checksum of the content and its header.
 The probability of a collision occuring across n unique objects is 0.5 * n<sup>2</sup> /2^160.
-In order to achieve a 1% probability of collision 1.7x10<sup>23</sup> objects are required, which is effectively impossible.
+In order to achieve a 1% probability of collision 1.7x10<sup>23</sup> objects are required, which is highly improbable.
 
 In order to store a file system strucutre, Git uses tree objects.
 Each node in the tree is constructed of four elements:
@@ -30,16 +29,49 @@ Each node in the tree is constructed of four elements:
 - The filename
 
 
-# Explain commits and then how a commit object works
+##### Repositories
+
+Each project is stored in a repository.
+A repository contains a set of commit objects, and a set of references to commit objects, called heads.
 
 ##### Commits
 
-When using Git it is the responsibility of the user to periodically tell Git to store their project.
+A commit object contains:
+- A set of files, describing the project state at the time of the commit
+- References to parent commit objects
+- An SHA1 checksum which uniquely identifies the commit object
 
-This is done by making a commit.
+##### Heads
 
+A head is a reference to a commit object.
+Each head has a name, with the default name being 'master'.
+A repository can contain any number of heads, but at any one time there is only a single current head.
 
-Each developer maintains a local copy of the full development history, and changes are copied from one repository to another.
+##### Branches
+
+Every branch has a head and every head has a branch. The only difference between the two is that while a branch refers to a head and the entire history of ancestor commits preceding it, a head is used to refer to a single commit object, the most recent commit in a branch.
+
+When the user switches branches their current head pointer is changed to point to the branches head, and all of their working files are rewritten to match those at that head commit.
+
+##### Merging
+
+When work has been completed on one branch, the changes need to be brought into another branch in order to allow others to use the changes.
+
+This is done by the merge command. 
+When asked to merge a branch 'changed' into a branch 'other' Git:
+- Finds the common ancestory of 'changed' and 'other'
+- If the ancestor commit is equal to the head of 'other'
+    - Updates 'other' by adding the commits which have been made to 'changed' since the common ancestor
+    - Updates the head pointer of 'other' to point to the same commit as 'changed'
+- Otherwise a full merge must be performed. This involves:
+    - Determining the changes made between the common ancestor and the head of 'changed'
+    - Attempt to merge these changes into 'current'
+    - If the merge was successful:
+        - Create a new commit with two parents 'changed' and 'other'
+        - Set 'other' and the working head to point to this commit
+    - Otherwise
+        - Insert conflict markers into the file
+        - Inform the user of the problem without creating a commit
 
 
 #### GitHub
@@ -101,6 +133,22 @@ Each column has a title and can be reordered within the project.
 ![Project columns](http://imgur.com/9hn7pib.png)
 
 Each item within a column is either a card, which is simply a string of markdown up to 250 characters in length, or a reference to an issue, which displays a link to the issue, its state, labels, and assignees.
+
+
+##### Integrations
+
+Integrations are designed to extend GitHub's functionality.
+An integration can be installed to a users account or to a single repository, allowing it hook access.
+
+When an integration has hook access, it is notified of changes to the repository, which might be a new commit being pushed to the repository or an issue being created.
+
+An integration could be used to automatically tag issues based on keywords in their text.
+
+A more common use of integrations is to notify a continuous integration system.
+Continuous integration is a practice where checked in code is verified against an automated build system, allowing the developer to be notified of a problem without manually running tests.
+
+Continuous integrations are often used as checks on pull requests. If a check fails the pull request will not be merged.
+
 
 #### Markdown
 
@@ -325,6 +373,39 @@ The font tag can be used to choose a text color and face
 
 gives <font color="red" face="impact">Formatted text</font>
 
+
+### Identification of the problem
+
+In July 2012, GitHub released an offical app for Android.
+
+# TODO Split frames from GIF
+
+![GitHub app](https://cloud.githubusercontent.com/assets/391331/6142496/22c87a64-b16c-11e4-8715-b1d8c1d78359.gif)
+
+
+GitHub later dropped support for their app in favour of a mobile website with severely limited features.
+
+The source of the original app has been used to continue support for a number of similar apps, however they have the same limitations as the original app as they are built on a 5 year old codebase.
+Further, the maintainers of some of the most used GitHub apps have recently dropped their support.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Design
 
 ## Android Application Structure
@@ -417,7 +498,7 @@ A layout resource file is an XML file containing the ```View``` classes to be sh
 
 A simple login ```Activity``` might have the following layout
 
-```
+``` XML
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:orientation="vertical"
@@ -456,7 +537,7 @@ Instead attributes should be specified in the applications values directory.
 The values directory is part of the resources directory, which also contains layout files and other resources such as images.
 Hint text is specified in a file called strings.xml
 
-```
+``` XML
 <resources>
         <string name="hint_login_username">Username</string>
 </resources>
@@ -464,7 +545,7 @@ Hint text is specified in a file called strings.xml
 
 This value can then be referenced elsewhere as 
 
-```
+``` XML
 <EditText
     android:id="@+id/user_name"
     android:layout_width="match_parent"
@@ -519,7 +600,7 @@ The id class contains the integer values of all the ids used throughout the app.
 
 In our ```Activity``` we create member variables for the ```Views``` which we need to access.
 
-```
+``` Java
 package com.tpb.example;
 
 import android.os.Bundle;
@@ -557,7 +638,7 @@ ButterKnife is an annotation processor which generates the necessary lookups fro
 
 The same ```Activity``` class using ButterKnife is as follows
 
-```
+``` Java
 @BindView(R.id.user_name) EditText mUserNameEditor;
 @BindView(R.id.password) EditText mPasswordEditor;
 @BindView(R.id.button) Button mLoginButton;
@@ -578,7 +659,7 @@ ButterKnife can also other resources
 
 As well as assigning click listeners to ```Views``` 
 
-```
+```Java
 @OnClick(R.id.button)
 void onButtonClick() {
     //Do something
@@ -586,7 +667,7 @@ void onButtonClick() {
 ```
 
 rather than 
-```
+``` Java
 mLoginButton.setOnClickListener(new View.OnClickListener() {
     @Override
     public void onClick(View v) {
@@ -635,7 +716,7 @@ Gradle is a plugin based system which makes it particularly useful for Android d
 
 A build script for a near empty project may appear as follows
 
-```
+``` gradle
 apply plugin: 'com.android.application'
 
 android {
@@ -678,7 +759,7 @@ If the Git version control system is being used, this can be achieved by checkin
 
 This is done by executing a Git command to count the number of revisions.
 
-```
+``` gradle
 def gitInfo() {
     def commitCount = 0
     def revision = "(unknown revision)"
