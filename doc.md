@@ -537,8 +537,62 @@ The client must implement the following features:
         - The issue body
         - The issue assignee(s)
         - The issue label(s)
-        
+- Projects
+    - Display information about each column
+        - The column title
+        - The last time that the column was updated
+        - The number of cards in the column
+    - Allow creation of new columns
+    - Allow deletion of columns
+    - Display cards for each column
+        - For note cards display the not text
+        - For issue cards display
+            - The issue title
+            - The issue body
+            - The issue state
+            - The issue number
+            - The number of comments on the issue
+            - The user that opened the issue
+            - The user that closed the issue
+            - The user(s) that are assigned to the issue
+            - The label(s) assigned to the issue
+    - Allow editing note cards
+        - Editing note text
+        - Deleting note cards
+    - Allow editing issue cards
+        - Allowing editing the issue
+        - Allow toggling the issue state
+        - Allow removing the issue card
+    - Allow creating new cards
+        - Create note cards with note text limited to the correct text length
+        - Create issue cards
+            - Create a new issue with the same functionality as creating a new issue elsewhere
+            - Create a new card linked to the created issue
+    - Implement searching project cards
+        - Search text of cards and issues
+        - Fuzzy text searching
+        - Jump to and highlight selected item
+- Link handling
+    - Handle all links through github.com
+    - Gracefully reject unsupported links by showing other apps to handle the link
+    - Handle username links by opening the user
+    - Handle repository links and subsections
+        - repository links by opening the repository
+        - issues links by opening the issues section of the repository
+        - projects links by opening the projects section of the repository
+        - commits links by opening the commits section of the repository
+    - Direct item links
+        - Open individual issues from their numbers
+        - Projects
+            - Open individual projects from their numbers
+            - Within a project, jump to a selected card from the url
+        - Open indiidual files from their links
+    - Open links to project file trees
 
+
+
+
+#  TODO Add objectives for Markdown, Interceptor, and notifications
 
 
 
