@@ -411,287 +411,288 @@ In order to be more useful than GitHub's mobile website, and other clients, an A
 
 The client must implement the following features:
 
-- Sign in
-    - Allow the user to log in to GitHub with their credentials
-    - Store the authentication token received from GitHub
-- Users
-    - Display available information about a user
-        - Name
-        - Avatar
-        - Join date
-        - Contributions in graphical form
-        - Statistics on contributions
-    - Repositories
-        - List the repositories that a user has created
-        - List private repositories for the authenticated user
-        - Display the repository primary language
-        - Display the last time that the repository was updated
-        - Display the number of users that have starred or forked the repository
-        - Allow a user to pin a repository to the top of their repository list
-    - Stars
-        - Display the list of repositories that a user has starred
-    - Gists
-        - Display the gists that a user has created
-        - Display private gists for the authenticated user
-    - Following
-        - Display the users that a user is following
-    - Followers
-        - Display the users that are following a user
-    - Events
-        - Display the events relevant to a user
-        - Display private events for the authenticated user
+```
+1. Sign in
+    a. Allow the user to log in to GitHub with their credentials
+    b. Store the authentication token received from GitHub
+2. Users
+    a. Display available information about a user
+        i. Name
+        ii. Avatar
+        iii. Join date
+        iv. Contributions in graphical form
+        v. Statistics on contributions
+    b. Repositories
+        i. List the repositories that a user has created
+        ii. List private repositories for the authenticated user
+        iii. Display the repository primary language
+        iv. Display the last time that the repository was updated
+        v. Display the number of users that have starred or forked the repository
+        vi. Allow a user to pin a repository to the top of their repository list
+    c. Stars
+        i. Display the list of repositories that a user has starred
+    d. Gists
+        i. Display the gists that a user has created
+        ii. Display private gists for the authenticated user
+    e. Following
+        i. Display the users that a user is following
+    f. Followers
+        ii. Display the users that are following a user
+    g. Events
+        i. Display the events relevant to a user
+        ii. Display private events for the authenticated user
 
-- Repositories
-    - Display information about the repository
-        - Repository size
-        - Number of issues
-        - Number of forks
-        - Number of stars
-        - The repositories license type
-        - Display the text of the license
-    - Repository files
-        - Display the repositories file tree
-        - Allow viewing the file tree for different branches
-        - Display files within the repository
-    - README
-        - Display the README in a suitable format for a mobile device
-    - Commits
-        - List the commits made to a repository
-        - Allow selecting the branch for which to show commits
-        - List the user that made the commit, and the commit message
-    - Issues
-       - List the issues made on a repository
-       - Display information about each issue
-           - The issue state
-           - The issue number
-           - The user that opened the issue
-           - The user that closed the issue (If closed)
-           - The date at which the issue was opened
-           - The user(s) assigned to the issue
-           - The tag(s) added to the issue
-           - The number of comments made on the issue
-        - Allow filtering the issues list
-            - By state 
-                - Open
-                - Closed
-                - Any
-            - By labels
-            - By assignee
-        - Allow searching the issues list
-            - Real time searching
-            - Fuzzy string comparison
-        - Allow toggling issue state
-        - Allow editing issues (See issues section)
-        - Allow creating issues (See issues section)
-    - Projects
-        - List the projects made on a repository
-        - Display information about each project
-            - Name
-            - Description
-            - State
-                - Open
-                - Closed
-            - Last update date
-        - Allow toggling project state
-        - Allow deleting projects
-        - Allowing editing projects and their descriptions
-- Issues
-    - Display information about the issue
-        - Title
-        - Number
-        - State
-        - Body
-        - User that opened the issue
-        - Date that the issue was opened
-        - User(s) assigned to the issue
-        - Labels added to the issue
-        - Display the list of events which have occured on the issue
-            - Closed - When the issue was closed, and the commit if it was closed from a commit message
-            - Reopened- When the issue was re-opened, and by whom
-            - Subscribed- When a user subscribed to the issue, and who subscribed
-            - Merged- When the issue (A pull request) was merged, the commit, and the user that merged the issue
-            - Referenced- When the issue was referenced from a commit message, and the commit
-            - Mentioned- When a user was mentioned in the body, and the user that was mentioned
-            - Assigned- When a user was assigned to the issue, the user that was assigned, and by whom
-            - Unassigned- When a user was unassinged from the issue, the user that was unassigned, and by whom
-            - Labeled- When a label was added to the issue, and by whom
-            - Unlabeled- When a label was removed from the issue, and by whom
-            - Milestoned- When the issue was added to a milestone, and by whom
-            - Demilestoned- When the issue was added to a milestone, and by whom
-            - Renamed- When the issue was renamed, the old and new names, and the user that renamed the issue
-            - Locked- When the issue was locked, and by whom
-            - Unlocked- When the issue was unlocked, and by whom
-            - Head ref deleted- When the pull request's branch was deleted
-            - Head ref restored- When the pull request's branch was restored
-            - Review requested- When a user was requested to review the pull request, and by whom
-            - Review request dismissed- When a review request was dismissed, and by whom
-            - Review request removed- When a request for a user to review the pull request was dismissed, and by whom
-            - Added to project- When the issue was added a project board
-            - Moved columns in project- When the issue was moved between columns in a project board
-            - Removed from project- When the issue was removed from a project board
-            - Converted note to issue- When the issue was created by conversion of a project note to an issue
-    - Comments
-        - Display the list of comments on the issue
-            - The user that created the comment
-            - The date that the comment was created
-            - The comment body
-        - Allow editing of comments made by the authenticated user
-        - Allow creation of comments by the authenticated user
-    - Allow editing of
-        - The issue title
-        - The issue body
-        - The issue assignee(s)
-        - The issue label(s)
-- Commits
-    - Display information about the commit
-        - The commit message
-        - The time that the commit was created
-        - The user that created the commit
-        - The number of additions and deletions made in the commit
-    - Diffs
-        - List the changed files
-        - Display information about the changed files
-            - The file state
-                - Created
-                - Deleted
-                - Modified
-            - The number of additions and deletions
-        - Display and highlight the changed lines of code
-    - Comments
-        - Display the list of comments on the commit
-            - The user that created the comment
-            - The date that the comment was created
-            - The comment body
-        - Allow editing of comments made by the authenticated user
-        - Allow creation of comments by the authenticated user
-    - Statuses
-        - Display the overall status for a commit
-        - Display the integration that created a status
-        - Link to the status information
-- Projects
-    - Display information about each column
-        - The column title
-        - The last time that the column was updated
-        - The number of cards in the column
-    - Allow creation of new columns
-    - Allow deletion of columns
-    - Display cards for each column
-        - For note cards display the not text
-        - For issue cards display
-            - The issue title
-            - The issue body
-            - The issue state
-            - The issue number
-            - The number of comments on the issue
-            - The user that opened the issue
-            - The user that closed the issue
-            - The user(s) that are assigned to the issue
-            - The label(s) assigned to the issue
-    - Allow editing note cards
-        - Editing note text
-        - Deleting note cards
-    - Allow editing issue cards
-        - Allowing editing the issue
-        - Allow toggling the issue state
-        - Allow removing the issue card
-    - Allow creating new cards
-        - Create note cards with note text limited to the correct text length
-        - Create issue cards
-            - Create a new issue with the same functionality as creating a new issue elsewhere
-            - Create a new card linked to the created issue
-    - Implement searching project cards
-        - Search text of cards and issues
-        - Fuzzy text searching
-        - Jump to and highlight selected item
-- Link handling
-    - Handle all links through github.com
-    - Gracefully reject unsupported links by showing other apps to handle the link
-    - Handle username links by opening the user
-    - Handle repository links and subsections
-        - repository links by opening the repository
-        - issues links by opening the issues section of the repository
-        - projects links by opening the projects section of the repository
-        - commits links by opening the commits section of the repository
-    - Direct item links
-        - Open individual issues from their numbers
-        - Projects
-            - Open individual projects from their numbers
-            - Within a project, jump to a selected card from the url
-        - Open indiidual files from their links
-    - Open links to project file trees
-- Notifications
-    - Run a background service to periodically check for new notifications
-    - Allow the user to disable the notification service
-    - Only load notifications created since notifications were last loaded
-    - Display different icons and titles for different notification types
-        - Assign notifications, when the user is assigned to an issue
-        - Author notifications, when an update occurs on an item which the user created
-        - Comment notifications, when an update occurs on a thread which the user commented on
-        - Invitation notifications, when the user accepts an invitation to contribute to a repository
-        - Manual notifications, when the user has manually subscribed to a thread
-        - Mention notifications, when the user has been mentioned in the content of an item
-        - State change notifications, when the user changes the state of a thread
-        - Subscribed notifications, when a change happens to a repository that the user is subscribed to
-- Markdown
-    - Parse markdown to an Android usable format
-    - Implement GitHub markdown specific features
-        - Code blocks
-            - Display short code blocks as monospaced text blocks within the text body
-            - Replace longer code blocks with clickable items to display a dialog containing the code
-        - Strikethroughs
-            - Parse strikethrougs and create the correct spans
-        - Images
-            - Parse image links
-            - Load the images asynchronously
-            - Display the images in the text body, maintaining their aspect
-            - Cache the images for later use
-            - Make image clickable, to show images in a fullscreen dialog
-        - Username mentions
-            - Find username mentions in text body
-            - Ensure that the following string matches the GitHub username format
-            - If the username is valid, replace the username text with a link
-        - Issue references
-            - Find issue references in text body
-            - Ensure that the following string is numeric
-            - Replace the issue reference text with an issue link
-        - Emojis
-            - Find emoji name strings in the text body
-            - If the emoji name is valid, replace it with the correct unicode character
-        - Checkboxes
-            - Find GitHub style checkboxes in the text body
-            - Replace the checkboxes with the correct unicode characters
-        - Background colours
-            - When displaying labels, choose a text colour which contrasts the label colour
-    - Link handling
-        - Match the same URIs that Android will normally find
-        - Attempt to ignore code strings which may match a URI
-    - Nested lists
-        - Format lists with the required indentation levels
-- Markdown editing
-    - Implement toggling of a text editor between raw markdown and formatted markdown
-    - Add utility buttons for markdown features
-        - Links
-        - Bold text
-        - Italic text
-        - Strikethrough text
-        - List items
-        - Numbered list items
-        - Quote blocks
-    - Add further utility buttons
-        - Images
-            - Allow the user to choose an image from their device or take a new image
-            - Upload the image to a hosting service
-            - Collect the image link and insert it into the text editor
-        - Code tags
-        - Emoji insertion
-            - Display a list of possible emojis
-            - Allow searching emojis by their names
-            - Insert the correct emoji text into the text editor
-        - Unicode characters
-            - Display a list of possible unicode characters
-            - Allow searching characters by their names
-            - Insert the characters into the text editor
-
+3. Repositories
+    a. Display information about the repository
+        i. Repository size
+        ii. Number of issues
+        iii. Number of forks
+        iv. Number of stars
+        v. The repositories license type
+        vi. Display the text of the license
+    b. Repository files
+        i. Display the repositories file tree
+        ii. Allow viewing the file tree for different branches
+        iii. Display files within the repository
+    c. README
+        i. Display the README in a suitable format for a mobile device
+    d. Commits
+        i. List the commits made to a repository
+        ii. Allow selecting the branch for which to show commits
+        iii. List the user that made the commit, and the commit message
+    e. Issues
+       i. List the issues made on a repository
+       ii. Display information about each issue
+           1. The issue state
+           2. The issue number
+           3. The user that opened the issue
+           4. The user that closed the issue (If closed)
+           5. The date at which the issue was opened
+           6. The user(s) assigned to the issue
+           7. The tag(s) added to the issue
+           8. The number of comments made on the issue
+        iii. Allow filtering the issues list
+            1. By state 
+                a. Open
+                b. Closed
+                c. Any
+            2. By labels
+            3. By assignee
+        iv. Allow searching the issues list
+            1. Real time searching
+            2. Fuzzy string comparison
+        v. Allow toggling issue state
+        vi. Allow editing issues (See issues section)
+        vii. Allow creating issues (See issues section)
+    f. Projects
+        i. List the projects made on a repository
+        ii. Display information about each project
+            1. Name
+            2. Description
+            3. State
+                a. Open
+                b. Closed
+            4. Last update date
+        iii. Allow toggling project state
+        iv. Allow deleting projects
+        v. Allowing editing projects and their descriptions
+4. Issues
+    a. Display information about the issue
+        i. Title
+        ii. Number
+        iii. State
+        iv. Body
+        v. User that opened the issue
+        vi. Date that the issue was opened
+        vii. User(s) assigned to the issue
+        ix. Labels added to the issue
+        x. Display the list of events which have occured on the issue
+            1. Closed - When the issue was closed, and the commit if it was closed from a commit message
+            2. Reopened- When the issue was re-opened, and by whom
+            3. Subscribed- When a user subscribed to the issue, and who subscribed
+            4. Merged- When the issue (A pull request) was merged, the commit, and the user that merged the issue
+            5. Referenced- When the issue was referenced from a commit message, and the commit
+            6. Mentioned- When a user was mentioned in the body, and the user that was mentioned
+            7. Assigned- When a user was assigned to the issue, the user that was assigned, and by whom
+            8. Unassigned- When a user was unassinged from the issue, the user that was unassigned, and by whom
+            9. Labeled- When a label was added to the issue, and by whom
+            10. Unlabeled- When a label was removed from the issue, and by whom
+            11. Milestoned- When the issue was added to a milestone, and by whom
+            12. Demilestoned- When the issue was added to a milestone, and by whom
+            13. Renamed- When the issue was renamed, the old and new names, and the user that renamed the issue
+            14. Locked- When the issue was locked, and by whom
+            15. Unlocked- When the issue was unlocked, and by whom
+            16. Head ref deleted- When the pull request's branch was deleted
+            17. Head ref restored- When the pull request's branch was restored
+            18. Review requested- When a user was requested to review the pull request, and by whom
+            19. Review request dismissed- When a review request was dismissed, and by whom
+            20. Review request removed- When a request for a user to review the pull request was dismissed, and by whom
+            21. Added to project- When the issue was added a project board
+            22. Moved columns in project- When the issue was moved between columns in a project board
+            23. Removed from project- When the issue was removed from a project board
+            24. Converted note to issue- When the issue was created by conversion of a project note to an issue
+    b. Comments
+        i. Display the list of comments on the issue
+            1. The user that created the comment
+            2. The date that the comment was created
+            3. The comment body
+        ii. Allow editing of comments made by the authenticated user
+        iii. Allow creation of comments by the authenticated user
+    c. Allow editing of
+        i. The issue title
+        ii. The issue body
+        iii. The issue assignee(s)
+        iv. The issue label(s)
+5. Commits
+    a. Display information about the commit
+        i. The commit message
+        ii. The time that the commit was created
+        iii. The user that created the commit
+        iv. The number of additions and deletions made in the commit
+    b. Diffs
+        i. List the changed files
+        ii. Display information about the changed files
+            1. The file state
+                a. Created
+                b. Deleted
+                c. Modified
+            2. The number of additions and deletions
+        iii. Display and highlight the changed lines of code
+    c. Comments
+        i. Display the list of comments on the commit
+            1. The user that created the comment
+            2. The date that the comment was created
+            3. The comment body
+        ii. Allow editing of comments made by the authenticated user
+        iii. Allow creation of comments by the authenticated user
+    d. Statuses
+        i. Display the overall status for a commit
+        ii. Display the integration that created a status
+        iii. Link to the status information
+6. Projects
+    a. Display information about each column
+        i. The column title
+        ii. The last time that the column was updated
+        iii. The number of cards in the column
+    b. Allow creation of new columns
+    c. Allow deletion of columns
+    d. Display cards for each column
+        i. For note cards display the not text
+        ii. For issue cards display
+            1. The issue title
+            2. The issue body
+            3. The issue state
+            4. The issue number
+            5. The number of comments on the issue
+            6. The user that opened the issue
+            7. The user that closed the issue
+            8. The user(s) that are assigned to the issue
+            9. The label(s) assigned to the issue
+    e. Allow editing note cards
+        i. Editing note text
+        ii. Deleting note cards
+    f. Allow editing issue cards
+        i. Allowing editing the issue
+        ii. Allow toggling the issue state
+        iii. Allow removing the issue card
+    g. Allow creating new cards
+        i. Create note cards with note text limited to the correct text length
+        ii. Create issue cards
+            1. Create a new issue with the same functionality as creating a new issue elsewhere
+            2. Create a new card linked to the created issue
+    h. Implement searching project cards
+        i. Search text of cards and issues
+        ii. Fuzzy text searching
+        iii. Jump to and highlight selected item
+7. Link handling
+    a. Handle all links through github.com
+    b. Gracefully reject unsupported links by showing other apps to handle the link
+    c. Handle username links by opening the user
+    d. Handle repository links and subsections
+        i. repository links by opening the repository
+        ii. issues links by opening the issues section of the repository
+        iii. projects links by opening the projects section of the repository
+        iv. commits links by opening the commits section of the repository
+    e. Direct item links
+        i. Open individual issues from their numbers
+        ii. Projects
+            a. Open individual projects from their numbers
+            b. Within a project, jump to a selected card from the url
+        iii. Open indiidual files from their links
+    f. Open links to project file trees
+8. Notifications
+    a. Run a background service to periodically check for new notifications
+    b. Allow the user to disable the notification service
+    c. Only load notifications created since notifications were last loaded
+    d. Display different icons and titles for different notification types
+        i. Assign notifications, when the user is assigned to an issue
+        ii. Author notifications, when an update occurs on an item which the user created
+        iii. Comment notifications, when an update occurs on a thread which the user commented on
+        iv. Invitation notifications, when the user accepts an invitation to contribute to a repository
+        v. Manual notifications, when the user has manually subscribed to a thread
+        vi. Mention notifications, when the user has been mentioned in the content of an item
+        vii. State change notifications, when the user changes the state of a thread
+        viii. Subscribed notifications, when a change happens to a repository that the user is subscribed to
+9. Markdown
+    a.  Parse markdown to an Android usable format
+    b. Implement GitHub markdown specific features
+        i. Code blocks
+            1. Display short code blocks as monospaced text blocks within the text body
+            2. Replace longer code blocks with clickable items to display a dialog containing the code
+        ii. Strikethroughs
+            1. Parse strikethrougs and create the correct spans
+        iii. Images
+            1. Parse image links
+            2. Load the images asynchronously
+            3. Display the images in the text body, maintaining their aspect
+            4. Cache the images for later use
+            5. Make image clickable, to show images in a fullscreen dialog
+        iv. Username mentions
+            1. Find username mentions in text body
+            2. Ensure that the following string matches the GitHub username format
+            3. If the username is valid, replace the username text with a link
+        v. Issue references
+            1. Find issue references in text body
+            2. Ensure that the following string is numeric
+            3. Replace the issue reference text with an issue link
+        vi. Emojis
+            1. Find emoji name strings in the text body
+            2. If the emoji name is valid, replace it with the correct unicode character
+        vii. Checkboxes
+            1. Find GitHub style checkboxes in the text body
+            2. Replace the checkboxes with the correct unicode characters
+        viii. Background colours
+            1. When displaying labels, choose a text colour which contrasts the label colour
+    c. Link handling
+        i. Match the same URIs that Android will normally find
+        ii. Attempt to ignore code strings which may match a URI
+    d. Nested lists
+        i. Format lists with the required indentation levels
+10. Markdown editing
+    a. Implement toggling of a text editor between raw markdown and formatted markdown
+    b. Add utility buttons for markdown features
+        i. Links
+        ii. Bold text
+        iii. Italic text
+        iv. Strikethrough text
+        v. List items
+        vi. Numbered list items
+        vii. Quote blocks
+    c. Add further utility buttons
+        i. Images
+            1. Allow the user to choose an image from their device or take a new image
+            2. Upload the image to a hosting service
+            3. Collect the image link and insert it into the text editor
+        ii. Code tags
+        iii. Emoji insertion
+            1. Display a list of possible emojis
+            2. Allow searching emojis by their names
+            3. Insert the correct emoji text into the text editor
+        iv. Unicode characters
+            1. Display a list of possible unicode characters
+            2. Allow searching characters by their names
+            3. Insert the characters into the text editor
+```
 
 
 ### Limitations
@@ -748,7 +749,7 @@ As the contributions image is an SVG containing the contributions information, i
 
 
 
-        
+
 ### Proposed design
 
 As explained in the background section, an Android app is made up of Activities and Fragments.
