@@ -537,6 +537,32 @@ The client must implement the following features:
         - The issue body
         - The issue assignee(s)
         - The issue label(s)
+- Commits
+    - Display information about the commit
+        - The commit message
+        - The time that the commit was created
+        - The user that created the commit
+        - The number of additions and deletions made in the commit
+    - Diffs
+        - List the changed files
+        - Display information about the changed files
+            - The file state
+                - Created
+                - Deleted
+                - Modified
+            - The number of additions and deletions
+        - Display and highlight the changed lines of code
+    - Comments
+        - Display the list of comments on the commit
+            - The user that created the comment
+            - The date that the comment was created
+            - The comment body
+        - Allow editing of comments made by the authenticated user
+        - Allow creation of comments by the authenticated user
+    - Statuses
+        - Display the overall status for a commit
+        - Display the integration that created a status
+        - Link to the status information
 - Projects
     - Display information about each column
         - The column title
@@ -588,11 +614,79 @@ The client must implement the following features:
             - Within a project, jump to a selected card from the url
         - Open indiidual files from their links
     - Open links to project file trees
-
-
-
-
-#  TODO Add objectives for Markdown, Interceptor, and notifications
+- Notifications
+    - Run a background service to periodically check for new notifications
+    - Allow the user to disable the notification service
+    - Only load notifications created since notifications were last loaded
+    - Display different icons and titles for different notification types
+        - Assign notifications, when the user is assigned to an issue
+        - Author notifications, when an update occurs on an item which the user created
+        - Comment notifications, when an update occurs on a thread which the user commented on
+        - Invitation notifications, when the user accepts an invitation to contribute to a repository
+        - Manual notifications, when the user has manually subscribed to a thread
+        - Mention notifications, when the user has been mentioned in the content of an item
+        - State change notifications, when the user changes the state of a thread
+        - Subscribed notifications, when a change happens to a repository that the user is subscribed to
+- Markdown
+    - Parse markdown to an Android usable format
+    - Implement GitHub markdown specific features
+        - Code blocks
+            - Display short code blocks as monospaced text blocks within the text body
+            - Replace longer code blocks with clickable items to display a dialog containing the code
+        - Strikethroughs
+            - Parse strikethrougs and create the correct spans
+        - Images
+            - Parse image links
+            - Load the images asynchronously
+            - Display the images in the text body, maintaining their aspect
+            - Cache the images for later use
+            - Make image clickable, to show images in a fullscreen dialog
+        - Username mentions
+            - Find username mentions in text body
+            - Ensure that the following string matches the GitHub username format
+            - If the username is valid, replace the username text with a link
+        - Issue references
+            - Find issue references in text body
+            - Ensure that the following string is numeric
+            - Replace the issue reference text with an issue link
+        - Emojis
+            - Find emoji name strings in the text body
+            - If the emoji name is valid, replace it with the correct unicode character
+        - Checkboxes
+            - Find GitHub style checkboxes in the text body
+            - Replace the checkboxes with the correct unicode characters
+        - Background colours
+            - When displaying labels, choose a text colour which contrasts the label colour
+    - Link handling
+        - Match the same URIs that Android will normally find
+        - Attempt to ignore code strings which may match a URI
+    - Nested lists
+        - Format lists with the required indentation levels
+- Markdown editing
+    - Implement toggling of a text editor between raw markdown and formatted markdown
+    - Add utility buttons for markdown features
+        - Links
+        - Bold text
+        - Italic text
+        - Strikethrough text
+        - List items
+        - Numbered list items
+        - Quote blocks
+    - Add further utility buttons
+        - Images
+            - Allow the user to choose an image from their device or take a new image
+            - Upload the image to a hosting service
+            - Collect the image link and insert it into the text editor
+        - Code tags
+        - Emoji insertion
+            - Display a list of possible emojis
+            - Allow searching emojis by their names
+            - Insert the correct emoji text into the text editor
+        - Unicode characters
+            - Display a list of possible unicode characters
+            - Allow searching characters by their names
+            - Insert the characters into the text editor
+        
 
 
 

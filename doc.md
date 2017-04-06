@@ -374,6 +374,11 @@ The font tag can be used to choose a text color and face
 gives <font color="red" face="impact">Formatted text</font>
 
 
+
+
+
+
+
 ## Identification of the problem
 
 In July 2012, GitHub released an offical app for Android.
@@ -686,18 +691,96 @@ The client must implement the following features:
             - Display a list of possible unicode characters
             - Allow searching characters by their names
             - Insert the characters into the text editor
+
+
+
+### Limitations
+
+#### Processing power
+
+Unlike the GitHub website, which has the benefit of running on more powerful devices, an Android app must perform the same tasks on a considerably less powerful device, without causing any inconvenience to the user.
+
+One of the key problems will be to ensure that the user interface remains responsive.
+By default, all logic will be run on the UI thread, which is usually the only thread which is allowed to modify a view, as only the original thread that created a view heirarchy can touch its views.
+
+In order to stop the UI thread from being blocked by other operations, such as networking or markdown rendering, worker threads should be used to perform the calculations and then call back to the main thread to perform the UI update.
+
+#### Screen size
+
+Due to the limited screen size, and vertical orientation of mobile devices, some content which has been designed to be viewed on much larger landscape oriented screens may not display properly.
+
+While not ideal, some content such as code and repository READMEs can be displayed such that they can be scrolled in two axis, as shown on the GitHub mobile website below:
+
+![Code on GitHub mobile website](http://imgur.com/oJaiBFT.png)
+
+#### API
+
+There are some limitations to the GitHub API.
+
+##### Rate limiting
+
+For non authenticated requests to the GitHub API there is a rate limit of 60 requests per hour.
+For content which must be loaded individually, this limit can be easily exceeded.
+
+Requests authenticated by a user sign in have a limit of 5000 requests per hour, an amount which a user is unlikely to exceed.
+
+In order to ensure that users do not consistenly hit rate limits, they must sign in rather than being able to use the app anonymously.
+
+##### Lack of endpoints
+
+While the GitHub API provides almost all of the data required to implement the proposed solution there are some features of the GitHub website which cannot be easily duplicated.
+
+Firstly, there is no API endpoint to find a user's pinned repositories.
+The client can still replicate this feature by pinning repositories within the app.
+
+Secondly, the API endpoint for contributions works by repository, rather than by user.
+One possibility might be to use the search API to find repositories that a user has contributed to, and load the contributions for each of them before calculating the total number of contributions made by the user.
+This is an awful idea as it will fail completely if a single request fails, as well as being unacceptably slow due to the number of requests made.
+
+Instead, the contributions image can be loaded with a single request
+
+![Contributions](http://imgur.com/4zp8SG2.png)
+
+As the contributions image is an SVG containing the contributions information, it can be easily parsed to calculate the number of contributions made per day.
         
 
 
 
 
 
+        
+### Proposed design
 
+As explained in the background section, an Android app is made up of Activities and Fragments.
 
+In order to implement the functionality listed above the app requires multiple activities to mimic the pages on the GitHub website.
 
+The initial Activity should display the same information that a user would see when they navigated to their own GitHub page.
 
+![GitHub user page](http://imgur.com/Szvqa9c.png)
 
+This page can be easily adapted to a mobile layout as it is already paginated.
 
+The root activity layout only needs to contain the navigation interface.
+This is the toolbar which displays back and settings navigation, and the viewpager layout which displays the different page names.
+
+![App user activity](http://imgur.com/BPBgFFA.png)
+
+Within the viewpager for this Activity, there will be 6 pages.
+
+The first should display information about the user and their activity
+
+![User info fragment](http://imgur.com/2G9uwEz.png)
+
+The second should list the user's repositories
+
+A single repository is shown as a list item with the repository name, description, stars and forks, and a button to pin the repository.
+
+![Repository viewholder](http://imgur.com/FARbi35.png)
+
+The third lists the user's starred repositories, using the same list item layout as the user's own repositories without the pin button.
+
+The fourth lists the user's Gists 
 
 
 # Design
