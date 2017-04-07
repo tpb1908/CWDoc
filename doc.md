@@ -672,6 +672,17 @@ The ```RecyclerView``` brought three key improvements over the ```ListView```
 
  ![Google keep](https://lh3.googleusercontent.com/fRGLrIICjExK5VqM-dL7Q4kmKtcnpVH5nyl3mHYCDKTocxrvQ1rZqLs4zyEyLRb62aNA=h900-rw)
 
+
+### Basic storage
+
+While many applications use a variety of database solutions, it is not always necessary or the best solution to store simple values in a full database.
+
+The ```SharedPreferences``` system is a persistent set of key value pairs which can be used to store application information such as settings.
+
+Each 'preference' is a key value set stored under a particular name.
+Once a ```SharedPreference``` object has been returned for the set, the key value pairs within the set can be read from and written to.
+
+
 ### Build system
 
 Android uses the Gradle build system.
