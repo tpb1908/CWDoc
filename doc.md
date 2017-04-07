@@ -17,10 +17,10 @@ Git acts as a content-addressable filesystem.
 When content is inserted into the system, the return value is a key which can later be used to retrieve the content.
 
 The key returned is a 40 character (160 bit) SHA-1 checksum of the content and its header.
-The probability of a collision occuring across n unique objects is 0.5 * n<sup>2</sup> /2^160.
+The probability of a collision occurring across n unique objects is 0.5 * n<sup>2</sup> /2^160.
 In order to achieve a 1% probability of collision 1.7x10<sup>23</sup> objects are required, which is highly improbable.
 
-In order to store a file system strucutre, Git uses tree objects.
+In order to store a file system structure, Git uses tree objects.
 Each node in the tree is constructed of four elements:
 
 - The unix file permissions
@@ -59,7 +59,7 @@ When work has been completed on one branch, the changes need to be brought into 
 
 This is done by the merge command. 
 When asked to merge a branch 'changed' into a branch 'other' Git:
-- Finds the common ancestory of 'changed' and 'other'
+- Finds the common ancestor of 'changed' and 'other'
 - If the ancestor commit is equal to the head of 'other'
     - Updates 'other' by adding the commits which have been made to 'changed' since the common ancestor
     - Updates the head pointer of 'other' to point to the same commit as 'changed'
@@ -1099,7 +1099,7 @@ The client must implement the following features:
 Unlike the GitHub website, which has the benefit of running on more powerful devices, an Android app must perform the same tasks on a considerably less powerful device, without causing any inconvenience to the user.
 
 One of the key problems will be to ensure that the user interface remains responsive.
-By default, all logic will be run on the UI thread, which is usually the only thread which is allowed to modify a view, as only the original thread that created a view heirarchy can touch its views.
+By default, all logic will be run on the UI thread, which is usually the only thread which is allowed to modify a view, as only the original thread that created a view hierarchy can touch its views.
 
 In order to stop the UI thread from being blocked by other operations, such as networking or markdown rendering, worker threads should be used to perform the calculations and then call back to the main thread to perform the UI update.
 
@@ -1122,7 +1122,7 @@ For content which must be loaded individually, this limit can be easily exceeded
 
 Requests authenticated by a user sign in have a limit of 5000 requests per hour, an amount which a user is unlikely to exceed.
 
-In order to ensure that users do not consistenly hit rate limits, they must sign in rather than being able to use the app anonymously.
+In order to ensure that users do not consistently hit rate limits, they must sign in rather than being able to use the app anonymously.
 
 ##### Lack of endpoints
 
@@ -1142,10 +1142,15 @@ Instead, the contributions image can be loaded with a single request
 As the contributions image is an SVG containing the contributions information, it can be easily parsed to calculate the number of contributions made per day.
         
 
+#### Lack of push API
 
+The GitHub API is purely restful, all data is requested by the client and returned in a JSON format.
 
+As there is no method for GitHub to notify the client of new notifications, the client must repeatedly poll the API for any updates to the user's notifications.
 
-
+In order to reduce data usage, and to ensure that the impact on rate limiting is reduced, conditional requests can be used.
+This is done by passing date-time string under the 'If-Modified-Since' header.
+If the data has not been modified, the API will return a 304 Not Modified code and the request will not count against the rate limit.
 
 ### Proposed design
 
@@ -1183,5 +1188,435 @@ The fourth lists the user's Gists
 
 # Design
 
+## Data structures and sources
+
+Almost all of the data used in the application is acquired through the GitHub API
+
+### Authentication
+
+#### Basic authentication
+
+Requests can be authenticated by sending the user's username and password in the request header, however this is not a an acceptable method of authentication for an Android client.
+
+The first problem is that, while HTTPS requests are encrypted, the request itself is likely to be logged by the Android system, and may pass through another service if the user has a VPN active.
+
+The second problem is that the user's account may require more than a password to authenticate.
+GitHub supports two factor authentication.
+If the user has activated two factor authentication, the two factor pin must be sent with each request.
+This is not a usable experience as the pin changes each minute.
+
+#### OAuth2 authentication
+
+OAuth2 authentication allows applications to request authorization to a user's account without having access to their password.
+This method also allows tokens to be limited to specific types of data, and can be revoked by the user.
+
+In order to use the OAuth API, the application must be registered with GitHub.
+
+![Application registration](http://imgur.com/EQu1SYh.png)
+
+The application is registered with information recognisable to the user to ensure their trust when authorizing the application.
+The callback URL is the URL which GitHub redirects to once the authorization is complete.
+
+##### Web authentication flow
+
+1. Redirect users to request access
+
+Display the webpage ```https://github.com/login/oauth/authorize```
+
+In order to successfully authenticate we must also pass parameters with the request.
+The only required parameter is the client id which was received when the application was registered.
+
+The scope parameter is used to specify what level of access is required to the user's account.
+
+2. Redirect
+
+If the user signs in and accepts the authorization request, GitHub redirects back to your site with a temporary parameter.
+
+The ```code``` parameter has a limited timeframe to be exchanged for an authorization token.
+
+This is done by posting to ```https://github.com/login/oauth/access_token```.
+
+The post request must have three parameters:
+
+1. The client id, which must match that provided when loading the authorization page
+2. The client secret
+3. The code received in 
+
+If the request is successful the response will be a string containing the access token in the form:
+
+``access_token=some_base_64_string&scope=the_scope_requested_in_step_1``.
+
+3. Once the access token has been received it can be used for authorization by including the authorization header with each request.
 
 
+
+##### Implementation of the authorization flow
+
+In order to avoid duplication of values used throughout the GitHub API, I have used a single abstract class to contain the headers and path keys used throughout the project
+
+``` Java
+package com.tpb.github.data;
+
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.support.annotation.Nullable;
+import android.support.annotation.StringRes;
+
+import com.androidnetworking.error.ANError;
+import com.tpb.github.R;
+import com.tpb.github.data.auth.GitHubSession;
+
+import java.util.HashMap;
+
+/**
+ * Created by theo on 18/12/16.
+ */
+
+public abstract class APIHandler {
+    static final String TAG = APIHandler.class.getSimpleName();
+
+    protected static final String GIT_BASE = "https://api.github.com";
+    private static final String ACCEPT_HEADER_KEY = "Accept";
+    private static final String ACCEPT_HEADER = "application/vnd.github.v3+json";
+    private static final String ORGANIZATIONS_PREVIEW_ACCEPT_HEADER = "application/vnd.github.korra-preview";
+    private static final String PROJECTS_PREVIEW_ACCEPT_HEADER = "application/vnd.github.inertia-preview+json";
+    private static final String REPO_LICENSE_PREVIEW_ACCEPT_HEADER = "application/vnd.github.drax-preview+json";
+    private static final String PAGES_PREVIEW_ACCEPT_HEADER = "application/vnd.github.mister-fantastic-preview+json";
+    private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
+    private static final String AUTHORIZATION_TOKEN_FORMAT = "token %1$s";
+    private static GitHubSession mSession;
+
+    protected static final HashMap<String, String> API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> PROJECTS_API_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> ORGANIZATIONS_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> LICENSES_API_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> PAGES_API_API_AUTH_HEADERS = new HashMap<>();
+
+    static final String SEGMENT_USER = "/user";
+    static final String SEGMENT_USERS = "/users";
+    static final String SEGMENT_REPOS = "/repos";
+    static final String SEGMENT_README = "/readme";
+    static final String SEGMENT_COLLABORATORS = "/collaborators";
+    static final String SEGMENT_LABELS = "/labels";
+    static final String SEGMENT_PROJECTS = "/projects";
+    static final String SEGMENT_COLUMNS = "/columns";
+    static final String SEGMENT_ISSUES = "/issues";
+    static final String SEGMENT_PERMISSION = "/permission";
+    static final String SEGMENT_CARDS = "/cards";
+    static final String SEGMENT_MOVES = "/moves";
+    static final String SEGMENT_COMMENTS = "/comments";
+    static final String SEGMENT_EVENTS = "/events";
+    static final String SEGMENT_STARRED = "/starred";
+    static final String SEGMENT_SUBSCRIPTION = "/subscription";
+    static final String SEGMENT_MILESTONES = "/milestones";
+    static final String SEGMENT_GISTS = "/gists";
+    static final String SEGMENT_FOLLOWING = "/following";
+    static final String SEGMENT_FOLLOWERS = "/followers";
+    static final String SEGMENT_COMMITS = "/commits";
+    static final String SEGMENT_NOTIFICATIONS = "/notifications";
+
+    protected APIHandler(Context context) {
+        if(mSession == null) {
+            mSession = GitHubSession.getSession(context);
+            initHeaders();
+        }
+    }
+
+    protected final void initHeaders() {
+        final String accessToken = mSession.getAccessToken();
+        API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+                String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
+        );
+        API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, ACCEPT_HEADER);
+
+        ORGANIZATIONS_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+                String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
+        );
+        ORGANIZATIONS_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, ORGANIZATIONS_PREVIEW_ACCEPT_HEADER);
+
+        PROJECTS_API_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+                String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
+        );
+        PROJECTS_API_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, PROJECTS_PREVIEW_ACCEPT_HEADER);
+
+        LICENSES_API_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+                String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
+        );
+        LICENSES_API_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, REPO_LICENSE_PREVIEW_ACCEPT_HEADER);
+
+        PAGES_API_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+                String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
+        );
+        PAGES_API_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, PAGES_PREVIEW_ACCEPT_HEADER);
+    }
+
+    private static final String CONNECTION_ERROR = "connectionError";
+
+    public static final int HTTP_OK_200 = 200; //OK
+
+    public static final String HTTP_REDIRECT_NEW_LOCATION = "Location";
+    public static final int HTTP_301_REDIRECTED = 301; //Should redirect through the value in location
+
+    public static final int HTTP_302_TEMPORARY_REDIRECT = 302; //Redirect for this request only
+    public static final int HTTP_307_TEMPORARY_REDIRECT = 307; //Same as above
+
+    private static final int HTTP_BAD_REQUEST_400 = 400; //Bad request problems parsing JSON
+
+    public static final String KEY_MESSAGE = "message";
+    private static final String MESSAGE_BAD_CREDENTIALS = "Bad credentials";
+    private static final int HTTP_UNAUTHORIZED_401 = 401; //Login required, account locked, permission error
+
+    private static final String MESSAGE_MAX_LOGIN_ATTEMPTS = "Maximum number of login attempts exceeded.";
+    
+    public static final String KEY_HEADER_RATE_LIMIT_RESET = "X-RateLimit-Reset";
+    private static final String MESSAGE_RATE_LIMIT_START = "API rate limit exceeded";
+    private static final String MESSAGE_ABUSE_LIMIT = "You have triggered an abuse detection mechanism";
+    private static final int HTTP_FORBIDDEN_403 = 403; //Forbidden server locked or other reasons
+
+    private static final int HTTP_NOT_FOUND_404 = 404;
+
+    private static final int HTTP_NOT_ALLOWED_405 = 405; //Not allowed (managed server)
+
+    private static final int HTTP_409 = 409; //Returned when loading commits for empty repo
+
+    private static final int HTTP_419 = 419; //This function can only be executed with an CL-account
+
+    public static final String ERROR_MESSAGE_UNPROCESSABLE = "Validation Failed";
+    public static final String ERROR_MESSAGE_VALIDATION_MISSING = "missing";
+    public static final String ERROR_MESSAGE_VALIDATION_MISSING_FIELD = "missing_field";
+    public static final String ERROR_MESSAGE_VALIDATION_INVALID = "invalid";
+    public static final String ERROR_MESSAGE_VALIDATION_ALREADY_EXISTS = "already_exists";
+    private static final String ERROR_MESSAGE_EMPTY_REPOSITORY = "Git Repository is empty.";
+    private static final int HTTP_UNPROCESSABLE_422 = 422; // Validation failed
+
+    //600 codes are server codes https://github.com/GleSYS/API/wiki/API-Error-codes#6xx---server
+
+    //700 codes are ip errors https://github.com/GleSYS/API/wiki/API-Error-codes#7xx---ip
+
+    //800 codes are archive codes https://github.com/GleSYS/API/wiki/API-Error-codes#8xx---archive
+
+    //900 domain https://github.com/GleSYS/API/wiki/API-Error-codes#9xx---domain
+
+    //1000 email https://github.com/GleSYS/API/wiki/API-Error-codes#10xx---email
+
+    //1100 livechat https://github.com/GleSYS/API/wiki/API-Error-codes#11xx---livechat
+
+    //1200 invoice https://github.com/GleSYS/API/wiki/API-Error-codes#11xx---livechat
+
+    //1300 glera https://github.com/GleSYS/API/wiki/API-Error-codes#13xx---glera
+
+    //1400 transaction https://github.com/GleSYS/API/wiki/API-Error-codes#14xx---transaction
+
+    //1500 vpn https://github.com/GleSYS/API/wiki/API-Error-codes#15xx---vpn
+
+    public static final int GIT_LOGIN_FAILED_1601 = 1601; //Login failed
+
+    public static final int GIT_LOGIN_FAILED_1602 = 1602; //Login failed unknown
+
+    public static final int GIT_GOOGLE_AUTHENTICATOR_OTP_REQUIRED_1603 = 1603; //Google auth error
+
+    public static final int GIT_YUBIKEY_1604 = 1604; //Yubikey OTP required
+
+    public static final int GIT_NOT_LOGGED_IN_1605 = 1605; //Not logged in as user
+
+    //1700 invite https://github.com/GleSYS/API/wiki/API-Error-codes#17xx---invite
+
+    //1800 test account https://github.com/GleSYS/API/wiki/API-Error-codes#18xx---test-account
+
+    //1900 network https://github.com/GleSYS/API/wiki/API-Error-codes#19xx---network
+
+    static APIError parseError(ANError error) {
+        APIError apiError;
+        if(CONNECTION_ERROR.equals(error.getErrorDetail())) {
+            apiError = APIError.NO_CONNECTION;
+        } else {
+            switch(error.getErrorCode()) {
+                case HTTP_BAD_REQUEST_400:
+                    apiError = APIError.BAD_REQUEST;
+                    break;
+                case HTTP_UNAUTHORIZED_401:
+                    apiError = APIError.UNAUTHORIZED;
+                    if(error.getErrorBody() != null) {
+                        if(error.getErrorBody().contains(MESSAGE_BAD_CREDENTIALS)) {
+                            apiError = APIError.BAD_CREDENTIALS;
+                        } else if(error.getErrorBody().contains(MESSAGE_MAX_LOGIN_ATTEMPTS)) {
+                            apiError = APIError.MAX_LOGIN_ATTEMPTS;
+                        }
+                    }
+                    break;
+                case HTTP_FORBIDDEN_403:
+                    apiError = APIError.FORBIDDEN;
+                    if(error.getErrorBody() != null) {
+                        if(error.getErrorBody().contains(MESSAGE_RATE_LIMIT_START)) {
+                            apiError = APIError.RATE_LIMIT;
+                        } else if(error.getErrorBody().contains(MESSAGE_ABUSE_LIMIT)) {
+                            apiError = APIError.ABUSE_LIMIT;
+                        }
+                    }
+                    break;
+                case HTTP_NOT_ALLOWED_405:
+                    apiError = APIError.NOT_ALLOWED;
+                    break;
+                case HTTP_NOT_FOUND_404:
+                    apiError = APIError.NOT_FOUND;
+                    break;
+                case HTTP_UNPROCESSABLE_422:
+                    apiError = APIError.UNPROCESSABLE;
+                    break;
+                case HTTP_409:
+                    if(error.getErrorBody() != null && error.getErrorBody().contains(
+                            ERROR_MESSAGE_EMPTY_REPOSITORY)) {
+                        apiError = APIError.EMPTY_REPOSITORY;
+                        break;
+                    }
+                default:
+                    apiError = APIError.UNKNOWN;
+            }
+        }
+        apiError.error = error;
+        return apiError;
+    }
+
+    public enum APIError {
+        NO_CONNECTION(R.string.error_no_connection),
+        UNAUTHORIZED(R.string.error_unauthorized),
+        FORBIDDEN(R.string.error_forbidden),
+        NOT_FOUND(R.string.error_not_found),
+        UNKNOWN(R.string.error_unknown),
+        RATE_LIMIT(R.string.error_rate_limit),
+        ABUSE_LIMIT(R.string.error_abuse_limit),
+        MAX_LOGIN_ATTEMPTS(R.string.error_max_login_attempts),
+        UNPROCESSABLE(R.string.error_unprocessable),
+        BAD_CREDENTIALS(R.string.error_bad_credentials),
+        NOT_ALLOWED(R.string.error_not_allowed),
+        BAD_REQUEST(R.string.error_bad_request),
+        EMPTY_REPOSITORY(R.string.error_empty_repository);
+
+        @StringRes
+        public final int resId;
+
+        @Nullable ANError error;
+
+        APIError(@StringRes int resId) {
+            this.resId = resId;
+        }
+    }
+
+}
+
+
+
+```
+
+The ```APIHandler``` class is mostly static constants:
+
+- GIT_BASE - The base URL for all GitHub API requests
+- ACCEPT_HEADER_KEY - The key for the content type header
+- ACCEPT_HEADER - The default content type, for JSON results
+- ORGANIZATIONS_PREVIEW_ACCEPT_HEADER - A content type header required for some features of the API, specifically requesting collaborators on a repository
+- PROJECTS_PREVIEW_API_HEADER - A content type header required for requesting information related to projects
+- REPO_LICENSE_PREVIEW_API_HEADER - A content type header required to load information about a repositories license when loading the repository
+- PAGES_PREVIEW_ACCEPT_HEADER - A content type header required to load information about a repositories pages when loading the repository
+- AUTHORIZATION_HEADER_KEY - A header key for providing the authorization token
+- AUTHORIZATION_TOKEN_FORMAT - A format string used when inserting the authorization key into a header
+
+Next we have the headers themselves. 
+Asheaders are key value pairs, they are represented as string to string maps.
+
+We then have the ```SEGMENT_``` constants. These are segments of the API paths which are used across numerous different API requests.
+
+The ```APIHandler``` constructor checks if the single instance of ```GitHubSession``` is null, and if so access the singleton session instance before initialising the headers.
+Next each header map is initialised with the authorization token header, and their own respective accept headers.
+
+
+The class which actually stores the authorization information is ```GitHubSession```, which was used once above in ```APIHandler```.
+
+``` Java
+package com.tpb.github.data.auth;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import com.tpb.github.data.models.User;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+public class GitHubSession {
+    private static final String TAG = GitHubSession.class.getSimpleName();
+
+    private static GitHubSession session;
+    private final SharedPreferences prefs;
+
+    private static final String SHARED = "GitHub_Preferences";
+    private static final String API_LOGIN = "username";
+    private static final String API_ID = "id";
+    private static final String API_ACCESS_TOKEN = "access_token";
+    private static final String INFO_USER = "user_json";
+
+    private GitHubSession(Context context) {
+        prefs = context.getSharedPreferences(SHARED, Context.MODE_PRIVATE);
+    }
+
+    public static GitHubSession getSession(Context context) {
+        if(session == null) session = new GitHubSession(context);
+        return session;
+    }
+
+    void storeCredentials(String accessToken, int id, String login) {
+        final SharedPreferences.Editor editor = prefs.edit();
+        editor.putInt(API_ID, id);
+        editor.putString(API_ACCESS_TOKEN, accessToken);
+        editor.putString(API_LOGIN, login);
+        editor.apply();
+    }
+
+    void storeUser(JSONObject user) {
+        final SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(INFO_USER, user.toString());
+        editor.apply();
+    }
+
+    public void updateUserLogin(String login) {
+        prefs.edit().putString(API_LOGIN, login).apply();
+    }
+
+    void storeAccessToken(String accessToken) {
+        final SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(API_ACCESS_TOKEN, accessToken);
+        editor.apply();
+    }
+
+    void resetAccessToken() {
+        final SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(API_ID, null);
+        editor.putString(API_ACCESS_TOKEN, null);
+        editor.putString(API_LOGIN, null);
+        editor.apply();
+    }
+
+    public User getUser() {
+        try {
+            final JSONObject obj = new JSONObject(prefs.getString(INFO_USER, null));
+            return User.parse(obj);
+        } catch(JSONException jse) {
+            return null;
+        }
+    }
+
+    public String getUserLogin() {
+        return prefs.getString(API_LOGIN, null);
+    }
+
+    public int getUserId() {
+        return prefs.getInt(API_ID, -1);
+    }
+    
+    public String getAccessToken() {
+        return prefs.getString(API_ACCESS_TOKEN, null);
+    }
+
+}
+```
+
+```GitHubSession``` is a singleton class which saves and loads the user credentials and authorization token to and from shared preferences.
