@@ -1296,3 +1296,71 @@ The class which actually stores the authorization information is ```GitHubSessio
 
 The private constructor is used to initialise the SharedPreferences instance, this either opens the pre-existing map or creates a new one if it does not exist.
 
+When the user authorizes the app the access token is stored with  ```storeAccessToken(@NonNull String accessToken)```.
+
+Once we have an authorization token, we can load the user's data and store it for later use.
+
+The ```LoginActivity``` consists of two layouts, only one of which is visible at a time.
+
+![LoginActivity](http://imgur.com/HfWNYbC.png)
+
+The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
+
+#include "app/src/main/com/tpb/projects/login/LoginActivity.java"
+
+The ```LoginActivity``` binds four views.
+
+1. The ```WebView``` which displays the login webpage
+2. The ```CardView``` which olds the ```WebView``` and user layout
+3. The spinning ```ProgressBar``` which is display to indicate progress while the ```WebView``` is loading or the user's information is being loaded.
+4. The ```LinearLayout``` which will be filled with views showing the user's information
+
+
+In the ```onCreate``` method the ```WebView``` is set up not to allow scrolling, to enable JavaScript, and to use a custom client to override page loading.
+
+```
+mWebView.setVerticalScrollBarEnabled(false);
+mWebView.setHorizontalScrollBarEnabled(false);
+mWebView.setWebViewClient(new OAuthWebViewClient(OAuthHandler.getListener()));
+mWebView.getSettings().setJavaScriptEnabled(true);
+mWebView.loadUrl(OAuthHandler.getAuthUrl());
+mWebView.setLayoutParams(FILL);
+```
+
+The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture the code once the user has logged in, as well as ensuring that the user only navigates through the pages required to log in.
+
+The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
+The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler''' which then requests the authorization token.
+
+#import "gitapi/src/main/java/com/tpb/github/data/auth/OAuthHandler.java"
+
+The ```OAuthHandler``` is used to load the authenticated user for the first time.
+
+```getAccessToken(final String code)``` performs a get request to the formatted token url, and parses the response as a string.
+The access token is extracted from the string between "access_token=" and "&scope".
+Once the access token has been extracted:
+- The token is stored with ```GitHubSession```
+- The headers are initialised with the token
+- The authentication listener (```LoginActivity```) is notified, allowing it to update the ```ProgressBar```
+- ```fetchUser()``` is called to load the authenticated user model
+
+'''fetchUser()``` performs another request, this to time /user, which loads the authenticated user if provided with an authorization token.
+The response is returned as a ```JSONObject```, Java's built in JSON model, and is passed to ```GitHubSession``` where it is stored as a string for later use, and parsed into a ```User``` object.
+The authentication listener is then called again, with the ```User``` object.
+
+
+Prior to the ```WebView``` loading the login page, the ```LoginActivity``` shows the view with a spinning ```ProgressBar```:
+
+![Login Activity loading webpage](http://imgur.com/Iv6xAz7.png)
+
+Once the ```WebView``` has loaded, it will display the GitHub login page:
+
+![Login Activity login page](http://imgur.com/x2MKOxk.png)
+
+Once the user has logged in, the GitHub authentication page will show the access which the app is asking for, and ask the user to grant access:
+
+|  |  | 
+| --- | --- | 
+|![Page 1](http://imgur.com/zmbcpfA.png) | ![Page 2](http://imgur.com/wiieru1.png)
+
+

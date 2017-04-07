@@ -1544,6 +1544,7 @@ package com.tpb.github.data.auth;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.support.annotation.NonNull;
 
 import com.tpb.github.data.models.User;
 
@@ -1571,34 +1572,24 @@ public class GitHubSession {
         return session;
     }
 
-    void storeCredentials(String accessToken, int id, String login) {
+    void storeUser(JSONObject json) {
         final SharedPreferences.Editor editor = prefs.edit();
-        editor.putInt(API_ID, id);
-        editor.putString(API_ACCESS_TOKEN, accessToken);
-        editor.putString(API_LOGIN, login);
+        editor.putString(INFO_USER, json.toString());
+        final User user = User.parse(json);
+        editor.putInt(API_ID, user.getId());
+        editor.putString(API_LOGIN, user.getLogin());
         editor.apply();
     }
 
-    void storeUser(JSONObject user) {
-        final SharedPreferences.Editor editor = prefs.edit();
-        editor.putString(INFO_USER, user.toString());
-        editor.apply();
-    }
-
-    public void updateUserLogin(String login) {
-        prefs.edit().putString(API_LOGIN, login).apply();
-    }
-
-    void storeAccessToken(String accessToken) {
+    void storeAccessToken(@NonNull String accessToken) {
         final SharedPreferences.Editor editor = prefs.edit();
         editor.putString(API_ACCESS_TOKEN, accessToken);
         editor.apply();
     }
-
 
     public User getUser() {
         try {
-            final JSONObject obj = new JSONObject(prefs.getString(INFO_USER, null));
+            final JSONObject obj = new JSONObject(prefs.getString(INFO_USER, ""));
             return User.parse(obj);
         } catch(JSONException jse) {
             return null;
@@ -1609,12 +1600,12 @@ public class GitHubSession {
         return prefs.getString(API_LOGIN, null);
     }
 
-    public int getUserId() {
-        return prefs.getInt(API_ID, -1);
-    }
-
     public String getAccessToken() {
         return prefs.getString(API_ACCESS_TOKEN, null);
+    }
+
+    public boolean hasAccessToken() {
+        return getAccessToken() != null;
     }
 
 }
