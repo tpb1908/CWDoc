@@ -1365,3 +1365,44 @@ Finally, the user is loaded and their information is displayed.
 
 ![User information](http://imgur.com/T4n1feN.png)
 
+
+### Data models and loading
+
+All of the models from the GitHub API are returned as JSON unless another content type is specified.
+Each endpoint returns either a single model, or a single dimensional array of models.
+
+All models used extend the abstract class ```DataModel``` which contains some of the commonly used keys, as well as the object creation date which is used across all models.
+
+#import "gitapi/src/main/java/com/tpb/github/data/models/DataModel.java"
+
+Networking is split into two classes extending ```APIHandler``` is split across four classes.
+
+#### Loader
+
+The ```Loader``` class is responsible for almost all get requests sent to the GitHub API.
+
+Each method is responsible for load a single model type, and takes the path or filter parameters required to load the model(s) as well as an implementation of a generic loader.
+
+The first interface ```ItemLoader``` is used when loading a single model or value.
+
+```
+public interface ItemLoader<T> {
+
+    void loadComplete(T data);
+
+    void loadError(APIError error);
+
+}
+```
+
+Any class implementing ```ItemLoader``` must implement ```loadComplete(T data)``` as well as ```loadError(APIError error)```.
+
+Most uses of ```ItemLoader``` load an instance of ```DataModel```.
+
+An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority)```
+
+
+#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName$"
+
+
+this method 
