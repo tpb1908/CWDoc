@@ -1785,3 +1785,85 @@ Finally, the user is loaded and their information is displayed.
 
 ![User information](http://imgur.com/T4n1feN.png)
 
+
+### Data models and loading
+
+All of the models from the GitHub API are returned as JSON unless another content type is specified.
+Each endpoint returns either a single model, or a single dimensional array of models.
+
+All models used extend the abstract class ```DataModel``` which contains some of the commonly used keys, as well as the object creation date which is used across all models.
+
+``` java
+package com.tpb.github.data.models;
+
+/**
+ * Created by theo on 15/12/16.
+ */
+
+public abstract class DataModel {
+
+    static final String ID = "id";
+    static final String NAME = "name";
+    static final String CREATED_AT = "created_at";
+    static final String UPDATED_AT = "updated_at";
+    static final String URL = "url";
+    public static final String JSON_NULL = "null";
+
+    long createdAt;
+
+    public abstract long getCreatedAt();
+
+}
+
+```
+
+Networking is split into two classes extending ```APIHandler``` is split across four classes.
+
+#### Loader
+
+The ```Loader``` class is responsible for almost all get requests sent to the GitHub API.
+
+Each method is responsible for load a single model type, and takes the path or filter parameters required to load the model(s) as well as an implementation of a generic loader.
+
+The first interface ```ItemLoader``` is used when loading a single model or value.
+
+```
+public interface ItemLoader<T> {
+
+    void loadComplete(T data);
+
+    void loadError(APIError error);
+
+}
+```
+
+Any class implementing ```ItemLoader``` must implement ```loadComplete(T data)``` as well as ```loadError(APIError error)```.
+
+Most uses of ```ItemLoader``` load an instance of ```DataModel```.
+
+An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority)```
+
+
+``` java
+loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
+        AndroidNetworking
+                .get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
+                .addHeaders(API_AUTH_HEADERS)
+                .setPriority(highPriority ? Priority.HIGH : Priority.MEDIUM)
+                .build()
+                .getAsJSONObject(new JSONObjectRequestListener() {
+                    @Override
+                    public void onResponse(JSONObject response) {
+                        loader.loadComplete(Issue.parse(response));
+                    }
+
+                    @Override
+                    public void onError(ANError anError) {
+                        loader.loadError(parseError(anError));
+                    }
+                });
+    }
+```
+
+
+this method 

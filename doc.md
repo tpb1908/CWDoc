@@ -1300,13 +1300,11 @@ When the user authorizes the app the access token is stored with  ```storeAccess
 
 Once we have an authorization token, we can load the user's data and store it for later use.
 
-The ```LoginActivity``` consists of two layouts, only one of which is visible at a time.
-
-![LoginActivity](http://imgur.com/HfWNYbC.png)
+The ```LoginActivity``` consists of two layouts, only one of which is visible at a time. 
 
 The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
 
-#include "app/src/main/com/tpb/projects/login/LoginActivity.java"
+#include "app/src/main/java/com/tpb/projects/login/LoginActivity.java"
 
 The ```LoginActivity``` binds four views.
 
@@ -1318,7 +1316,7 @@ The ```LoginActivity``` binds four views.
 
 In the ```onCreate``` method the ```WebView``` is set up not to allow scrolling, to enable JavaScript, and to use a custom client to override page loading.
 
-```
+``` java
 mWebView.setVerticalScrollBarEnabled(false);
 mWebView.setHorizontalScrollBarEnabled(false);
 mWebView.setWebViewClient(new OAuthWebViewClient(OAuthHandler.getListener()));
@@ -1344,7 +1342,7 @@ Once the access token has been extracted:
 - The authentication listener (```LoginActivity```) is notified, allowing it to update the ```ProgressBar```
 - ```fetchUser()``` is called to load the authenticated user model
 
-'''fetchUser()``` performs another request, this to time /user, which loads the authenticated user if provided with an authorization token.
+```fetchUser()``` performs another request, this to time /user, which loads the authenticated user if provided with an authorization token.
 The response is returned as a ```JSONObject```, Java's built in JSON model, and is passed to ```GitHubSession``` where it is stored as a string for later use, and parsed into a ```User``` object.
 The authentication listener is then called again, with the ```User``` object.
 
@@ -1385,7 +1383,7 @@ Each method is responsible for load a single model type, and takes the path or f
 
 The first interface ```ItemLoader``` is used when loading a single model or value.
 
-```
+``` Java
 public interface ItemLoader<T> {
 
     void loadComplete(T data);
@@ -1405,4 +1403,13 @@ An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoF
 #import "gitapi/src/main/java/com/tpb/github/data/Loader.java $loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName$"
 
 
-this method 
+this method is used to load a single ```Issue``` model given a full repository name (user login and repository name) and the issue number.
+
+ Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
+
+ #import "gitapi/src/main/java/com/tpb/github/data/Loader.java $loadProject(@Nullable final ItemLoader<Project> loader, int id)$"
+
+ In this case the ```ANRequest``` instance is built and only requested as a ```JSONObject``` when there is an ```ItemLoader``` to deal with the model.
+
+---
+
