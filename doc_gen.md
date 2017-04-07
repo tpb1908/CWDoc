@@ -819,7 +819,7 @@ In order to be more useful than GitHub's mobile website, and other clients, an A
 
 The client must implement the following features:
 
-```
+
 1. Sign in
     a. Allow the user to log in to GitHub with their credentials
     b. Store the authentication token received from GitHub
@@ -1100,7 +1100,7 @@ The client must implement the following features:
             1. Display a list of possible unicode characters
             2. Allow searching characters by their names
             3. Insert the characters into the text editor
-```
+
 
 
 ### Limitations
