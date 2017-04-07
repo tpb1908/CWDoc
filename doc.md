@@ -655,7 +655,7 @@ A ```Fragment``` has its own lifecycle separate from its parent ```Activity```
 
 ```Fragments``` are commonly used in ```ViewPagers``` to display multiple related sets of content within the same ```Activity```.
 
-![enter image description here](https://lh3.googleusercontent.com/l3OtlZDW7JlczwHBPsPXJ7OpkXP1MfMH_WV2N017hGHyArpuMyatUYtU84oLHIr1p0g=h900-rw)
+![enter image description here](http://imgur.com/GsPWoBA.png)
 
 ### RecyclerViews
 
@@ -670,7 +670,7 @@ The ```RecyclerView``` brought three key improvements over the ```ListView```
  2. Animations are decoupled from the individual ```Views``` and delegated to an ```ItemAnimator``` which provides default animations for common actions such as insertion and removal of items.
  3. The list itself is decoupled from its containing ```ViewGroup``` which allows much more complex  item layouts with ```LayoutManagers``` such as the ```StaggeredGridLayoutManager``` which can ```Views``` of different sizes as in Google Keep (Below).
 
- ![Google keep](https://lh3.googleusercontent.com/fRGLrIICjExK5VqM-dL7Q4kmKtcnpVH5nyl3mHYCDKTocxrvQ1rZqLs4zyEyLRb62aNA=h900-rw)
+ ![Google keep](http://imgur.com/WeVtSkc.png)
 
 
 ### Basic storage

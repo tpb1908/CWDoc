@@ -670,7 +670,7 @@ The ```RecyclerView``` brought three key improvements over the ```ListView```
  2. Animations are decoupled from the individual ```Views``` and delegated to an ```ItemAnimator``` which provides default animations for common actions such as insertion and removal of items.
  3. The list itself is decoupled from its containing ```ViewGroup``` which allows much more complex  item layouts with ```LayoutManagers``` such as the ```StaggeredGridLayoutManager``` which can ```Views``` of different sizes as in Google Keep (Below).
 
- ![Google keep](https://lh3.googleusercontent.com/fRGLrIICjExK5VqM-dL7Q4kmKtcnpVH5nyl3mHYCDKTocxrvQ1rZqLs4zyEyLRb62aNA=h900-rw)
+ ![Google keep](https://upload.wikimedia.org/wikipedia/en/1/15/Google_Keep_Android.png)
 
 
 ### Basic storage
@@ -1620,7 +1620,7 @@ When the user authorizes the app the access token is stored with  ```storeAccess
 Once we have an authorization token, we can load the user's data and store it for later use.
 
 The ```LoginActivity``` consists of two layouts, only one of which is visible at a time. 
-
+ 
 The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
 
 #include "app/src/main/java/com/tpb/projects/login/LoginActivity.java"
