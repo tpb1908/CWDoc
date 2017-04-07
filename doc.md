@@ -1301,7 +1301,7 @@ When the user authorizes the app the access token is stored with  ```storeAccess
 Once we have an authorization token, we can load the user's data and store it for later use.
 
 The ```LoginActivity``` consists of two layouts, only one of which is visible at a time. 
-
+ 
 The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
 
 #include "app/src/main/java/com/tpb/projects/login/LoginActivity.java"
