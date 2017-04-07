@@ -1542,7 +1542,7 @@ Next each header map is initialised with the authorization token header, and the
 
 The class which actually stores the authorization information is ```GitHubSession```, which was used once above in ```APIHandler```.
 
-``` Java
+``` java
 package com.tpb.github.data.auth;
 
 import android.content.Context;
@@ -1597,14 +1597,7 @@ public class GitHubSession {
         editor.putString(API_ACCESS_TOKEN, accessToken);
         editor.apply();
     }
-
-    void resetAccessToken() {
-        final SharedPreferences.Editor editor = prefs.edit();
-        editor.putString(API_ID, null);
-        editor.putString(API_ACCESS_TOKEN, null);
-        editor.putString(API_LOGIN, null);
-        editor.apply();
-    }
+    
 
     public User getUser() {
         try {
@@ -1622,7 +1615,7 @@ public class GitHubSession {
     public int getUserId() {
         return prefs.getInt(API_ID, -1);
     }
-    
+
     public String getAccessToken() {
         return prefs.getString(API_ACCESS_TOKEN, null);
     }
@@ -1631,3 +1624,6 @@ public class GitHubSession {
 ```
 
 ```GitHubSession``` is a singleton class which saves and loads the user credentials and authorization token to and from shared preferences.
+
+The private constructor is used to initialise the SharedPreferences instance, this either opens the pre-existing map or creates a new one if it does not exist.
+
