@@ -1302,7 +1302,7 @@ public abstract class APIHandler {
     static final HashMap<String, String> LICENSES_API_API_AUTH_HEADERS = new HashMap<>();
     static final HashMap<String, String> PAGES_API_API_AUTH_HEADERS = new HashMap<>();
 
-    static final String SEGMENT_USER = "/user";
+    protected static final String SEGMENT_USER = "/user";
     static final String SEGMENT_USERS = "/users";
     static final String SEGMENT_REPOS = "/repos";
     static final String SEGMENT_README = "/readme";
@@ -1614,4 +1614,173 @@ public class GitHubSession {
 ```GitHubSession``` is a singleton class which saves and loads the user credentials and authorization token to and from shared preferences.
 
 The private constructor is used to initialise the SharedPreferences instance, this either opens the pre-existing map or creates a new one if it does not exist.
+
+When the user authorizes the app the access token is stored with  ```storeAccessToken(@NonNull String accessToken)```.
+
+Once we have an authorization token, we can load the user's data and store it for later use.
+
+The ```LoginActivity``` consists of two layouts, only one of which is visible at a time.
+
+![LoginActivity](http://imgur.com/HfWNYbC.png)
+
+The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
+
+#include "app/src/main/com/tpb/projects/login/LoginActivity.java"
+
+The ```LoginActivity``` binds four views.
+
+1. The ```WebView``` which displays the login webpage
+2. The ```CardView``` which olds the ```WebView``` and user layout
+3. The spinning ```ProgressBar``` which is display to indicate progress while the ```WebView``` is loading or the user's information is being loaded.
+4. The ```LinearLayout``` which will be filled with views showing the user's information
+
+
+In the ```onCreate``` method the ```WebView``` is set up not to allow scrolling, to enable JavaScript, and to use a custom client to override page loading.
+
+```
+mWebView.setVerticalScrollBarEnabled(false);
+mWebView.setHorizontalScrollBarEnabled(false);
+mWebView.setWebViewClient(new OAuthWebViewClient(OAuthHandler.getListener()));
+mWebView.getSettings().setJavaScriptEnabled(true);
+mWebView.loadUrl(OAuthHandler.getAuthUrl());
+mWebView.setLayoutParams(FILL);
+```
+
+The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture the code once the user has logged in, as well as ensuring that the user only navigates through the pages required to log in.
+
+The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
+The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler''' which then requests the authorization token.
+
+``` java
+package com.tpb.github.data.auth;
+
+/**
+ * Created by theo on 15/12/16.
+ */
+
+import android.content.Context;
+import android.util.Log;
+
+import com.androidnetworking.AndroidNetworking;
+import com.androidnetworking.error.ANError;
+import com.androidnetworking.interfaces.JSONObjectRequestListener;
+import com.androidnetworking.interfaces.StringRequestListener;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.models.User;
+
+import org.json.JSONObject;
+
+public class OAuthHandler extends APIHandler {
+    private static final String TAG = OAuthHandler.class.getSimpleName();
+
+    private final GitHubSession mSession;
+    private final OAuthAuthenticationListener mListener;
+    private final String mAuthUrl;
+    private final String mTokenUrl;
+    private String mAccessToken;
+
+    private static final String AUTH_URL = "https://gitHub.com/login/oauth/authorize?";
+    private static final String TOKEN_URL = "https://gitHub.com/login/oauth/access_token?";
+    private static final String SCOPE = "user public_repo repo gist";
+
+    private static final String TOKEN_URL_FORMAT = TOKEN_URL + "client_id=%1$s&client_secret=%2$s&redirect_uri=%3$s";
+    private static final String AUTH_URL_FORMAT = AUTH_URL + "client_id=%1$s&scope=%2$s&redirect_uri=%3$s";
+
+    public OAuthHandler(Context context, String clientId, String clientSecret,
+                        String callbackUrl,
+                        OAuthAuthenticationListener listener) {
+        super(context);
+        mSession = GitHubSession.getSession(context);
+        mTokenUrl = String.format(TOKEN_URL_FORMAT, clientId, clientSecret, callbackUrl);
+        mAuthUrl = String.format(AUTH_URL_FORMAT, clientId, SCOPE, callbackUrl);
+        mListener = listener;
+    }
+
+    public void getAccessToken(final String code) {
+        AndroidNetworking.get(mTokenUrl + "&code=" + code)
+                         .build()
+                         .getAsString(new StringRequestListener() {
+                             @Override
+                             public void onResponse(String response) {
+                                 mAccessToken = response.substring(
+                                         response.indexOf("access_token=") + 13,
+                                         response.indexOf("&scope")
+                                 );
+                                 mSession.storeAccessToken(mAccessToken);
+                                 initHeaders();
+                                 mListener.onSuccess();
+                                 fetchUser();
+                             }
+
+                             @Override
+                             public void onError(ANError anError) {
+                                 mListener.onFail(anError.getErrorDetail());
+                             }
+                         });
+    }
+
+    private void fetchUser() {
+        AndroidNetworking.get(GIT_BASE + SEGMENT_USER)
+                         .addHeaders(API_AUTH_HEADERS)
+                         .build()
+                         .getAsJSONObject(new JSONObjectRequestListener() {
+                             @Override
+                             public void onResponse(JSONObject response) {
+                                 mSession.storeUser(response);
+                                 mListener.userLoaded(mSession.getUser());
+                             }
+
+                             @Override
+                             public void onError(ANError anError) {
+                                 mListener.onFail(anError.getErrorDetail());
+                                 Log.e(TAG, "onError: " + anError.getErrorDetail());
+                             }
+                         });
+
+    }
+
+    public String getAuthUrl() {
+        return mAuthUrl;
+    }
+
+    public interface OAuthAuthenticationListener {
+        void onSuccess();
+
+        void onFail(String error);
+
+        void userLoaded(User user);
+
+    }
+}
+```
+
+The ```OAuthHandler``` is used to load the authenticated user for the first time.
+
+```getAccessToken(final String code)``` performs a get request to the formatted token url, and parses the response as a string.
+The access token is extracted from the string between "access_token=" and "&scope".
+Once the access token has been extracted:
+- The token is stored with ```GitHubSession```
+- The headers are initialised with the token
+- The authentication listener (```LoginActivity```) is notified, allowing it to update the ```ProgressBar```
+- ```fetchUser()``` is called to load the authenticated user model
+
+'''fetchUser()``` performs another request, this to time /user, which loads the authenticated user if provided with an authorization token.
+The response is returned as a ```JSONObject```, Java's built in JSON model, and is passed to ```GitHubSession``` where it is stored as a string for later use, and parsed into a ```User``` object.
+The authentication listener is then called again, with the ```User``` object.
+
+
+Prior to the ```WebView``` loading the login page, the ```LoginActivity``` shows the view with a spinning ```ProgressBar```:
+
+![Login Activity loading webpage](http://imgur.com/Iv6xAz7.png)
+
+Once the ```WebView``` has loaded, it will display the GitHub login page:
+
+![Login Activity login page](http://imgur.com/x2MKOxk.png)
+
+Once the user has logged in, the GitHub authentication page will show the access which the app is asking for, and ask the user to grant access:
+
+|  |  | 
+| --- | --- | 
+|![Page 1](http://imgur.com/zmbcpfA.png) | ![Page 2](http://imgur.com/wiieru1.png)
+
 
