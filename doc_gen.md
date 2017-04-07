@@ -1265,11 +1265,10 @@ If the request is successful the response will be a string containing the access
 
 In order to avoid duplication of values used throughout the GitHub API, I have used a single abstract class to contain the headers and path keys used throughout the project
 
-``` Java
+``` java
 package com.tpb.github.data;
 
 import android.content.Context;
-import android.net.ConnectivityManager;
 import android.support.annotation.Nullable;
 import android.support.annotation.StringRes;
 
@@ -1378,7 +1377,7 @@ public abstract class APIHandler {
     private static final int HTTP_UNAUTHORIZED_401 = 401; //Login required, account locked, permission error
 
     private static final String MESSAGE_MAX_LOGIN_ATTEMPTS = "Maximum number of login attempts exceeded.";
-    
+
     public static final String KEY_HEADER_RATE_LIMIT_RESET = "X-RateLimit-Reset";
     private static final String MESSAGE_RATE_LIMIT_START = "API rate limit exceeded";
     private static final String MESSAGE_ABUSE_LIMIT = "You have triggered an abuse detection mechanism";
@@ -1515,8 +1514,6 @@ public abstract class APIHandler {
 
 }
 
-
-
 ```
 
 The ```APIHandler``` class is mostly static constants:
@@ -1597,7 +1594,7 @@ public class GitHubSession {
         editor.putString(API_ACCESS_TOKEN, accessToken);
         editor.apply();
     }
-    
+
 
     public User getUser() {
         try {
