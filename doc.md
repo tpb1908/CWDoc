@@ -1349,13 +1349,11 @@ The response is returned as a ```JSONObject```, Java's built in JSON model, and 
 The authentication listener is then called again, with the ```User``` object.
 
 
-Prior to the ```WebView``` loading the login page, the ```LoginActivity``` shows the view with a spinning ```ProgressBar```:
+Prior to the ```WebView``` loading the login page, the ```LoginActivity``` shows the view with a spinning ```ProgressBar```, and once it has finished the login page is displayed
 
-![Login Activity loading webpage](http://imgur.com/Iv6xAz7.png)
-
-Once the ```WebView``` has loaded, it will display the GitHub login page:
-
-![Login Activity login page](http://imgur.com/x2MKOxk.png)
+| | |
+| --- | --- | 
+|![Login Activity loading webpage](http://imgur.com/Iv6xAz7.png) | ![Login Activity login page](http://imgur.com/x2MKOxk.png) |
 
 Once the user has logged in, the GitHub authentication page will show the access which the app is asking for, and ask the user to grant access:
 
@@ -1363,4 +1361,7 @@ Once the user has logged in, the GitHub authentication page will show the access
 | --- | --- | 
 |![Page 1](http://imgur.com/zmbcpfA.png) | ![Page 2](http://imgur.com/wiieru1.png)
 
+Finally, the user is loaded and their information is displayed.
+
+![User information](http://imgur.com/T4n1feN.png)
 
