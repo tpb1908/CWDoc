@@ -955,7 +955,7 @@ The client must implement the following features:
             <li>Display information about the issue
                 <ol type="i">  
                     <li>Title</li>
-                    <li>Number<li>
+                    <li>Number</li>
                     <li>State</li>
                     <li>Body</li>
                     <li>User that opened the issue</li>
@@ -1698,6 +1698,7 @@ public abstract class APIHandler {
         }
     }
 
+
 }
 
 ```
@@ -1761,7 +1762,7 @@ public class GitHubSession {
     void storeUser(JSONObject json) {
         final SharedPreferences.Editor editor = prefs.edit();
         editor.putString(INFO_USER, json.toString());
-        final User user = User.parse(json);
+        final User user = new User(json);
         editor.putInt(API_ID, user.getId());
         editor.putString(API_LOGIN, user.getLogin());
         editor.apply();
@@ -1776,7 +1777,7 @@ public class GitHubSession {
     public User getUser() {
         try {
             final JSONObject obj = new JSONObject(prefs.getString(INFO_USER, ""));
-            return User.parse(obj);
+            return new User(obj);
         } catch(JSONException jse) {
             return null;
         }
@@ -1997,6 +1998,7 @@ public abstract class DataModel {
 
     public abstract long getCreatedAt();
 
+
 }
 
 ```
@@ -2030,15 +2032,14 @@ An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoF
 
 ``` java
 loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
-        AndroidNetworking
-                .get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
+        get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
                 .addHeaders(API_AUTH_HEADERS)
                 .setPriority(highPriority ? Priority.HIGH : Priority.MEDIUM)
                 .build()
                 .getAsJSONObject(new JSONObjectRequestListener() {
                     @Override
                     public void onResponse(JSONObject response) {
-                        loader.loadComplete(Issue.parse(response));
+                        loader.loadComplete(new Issue(response));
                     }
 
                     @Override
@@ -2052,20 +2053,20 @@ loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issu
 
 this method is used to load a single ```Issue``` model given a full repository name (user login and repository name) and the issue number.
 
- Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
+Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
 
- ``` java
+``` java
 loadProject(@Nullable final ItemLoader<Project> loader, int id) {
-        final ANRequest req = AndroidNetworking.get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
-                                               .addHeaders(PROJECTS_API_API_AUTH_HEADERS)
-                                               .build();
+        final ANRequest req = get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
+                .addHeaders(PROJECTS_API_API_AUTH_HEADERS)
+                .build();
         if(loader == null) {
             req.prefetch();
         } else {
             req.getAsJSONObject(new JSONObjectRequestListener() {
                 @Override
                 public void onResponse(JSONObject response) {
-                    loader.loadComplete(Project.parse(response));
+                    loader.loadComplete(new Project(response));
                 }
 
                 @Override
@@ -2077,7 +2078,118 @@ loadProject(@Nullable final ItemLoader<Project> loader, int id) {
     }
 ```
 
- In this case the ```ANRequest``` instance is built and only requested as a ```JSONObject``` when there is an ```ItemLoader``` to deal with the model.
+In this case the ```ANRequest``` instance is built and only requested as a ```JSONObject``` when there is an ```ItemLoader``` to deal with the model.
+This allows the response to be preloaded before an Activity is started, and only parsed to a ```DataModel``` once a user interface is present to use it.
 
----
 
+The ```Loader``` class also contains the ```ListLoader``` interface
+
+```Java
+public interface ListLoader<T> {
+
+    void listLoadComplete(List<T> data);
+
+    void listLoadError(APIError error);
+
+}
+```
+
+which is used to return objects parsed from a JSONArray as a list of ```DataModels```.
+
+#### Models
+
+Numerous different models are required for use in different parts of the project.
+
+
+<ol>
+    <li> User model:
+        <ul> 
+            <li> 1. Sign in </li>
+            <li> 2. Users </li>
+            <li> 3. Repositories </li>
+            <li> 4. Issues </li>
+            <li> 5. Commits </li>
+            <li> 6. Projects </li>
+        </ul>
+    </li>
+    <li> Repository model: 
+        <ul>
+            <li> 2.b User repositories </li>
+            <li> 2.c User starred repositories </li>
+            <li> 3. Repositories </li>
+        </ul>
+    </li>
+    <li> Node model
+        <ul> 
+            <li> 3.b Repository files</li>
+        </ul>
+      </li>
+    <li> Issue and label models: 
+        <ul>
+            <li> 3.e Repository issues </li>
+            <li> 4. Issues </li>
+            <li> 6.d.ii Project issue cards </li>
+            <li> 6.g Editing project issue cards </li>
+            <li> 6.h.ii Creation of new issue cards </li>
+            <li> 6.h.iii Creation of new issue cards from existing issues </li>
+        </ul>
+    </li>
+    <li> IssueEvent and MergedModel models:
+        <ul>
+            <li> 4.a.x Issue events</li>
+         </ul>
+     </li>
+    <li> Gist model: 
+        <ul>
+            <li>2.d User gists </li>
+        </ul>
+    </li>
+    <li> Project model:
+        <ul>
+            <li> 3.f Repository projects </li>
+            <li> 6. Projects </li>
+        </ul>
+     </li>
+     <li> Column model: 
+        <ul>
+            <li> 6. Projects </li>
+        </ul>
+     </li>
+     <li> Card model: 
+        <ul>
+            <li> 6. Projects </li>
+        </ul>
+     </li>
+     <li> Commit model:
+        <ul>
+            <li> 3.d Repository commits</li>
+            <li> 5. Commits </li>
+        </ul>
+     </li>
+     <li> DiffFile model: 
+        <ul>
+            <li> 5.b Commit diffs </li>
+         </ul>
+     </li>
+    <li> Status and CompleteStatus models 
+        <ul>
+            <li> 5.d commit statuses </li>
+        </ul>
+     </li>
+     <li> State model: 
+        <ul> 
+            <li> Issue model </li>
+            <li> Project model </li>
+            <li> Milestone model </li>
+        </ul>
+     </li>
+     <li>Comment model:
+        <ul> 
+            <li> 4.b Issue comments</li>
+            <li> 5.c Commit comments </li>
+        </ul>
+      </li>
+     <li> Notification model:
+        <ul> 8. Notifications</ul>
+     </li>
+</ol>

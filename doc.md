@@ -1550,6 +1550,8 @@ Finally, the user is loaded and their information is displayed.
 ![User information](http://imgur.com/T4n1feN.png)
 
 
+<div style="page-break-after: always;"></div>
+
 ### Data models and loading
 
 All of the models from the GitHub API are returned as JSON unless another content type is specified.
@@ -1658,7 +1660,7 @@ Numerous different models are required for use in different parts of the project
      </li>
     <li> Gist model: 
         <ul>
-            <li>2.d User gists </li>
+            <li> 2.d User gists </li>
         </ul>
     </li>
     <li> Project model:
