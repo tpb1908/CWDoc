@@ -1836,6 +1836,8 @@ The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture 
 The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
 The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler''' which then requests the authorization token.
 
+This completes objective 1.i
+
 ``` java
 package com.tpb.github.data.auth;
 
@@ -1966,12 +1968,62 @@ Once the user has logged in, the GitHub authentication page will show the access
 | --- | --- | 
 |![Page 1](http://imgur.com/zmbcpfA.png) | ![Page 2](http://imgur.com/wiieru1.png)
 
-Finally, the user is loaded and their information is displayed.
+If the user presses the authorize button, the page will be redirected through url containing the path parameter "code".
+
+In on the overriden ```onPageStarted``` method of the ```OAuthWebViewClient``` this results in the ```code``` parameter being passed to the ```OAuthHandler``` through ```fetchAccessToken```.
+
+``` java
+public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            if(url.contains("?code=")) {
+                final String[] parts = url.split("=");
+                mAuthHandler.fetchAccessToken(parts[1]);
+            }
+            super.onPageStarted(view, url, favicon);
+        }
+```
+
+
+``` java
+void fetchAccessToken(final String code) {
+        AndroidNetworking.get(mTokenUrl + "&code=" + code)
+                         .build()
+                         .getAsString(new StringRequestListener() {
+                             @Override
+                             public void onResponse(String response) {
+                                 mAccessToken = response.substring(
+                                         response.indexOf("access_token=") + 13,
+                                         response.indexOf("&scope")
+                                 );
+                                 mSession.storeAccessToken(mAccessToken);
+                                 initHeaders();
+                                 mListener.onSuccess();
+                                 fetchUser();
+                             }
+
+                             @Override
+                             public void onError(ANError anError) {
+                                 mListener.onFail(anError.getErrorDetail());
+                             }
+                         });
+    }
+```
+
+The ```fetchAccessToken``` method performs a get request to the token URL created with the apps client id and secret, adding the code as a path parameter.
+
+On a successful response the access token is split from the returned value and stored through ```GitHubSession```.
+
+This completes objective 1.ii
+
+The authorization headers are initialised with a call to ```initHeaders``` and the ```OAuthAuthenticationListener``` (```LoginActivity```) is notified of the success.
+
+Finally, ```fetchUser``` is called.
+
+This method performs a second get request to the Git API,  this time to load the ```User``` model and store the JSON data, as well as notifying the ```OAuthAuthenticationListener``` that the user has been loaded, allowing the user information to be displayed.
 
 ![User information](http://imgur.com/T4n1feN.png)
 
 
-<div style="page-break-after: always;"></div>
+
 
 ### Data models and loading
 
