@@ -1022,7 +1022,7 @@ The client must implement the following features:
                     <li>The commit message</li>
                     <li>The time that the commmit was created</li>
                     <li>The user that created the commit</li>
-                    <li>THe number of additions and deletions made in the commit</li>
+                    <li>The number of additions and deletions made in the commit</li>
                 </ol>
             </li>
             <li>Diffs
@@ -1058,7 +1058,7 @@ The client must implement the following features:
             </li>
             <li>Statuses 
                 <ol type="i">
-                    <li>Display the overall status for a commit<li>
+                    <li>Display the overall status for a commit</li>
                     <li>Display the integration that created a status</li>
                     <li>Link to the status information</li>
                 </ol>
@@ -1224,7 +1224,25 @@ The client must implement the following features:
                     <li>Attempt to ignore code strings which may match a URI</li>
                 </ol>
             </li>
-            <li>Format lists with the required indentation levels</li>
+            <li>Format lists with the required indentation levels
+                <ol type="i">
+                    <li>Support both ordered and unordered lists
+                        <ol type="1">
+                            <li>Correctly indent lists</li>
+                            <li>Handle nested lists</li>
+                        </ol>
+                    </li>
+                    <li>Support ordered list types
+                        <ol type="1"> 
+                            <li>Numbered lists</li>
+                            <li>Alphabetic lists </li>
+                            <li>Capitalised alphabetic lists</li>
+                            <li>Roman numeral lists</li>
+                            <li>Capitalised Roman numeral lists</li>
+                        </ol>
+                    </li>
+                 </ol>
+            </li>
         </ol>
      </li>
      <li>Markdown editing
