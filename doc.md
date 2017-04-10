@@ -1532,7 +1532,7 @@ The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture 
 The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
 The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler''' which then requests the authorization token.
 
-This completes objective 1.i
+This completes objective 1.a
 
 #import "gitapi/src/main/java/com/tpb/github/data/auth/OAuthHandler.java"
 
@@ -1576,7 +1576,7 @@ The ```fetchAccessToken``` method performs a get request to the token URL create
 
 On a successful response the access token is split from the returned value and stored through ```GitHubSession```.
 
-This completes objective 1.ii
+This completes objective 1.b
 
 The authorization headers are initialised with a call to ```initHeaders``` and the ```OAuthAuthenticationListener``` (```LoginActivity```) is notified of the success.
 
