@@ -17,8 +17,8 @@ Git acts as a content-addressable filesystem.
 When content is inserted into the system, the return value is a key which can later be used to retrieve the content.
 
 The key returned is a 40 character (160 bit) SHA-1 checksum of the content and its header.
-The probability of a collision occurring across n unique objects is 0.5 * n<sup>2</sup> /2^160.
-In order to achieve a 1% probability of collision 1.7x10<sup>23</sup> objects are required, which is highly improbable.
+The probability of a collision occurring across n unique objects is 0.5 * n<sup>2</sup> /2<sup>160</sup>.
+In order to achieve a 1% probability of collision 1.7x10<sup>23</sup> objects are required, which is effectively impossible.
 
 In order to store a file system structure, Git uses tree objects.
 Each node in the tree is constructed of four elements:
@@ -224,6 +224,8 @@ Numbered list:
 
 A [link](http://example.com).
 
+#page
+
 GitHub uses its own markdown structure with some extra features.
 
 #### Lists
@@ -373,6 +375,7 @@ The font tag can be used to choose a text color and face
 
 gives <font color="red" face="impact">Formatted text</font>
 
+#page
 
 ## Android Application Structure
 
@@ -529,7 +532,7 @@ When the layout above is inflated and set as the root layout in an ```Activity``
 
 ![Example layout](http://i.imgur.com/Sorbgys.png)
 
-
+#page
 
 #### Dimensions
 
@@ -551,6 +554,8 @@ There are therefore sizes independent of the size and resolution of the device:
 
  - dp or dip are density independent pixels based on the physical density (dots per inch) of the screen. Density independent pixels are relative to a screen with a density of 160 dots per inch. This allows a ```View``` to maintain its proportions on different resolutions and form factors.
  - sp are scale independent pixels which are similar to dp, but are also scaled with the user's font size. This unit is recommended for use with text in order to respect both the device dimensions and the users preference.
+
+#page
 
 #### View binding
 
@@ -642,6 +647,8 @@ mLoginButton.setOnClickListener(new View.OnClickListener() {
 });
 ```
 
+#page
+
 ### Fragments
 
 In all cases, at least one ```Activity``` must be used to display an application, however it is not always necessary, and often adds unnecessary complexity to use a full ```Activity``` for each component of the application.
@@ -672,6 +679,7 @@ The ```RecyclerView``` brought three key improvements over the ```ListView```
 
  ![Google keep](http://imgur.com/WeVtSkc.png)
 
+#page
 
 ### Basic storage
 
@@ -682,6 +690,8 @@ The ```SharedPreferences``` system is a persistent set of key value pairs which 
 Each 'preference' is a key value set stored under a particular name.
 Once a ```SharedPreference``` object has been returned for the set, the key value pairs within the set can be read from and written to.
 
+
+#page
 
 ### Build system
 
@@ -783,9 +793,7 @@ Each method takes a ```TAG``` string which is used to identify the source of the
  - WTF (What a terrible failure) Used to report an exception that should never happen.
 
 
-
-
-
+#page
 
 ## Identification of the problem
 
@@ -809,6 +817,7 @@ According to GitHub's 2016 statistics there are 5.8 million active GitHub users 
 
 As GitHub is designed for groups of developers to collaborate it is reasonable to assume that GitHub's users would make use of a method for keeping track of their projects without having access to a computer.
 
+#page
 
 ### Proposition and objectives
 
@@ -1289,6 +1298,8 @@ The client must implement the following features:
      </li>
 </ol>
 
+#page
+
 ### Limitations
 
 #### Processing power
@@ -1349,11 +1360,15 @@ In order to reduce data usage, and to ensure that the impact on rate limiting is
 This is done by passing date-time string under the 'If-Modified-Since' header.
 If the data has not been modified, the API will return a 304 Not Modified code and the request will not count against the rate limit.
 
+#page
+
 ### Proposed design
 
 As explained in the background section, an Android app is made up of Activities and Fragments.
 
 In order to implement the functionality listed above the app requires multiple activities to mimic the pages on the GitHub website.
+
+## User information Activity
 
 The initial Activity should display the same information that a user would see when they navigated to their own GitHub page.
 

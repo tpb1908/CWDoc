@@ -2152,8 +2152,7 @@ which is used to return objects parsed from a JSONArray as a list of ```DataMode
 
 #### Models
 
-Numerous different models are required for use in different parts of the project.
-
+Numerous different models are required to fulfill different objectives
 
 <ol>
     <li> User model:
@@ -2247,3 +2246,72 @@ Numerous different models are required for use in different parts of the project
         <ul> 8. Notifications</ul>
      </li>
 </ol>
+
+## Base structure
+
+In order to maintain a cleaner application structure, it is normal to separate repeated logic into a base class or a set of utility classes.
+
+### BaseActivity
+
+In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
+
+#include "app/src/main.java/com/tpb/projects/common/BaseActivity.java"
+
+#### onCreate
+
+The ```BaseActivity``` ```onCreate``` method checks that ```GitHubSession``` has an access token, setting the ```mHasAccess``` flag accordingly.
+
+If there is an access token, the notification service (Objective 8) is started.
+
+If there is not an access token the ```mHasAccess``` flag is set to false, allowing any extending ```Activities``` to return from their ```onCreate``` methods without performing any unnecessary initialisation, such as ```View``` inflation.
+
+An ```Intent``` is then created to launch ```LoginActivity```, setting the flags ```Intent.FLAG_ACTIVITY_CLEAR_TASK``` and ```Intent.FLAG_ACTIVITY_NEW_TASK``` which result in the current task, a group of ```Activities``` being destroyed and a new task being created for the ```LoginActivity```.
+
+Next, the method checks if the ```Intent``` which started ```BaseActivity``` is not from the home screen (```ACTION_MAIN```).
+If the ```Intent``` is not from the homescreen, the ```Activity``` was launched from a URL which the user likely wants to view once they have signed in. This can be achieved by passing the launch ```Intent``` forward to the ```LoginActivity```.
+
+#### onDestroy
+
+A bug introduced in Android 5.0, launched in November 2014, which results in a reference to the ```Activity``` being kept in the ```TransitionManager```.
+The memory leak can be solved by using reflection to remove the ```Activity``` from the ```TransitionManager``` map.
+
+```
+final ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitions = (ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitionsField.get(transitionManagerClass);
+```
+
+The ```runningTransitionsField``` refers to a ```ThreadLocal``` ```WeakReference``` to a map of ```ViewGroups``` to ```ArrayLists``` of ```Transitions```.
+
+```ThreadLocal``` is a reference to a field, such that each ```Thread``` which access a thread-local variable via the ```TheadLocals``` get and set methods have their own copy of the variable.
+
+A ```WeakReference``` is a reference which is not strong enough to prevent grabage collection.
+
+Finally we have the map which may contain the reference to our ```Activity```'s ```DecorView```.
+
+```removeActivityFromTransitionManager``` checks that both the ```ThreadLocal```'s ```WeakReference``` is not null, and that the ```WeakReference```'s ```ArrayMap``` is not null before checking the ```ArrayMap``` for the ```DecorView``` and removing it if is present.
+
+#### onToolbarBackPressed
+
+```onToolbarBackPressed``` is used solely to reduce clutter in other ```Activity``` classes.
+When a ```View``` is declared in XML, its onClick listener can be set with the ```onClick``` attribute.
+Rather than adding this method in all of the ```Activities```, it can be added to ```BaseActivity```.
+
+``` XML
+<ImageButton
+    android:id="@+id/back_button"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:src="@drawable/ic_arrow_back"
+    android:onClick="onToolbarBackPressed"/>
+```
+
+The back button shown in each ```Toolbar``` then references this method, which calls the ```Activity``` method ```onBackPressed``` to perform the same behaviour as pressing the phones navigation back key.
+
+
+## User Activity
+
+Once a user has logged in, their account can be displayed.
+This is objective 2.
+
+The immediate sub-objectives of objective 2 are written to represent the different components shown when displaying a user in a paged ```Activity```.
+
