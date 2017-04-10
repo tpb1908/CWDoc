@@ -1864,7 +1864,7 @@ public class OAuthHandler extends APIHandler {
     private final String mTokenUrl;
     private String mAccessToken;
 
-    private static final String AUTH_URL = "https://gitHub.com/login/oauth/authorize?";
+    private static final String AUTH_URL = "https://gitHub.com/login/oauth/aGituthorize?";
     private static final String TOKEN_URL = "https://gitHub.com/login/oauth/access_token?";
     private static final String SCOPE = "user public_repo repo gist";
 
@@ -1881,7 +1881,7 @@ public class OAuthHandler extends APIHandler {
         mListener = listener;
     }
 
-    public void getAccessToken(final String code) {
+    public void fetchAccessToken(final String code) {
         AndroidNetworking.get(mTokenUrl + "&code=" + code)
                          .build()
                          .getAsString(new StringRequestListener() {
