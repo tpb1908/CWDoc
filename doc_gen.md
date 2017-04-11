@@ -2987,6 +2987,23 @@ In this case, a ```post``` call is made, which will add a runnable to the UI thr
 
 When the ```NetworkImageView``` is able to set the image, it checks whether the ```BitMap``` is non null, and sets either the ```BitMap``` or the default resource accordingly.
 
+<div style="page-break-after: always;"></div>
+
+### Utility methods
+
+The ```Util``` class contains numerous utility methods for formatting and finding array indices.
+
+The ```indexOf``` methods are used to find the index of a value within an array of integers, strings, pairs, or a generic type.
+Each method performs a linear search for the key item, returning -1 if it does not exist.
+
+The  ```formatBytes``` and ```formatKB``` methods are used to format a number of bytes or kilobytes into a 2 decimal place string representation of the highest unit suffix.
+
+The next method, ```formatDateLocally``` is used to format a date in the expected manner for the device locale.
+
+```isNotNullOrEmpty``` is used to check that a string is not null, not empty, and not a "null" string returned from a ```JSONObject```.
+
+Finally, the ```insertString``` methods are used to insert a string at the currently selected position in an ```EditText```, before moving the cursor to the end of the inserted string, or to a provided offset.
+
 
 ## User Activity
 
@@ -3522,3 +3539,5 @@ The layout included within the first ```CardView``` is the same layout used in `
 ```
 
 and contains a ```LinearLayout``` to display the user's avatar and username, as well as another ```LinearLayout``` to display a list of the user's available information.
+
+
