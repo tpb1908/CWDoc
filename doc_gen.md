@@ -2637,7 +2637,7 @@ If the ```Intent``` is not from the homescreen, the ```Activity``` was launched 
 ##### Network cancelling
 
 Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
-The ```BaseActivity``` retains ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
+The ```BaseActivity``` retains a ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
 
 **BaseActivity.java**
 ``` java
