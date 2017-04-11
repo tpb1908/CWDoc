@@ -3746,3 +3746,623 @@ the second case, however we must now ensure that the ```Views``` are bound once 
 This is achieved with the second check, the last line in ```onCreateView``` before returning the ```View```.
 This check is ```if(mUser != null) userLoaded(mUser)```. As mAreViewsValid has been set to true, this will bind the ```Views``` if the ```User``` was initially loaded before the ```Views``` were created.
 This structure is used throughout the different concrete implementations of ```UserFragment```.
+
+#### ContributionsView
+
+Objective 2.i.d is to display the user's contributions in a graphical form.
+
+As explained in the limitations section, there is no API for loading a user's contributions. Instead this can be achieved by parsing the SVG image of a user's contributions
+
+![Contributions](http://imgur.com/4zp8SG2.png)
+
+This image can be loaded from https://github.com/users/user_name/contributions
+
+##### Loading contributions
+
+Each column in the image is made up of a set of rectangles, with three important attributes.
+
+```XML
+<g transform="translate(0, 0)">
+          <rect class="day" width="10" height="10" x="13" y="0" fill="#ebedf0" data-count="0" data-date="2016-04-10"></rect>
+          <rect class="day" width="10" height="10" x="13" y="12" fill="#ebedf0" data-count="0" data-date="2016-04-11"></rect>
+          <rect class="day" width="10" height="10" x="13" y="24" fill="#ebedf0" data-count="0" data-date="2016-04-12"></rect>
+          <rect class="day" width="10" height="10" x="13" y="36" fill="#ebedf0" data-count="0" data-date="2016-04-13"></rect>
+          <rect class="day" width="10" height="10" x="13" y="48" fill="#ebedf0" data-count="0" data-date="2016-04-14"></rect>
+          <rect class="day" width="10" height="10" x="13" y="60" fill="#ebedf0" data-count="0" data-date="2016-04-15"></rect>
+          <rect class="day" width="10" height="10" x="13" y="72" fill="#ebedf0" data-count="0" data-date="2016-04-16"></rect>
+      </g>
+```
+
+Firstly, the ```fill``` attribute provides the hexadecimal colour code used to draw the rectangle, which can be parsed and used to draw the image later.
+Secondly, the ```data-count``` attribute provides the number of contributions made for the particular day.
+Finally, the ```data-date``` attribute is the date represented by the rectangle in the format yyyy-mm-dd.
+
+In order to load the SVG, a request can be made to download it as a string.
+
+The ```ContributionsLoader``` class is used to load a user's contributions.
+
+**ContributionsLoader.java**
+``` java
+/*
+ * Copyright  2016 Theo Pearson-Bray
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ *
+ */
+
+package com.tpb.contributionsview;
+
+import android.content.Context;
+import android.graphics.Color;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.support.annotation.ColorInt;
+import android.support.annotation.NonNull;
+
+import com.android.volley.Request;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+
+import java.lang.ref.WeakReference;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+
+/**
+ * Created by theo on 12/01/17.
+ */
+
+public class ContributionsLoader {
+
+    // Format string for svg path
+    private static final String IMAGE_BASE = "https://github.com/users/%s/contributions";
+
+    private final WeakReference<ContributionsRequestListener> mListener;
+
+    ContributionsLoader(@NonNull ContributionsRequestListener listener) {
+        mListener = new WeakReference<>(listener);
+    }
+
+    void beginRequest(@NonNull Context context, @NonNull String login) {
+        final String URL = String.format(IMAGE_BASE, login);
+        // Load the svg as a string
+        final StringRequest req = new StringRequest(Request.Method.GET, URL,
+                new Response.Listener<String>() {
+                    @Override
+                    public void onResponse(String response) {
+                        parse(response);
+                    }
+                }, new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    if(mListener.get() != null) mListener.get().onError(error);
+                }
+            }
+        );
+        Volley.newRequestQueue(context).add(req);
+    }
+
+    private void parse(String response) {
+        final ArrayList<ContributionsDay> contributions = new ArrayList<>();
+        int first = response.indexOf("<rect");
+        int last;
+        // Find each rectangle in the image
+        while(first != -1) {
+            last = response.indexOf("/>", first);
+            contributions.add(new ContributionsDay(response.substring(first, last)));
+            first = response.indexOf("<rect", last);
+        }
+        if(mListener.get() != null) mListener.get().onResponse(contributions);
+
+    }
+
+    public static class ContributionsDay implements Parcelable {
+        private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        @ColorInt public final int color;
+        public long date;
+        public final int contributions;
+
+        ContributionsDay(String rect) {
+            //rect is <rect class="day" width="10" height="10" x="" y="" fill="#FFFFF" data-count="n" data-date="yyyy-mm-dd"/>
+            final int colorIndex = rect.indexOf("fill=\"") + 6;
+            color = Color.parseColor(rect.substring(colorIndex, colorIndex + 7));
+
+            final int countIndex = rect.indexOf("data-count=\"") + 12;
+            final int countEndIndex = rect.indexOf("\"", countIndex);
+            contributions = Integer.parseInt(rect.substring(countIndex, countEndIndex));
+
+            final int dateIndex = rect.indexOf("data-date=\"") + 11;
+            try {
+                date = sdf.parse(rect.substring(dateIndex, dateIndex + 11)).getTime();
+            } catch(ParseException ignored) {}
+        }
+
+
+        @Override
+        public String toString() {
+            return "ContributionsDay{" +
+                    "color=" + color +
+                    ", date=" + date +
+                    ", contributions=" + contributions +
+                    '}';
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(this.color);
+            dest.writeLong(this.date);
+            dest.writeInt(this.contributions);
+        }
+
+        protected ContributionsDay(Parcel in) {
+            this.color = in.readInt();
+            this.date = in.readLong();
+            this.contributions = in.readInt();
+        }
+
+        public static final Creator<ContributionsDay> CREATOR = new Creator<ContributionsDay>() {
+            @Override
+            public ContributionsDay createFromParcel(Parcel source) {
+                return new ContributionsDay(source);
+            }
+
+            @Override
+            public ContributionsDay[] newArray(int size) {
+                return new ContributionsDay[size];
+            }
+        };
+    }
+
+    interface ContributionsRequestListener {
+
+        void onResponse(ArrayList<ContributionsDay> contributions);
+
+        void onError(VolleyError error);
+
+    }
+
+
+}
+
+```
+
+The interface ```ContributionsRequestListener``` is used as a callback once the contributions information is loaded.
+As such, the ```ContributionsLoader``` constructor takes a ```ContributionsLoader``` and stores a ```WeakReference``` to it.
+
+The ```beginRequest``` method formats the user login and performs a get request to the URL of the SVG image.
+If the image is loaded successfully, the ```parse``` method is called.
+
+```parse``` uses two counters, ```first``` and ```last``` to iterate through each substring which is surrounded by the tags ```<rect``` and the closing tag ```/>```.
+The ```String``` ```indexOf``` method searches a string for a substring from a given position, 0 in the simpler overloaded method, returning -1 if the substring is not present.
+
+Each time the substring is found, the ```parse``` method adds a new ```ContributionsDay``` object to the contributions ```ArrayList```.
+
+```ContributionsDay``` contains the integer value of the ```fill``` attribute, the long value of the ```data-date``` attribute, and the integer value of the ```data-count``` attribute.
+
+Finally, if the ```ContributionsRequestListener``` is non null, the values are returned to it.
+
+##### Displaying contributions
+
+The ```ContributionsView``` is a custom descendant of ```View``` used to draw the contributions heatmap.
+
+**ContributionsView.java**
+``` java
+/*
+ * Copyright  2016 Theo Pearson-Bray
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ *
+ */
+
+package com.tpb.contributionsview;
+
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.util.AttributeSet;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.android.volley.VolleyError;
+
+import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.List;
+
+/**
+ * Created by theo on 12/01/17.
+ */
+
+public class ContributionsView extends View implements ContributionsLoader.ContributionsRequestListener {
+
+    private static final Calendar mCalendar = Calendar.getInstance();
+
+    private boolean mShouldDisplayMonths;
+    private int mTextColor;
+    private int mTextSize;
+    private int mBackGroundColor;
+    private ArrayList<ContributionsLoader.ContributionsDay> mContributions = new ArrayList<>();
+
+    private Paint mDayPainter;
+    private Paint mTextPainter;
+
+    private Rect mRect;
+    private final Rect mTextBounds = new Rect();
+
+    private WeakReference<ContributionsLoadListener> mListener;
+
+    public ContributionsView(Context context) {
+        super(context);
+        initView(context, null, 0, 0);
+    }
+
+    public ContributionsView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        initView(context, attrs, 0, 0);
+    }
+
+    public ContributionsView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initView(context, attrs, defStyleAttr, 0);
+    }
+
+    private void initView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        mRect = new Rect();
+
+        final TypedArray attributes = context.getTheme().obtainStyledAttributes(attrs,
+                R.styleable.ContributionsView, defStyleAttr, defStyleRes
+        );
+        useAttributes(attributes);
+
+        mTextPainter = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mDayPainter = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mDayPainter.setStyle(Paint.Style.FILL);
+    }
+
+    private void useAttributes(TypedArray ta) {
+        mShouldDisplayMonths = ta.getBoolean(R.styleable.ContributionsView_showMonths, true);
+        mBackGroundColor = ta.getColor(R.styleable.ContributionsView_backgroundColor,
+                0xD6E685
+        ); //GitHub default color
+        mTextColor = ta.getColor(R.styleable.ContributionsView_textColor, Color.BLACK);
+        mTextSize = ta.getDimensionPixelSize(R.styleable.ContributionsView_textSize, 7);
+        if(ta.getString(R.styleable.ContributionsView_username) != null && !isInEditMode()) {
+            loadContributions(ta.getString(R.styleable.ContributionsView_username));
+        }
+    }
+
+    public void loadContributions(String user) {
+        new ContributionsLoader(this).beginRequest(getContext(), user);
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        canvas.getClipBounds(mRect);
+
+        final int w = mRect.width();
+        final int h = mRect.height();
+
+        final int hnum = mContributions.size() == 0 ? 52 : (int) Math
+                .ceil(mContributions.size() / 7d); //The number of columns to show horizontally
+
+        final float bd = (w / (float) hnum) * 0.9f; //The dimension of a single block
+        final float m = (w / (float) hnum) - bd; //The margin around a block
+
+        final float mth = mShouldDisplayMonths ? mTextSize : 0; //Height of month text
+
+        //Draw the background
+        mDayPainter.setColor(mBackGroundColor);
+        canvas.drawRect(0, (2 * mth), w, h + mth, mDayPainter);
+        float x = 0;
+        if(mContributions.size() > 0) {
+            int dow = getDayOfWeek(mContributions.get(0).date) - 1;
+            float y = (dow * (bd + m)) + 2 * mth;
+            for(ContributionsLoader.ContributionsDay d : mContributions) {
+                mDayPainter.setColor(d.color);
+                canvas.drawRect(x, y, x + bd, y + bd, mDayPainter);
+                dow = getDayOfWeek(d.date) - 1;
+                if(dow == 6) { //We just drew the last day of the week
+                    x += bd + m;
+                    y = 2 * mth;
+                } else {
+                    y += bd + m;
+                }
+
+            }
+        } else {
+            int dow = 0;
+            float y = 2 * mth;
+            mDayPainter.setColor(0xffeeeeee);
+            for(int i = 0; i < 364; i++) {
+                canvas.drawRect(x, y, x + bd, y + bd, mDayPainter);
+                if(dow == 6) { //We just drew the last day of the week
+                    x += bd + m;
+                    y = 2 * mth;
+                    dow = 0;
+                } else {
+                    y += bd + m;
+                    dow++;
+                }
+            }
+        }
+        if(mShouldDisplayMonths) {
+            mTextPainter.setColor(mTextColor);
+            mTextPainter.setTextSize(mth);
+            mCalendar.setTimeInMillis(System.currentTimeMillis());
+            mCalendar.add(Calendar.MONTH, -12);
+            x = 0;
+            for(int i = 0; i < 12; i++) {
+                final String month = getMonthName(mCalendar.getTimeInMillis());
+                mTextPainter.getTextBounds(month, 0, month.length(), mTextBounds);
+                if(w > x + mTextBounds.width()) {
+                    canvas.drawText(
+                            month,
+                            x,
+                            mth,
+                            mTextPainter
+                    );
+                } else {
+                    break;
+                }
+                mCalendar.add(Calendar.MONTH, 1);
+                x += w / 12;
+            }
+        }
+        final ViewGroup.LayoutParams lp = getLayoutParams();
+        lp.height = h;
+        setLayoutParams(lp);
+    }
+
+    private int getDayOfWeek(long stamp) {
+        mCalendar.setTimeInMillis(stamp);
+        //Day of week is indexed 1 to 7
+        return mCalendar.get(Calendar.DAY_OF_WEEK);
+    }
+
+    private static final SimpleDateFormat month = new SimpleDateFormat("MMM");
+
+    private String getMonthName(long stamp) {
+        return month.format(stamp);
+    }
+
+    @Override
+    public void onResponse(ArrayList<ContributionsLoader.ContributionsDay> contributions) {
+        mContributions = contributions;
+        invalidate();
+        if(mListener != null && mListener.get() != null) {
+            mListener.get().contributionsLoaded(contributions);
+        }
+    }
+
+    @Override
+    public void onError(VolleyError error) {
+
+    }
+
+    public void setListener(ContributionsLoadListener listener) {
+        mListener = new WeakReference<>(listener);
+    }
+
+
+    public interface ContributionsLoadListener {
+
+        void contributionsLoaded(List<ContributionsLoader.ContributionsDay> contributions);
+    }
+
+    @Override
+    protected Parcelable onSaveInstanceState() {
+        final Parcelable ss = super.onSaveInstanceState();
+        final ContributionsState state = new ContributionsState(ss);
+        state.contributions = mContributions.toArray(new ContributionsLoader.ContributionsDay[0]);
+        return state;
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Parcelable state) {
+        super.onRestoreInstanceState(state);
+
+        if(!(state instanceof ContributionsState)) {
+            super.onRestoreInstanceState(state);
+            return;
+        }
+        final ContributionsState cs = (ContributionsState) state;
+        super.onRestoreInstanceState(cs.getSuperState());
+        this.mContributions = new ArrayList<>(Arrays.asList(cs.contributions));
+        invalidate();
+    }
+
+    private static class ContributionsState extends BaseSavedState {
+        ContributionsLoader.ContributionsDay[] contributions;
+
+        ContributionsState(Parcel source) {
+            super(source);
+            this.contributions = source.createTypedArray(ContributionsLoader.ContributionsDay.CREATOR);
+        }
+
+        ContributionsState(Parcelable superState) {
+            super(superState);
+        }
+
+        @Override
+        public void writeToParcel(Parcel out, int flags) {
+            super.writeToParcel(out, flags);
+            out.writeTypedArray(contributions, flags);
+        }
+
+        public static final Parcelable.Creator<ContributionsState> CREATOR =
+                new Parcelable.Creator<ContributionsState>() {
+                    public ContributionsState createFromParcel(Parcel in) {
+                        return new ContributionsState(in);
+                    }
+
+                    public ContributionsState[] newArray(int size) {
+                        return new ContributionsState[size];
+                    }
+                };
+    }
+
+}
+
+
+
+```
+
+The ```ContributionsView``` has attributes for its background colour, text colour, text size, and whether months should be displayed. A default user login can also be set via XML.
+
+As the ```View``` is being repeatedly drawn, it is important to ensure that as few objects as possible are allocated in the ```onDraw``` method.
+The single ```Paint``` objects for text and day (rectangle) painting are therefore re-used, as are the ```Rectangle``` used to store the ```View``` dimensions and the second ```Rectangle``` used to store text bounds.
+The ```Calendar``` used for parsing dates is static and used in all instances of ```ContributionsView```.
+
+The ```ContributionsView``` implements ```ContributionsRequestListener``` and contains the ```loadContributions``` method, which creates an anonymous ```ContributionsLoader``` and
+begins loading the contributions for the given user.
+In the ```onResponse``` method the ```ContributionsView``` stores the ```ArrayList``` of contributions and calls the ```invalidate``` method, forcing a redraw.
+It also checks if its listener has been set, and notifies it of the newly loaded ```ArrayList``` of ```ContributionsDay``` objects.
+
+The ```onDraw``` method needs to deal with two states, either the ```ContributionsView``` has a non empty list of ```ContributionsDays``` or it does not.
+
+**ContributionsView.java**
+``` java
+void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        canvas.getClipBounds(mRect);
+
+        final int w = mRect.width();
+        final int h = mRect.height();
+
+        final int hnum = mContributions.size() == 0 ? 52 : (int) Math
+                .ceil(mContributions.size() / 7d); //The number of columns to show horizontally
+
+        final float bd = (w / (float) hnum) * 0.9f; //The dimension of a single block
+        final float m = (w / (float) hnum) - bd; //The margin around a block
+
+        final float mth = mShouldDisplayMonths ? mTextSize : 0; //Height of month text
+
+        //Draw the background
+        mDayPainter.setColor(mBackGroundColor);
+        canvas.drawRect(0, (2 * mth), w, h + mth, mDayPainter);
+        float x = 0;
+        if(mContributions.size() > 0) {
+            int dow = getDayOfWeek(mContributions.get(0).date) - 1;
+            float y = (dow * (bd + m)) + 2 * mth;
+            for(ContributionsLoader.ContributionsDay d : mContributions) {
+                mDayPainter.setColor(d.color);
+                canvas.drawRect(x, y, x + bd, y + bd, mDayPainter);
+                dow = getDayOfWeek(d.date) - 1;
+                if(dow == 6) { //We just drew the last day of the week
+                    x += bd + m;
+                    y = 2 * mth;
+                } else {
+                    y += bd + m;
+                }
+
+            }
+        } else {
+            int dow = 0;
+            float y = 2 * mth;
+            mDayPainter.setColor(0xffeeeeee);
+            for(int i = 0; i < 364; i++) {
+                canvas.drawRect(x, y, x + bd, y + bd, mDayPainter);
+                if(dow == 6) { //We just drew the last day of the week
+                    x += bd + m;
+                    y = 2 * mth;
+                    dow = 0;
+                } else {
+                    y += bd + m;
+                    dow++;
+                }
+            }
+        }
+        if(mShouldDisplayMonths) {
+            mTextPainter.setColor(mTextColor);
+            mTextPainter.setTextSize(mth);
+            mCalendar.setTimeInMillis(System.currentTimeMillis());
+            mCalendar.add(Calendar.MONTH, -12);
+            x = 0;
+            for(int i = 0; i < 12; i++) {
+                final String month = getMonthName(mCalendar.getTimeInMillis());
+                mTextPainter.getTextBounds(month, 0, month.length(), mTextBounds);
+                if(w > x + mTextBounds.width()) {
+                    canvas.drawText(
+                            month,
+                            x,
+                            mth,
+                            mTextPainter
+                    );
+                } else {
+                    break;
+                }
+                mCalendar.add(Calendar.MONTH, 1);
+                x += w / 12;
+            }
+        }
+        final ViewGroup.LayoutParams lp = getLayoutParams();
+        lp.height = h;
+        setLayoutParams(lp);
+    }
+```
+
+The ```onDraw``` method begins by measuring the size which it has to draw in.
+Next, the number of columns to show horizontally can be calculated, as either the number of contributions split across 7 day weeks, or 52 weeks.
+
+Each rectangle has an area of the view width over the horizontal number of contributions, however it must also account for the margin between each rectangle.
+For each rectangular segment of the canvas, 90% of the width will be filled with the block, and the remaining 10% left as a margin.
+
+Next the month text height is set as either the text size, or 0 depenedent on whether month text should be drawn.
+
+The first draw call is to draw the background behind the image. This call draws the background colour behind everything but the space for the month text.
+
+The next draw call is dependent on whether there are contributions to be drawn.
+The contributions are drawn based on the day of the week, which is calculated from the value stored in each ```ContributionsDay``` and the ```Calendar```.
+The y position is the day of the week multiplied by the total height of a rectangle plus the margin for drawing the month text.
+
+After computing the initial y position, the ```onDraw``` method uses a for-each loop to iterate through each ```ContributionsDay```, setting the colour of mDayPainter, drawing the rectangle, and calculating the day of the week.
+If the day of the week is 6, the week has ended; the x position is incremented by the width of rectangle and the y value is reset to the month text margin.
+Otherwise, the y value is incremented by the height of a rectangle.
+
+If there are no contributions to draw mDayPainter is set to the default background colour, and 364 rectangles are drawn to fill the 52 weeks with full 7 day weeks.
+
+The final set of draw calls occur if mShouldDisplayMonths is true.
+In this case mTextPainter is setup with mTextColor and the month text height, and the calendar is initialised to the current time, before subtracting 12 months to return to the start
+of the year.
+For each month in the year, the three letter month string is collected from the ```Calendar``` instance and the mTextBounds rectangle is used to store the measured bounds of the text,
+ensuring that it doesn't extend past the end of the ```Canvas```.
+After each draw call the ```Calendar``` month is incremented, and the x position is incremented by one twelfth of the ```Canvas``` width.
+
+The final call in ```onDraw``` is to set the ```LayoutParams``` of the ```ContributionsView``` to ensure that the ```Canvas``` is drawn across the full width available.
+

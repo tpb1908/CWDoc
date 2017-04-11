@@ -2103,3 +2103,28 @@ After each draw call the ```Calendar``` month is incremented, and the x position
 
 The final call in ```onDraw``` is to set the ```LayoutParams``` of the ```ContributionsView``` to ensure that the ```Canvas``` is drawn across the full width available.
 
+##### Contributions statistics
+
+Returning to the ```UserInfoFragment``` we have the callback for ```contributionsLoaded```.
+This method computes numerous statistics about the user:
+- Their total number of contributions
+- Their average number of contributions per day
+- Their average number of contributions per active day
+- Their greatest number of contributions per day
+- Their longest uninterrupted 'streak' of active days
+
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $void contributionsLoaded$"
+
+5 counters are used for the computation.
+Each iteration of the loop checks if any contributions have been made.
+If any contributions have been made, the total number of contributions is incremented by the value, the number of active days is incremented, the number of contributions on that day
+is checked against the current maximum number of contributions, and streak counter is incremented before being checked against the current maxStreak value.
+If no contributions have been made, the streak counter is reset to 0.
+
+Once the computations have been made, the total number of contributions is made.
+If it is 0, the "No contributions" string resource is displayed.
+Otherwise, a string is built from 5 different format strings to display the information.
+
+Before setting the text of mContributionsInfo, a check is performed to see if it already contains any text.
+If the ```TextView``` is empty, then it will have 0 height (other than its margin), and setting its text would cause both it and its parent ```CardView``` to jump in size.
+Rather than allowing this, an ```ObjectAnimator``` is used to increment the maxLines count of the ```TextView``` from 0 to the required number over a period of 200 milliseconds.
