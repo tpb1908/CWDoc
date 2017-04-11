@@ -2001,3 +2001,105 @@ the second case, however we must now ensure that the ```Views``` are bound once 
 This is achieved with the second check, the last line in ```onCreateView``` before returning the ```View```.
 This check is ```if(mUser != null) userLoaded(mUser)```. As mAreViewsValid has been set to true, this will bind the ```Views``` if the ```User``` was initially loaded before the ```Views``` were created.
 This structure is used throughout the different concrete implementations of ```UserFragment```.
+
+#### ContributionsView
+
+Objective 2.i.d is to display the user's contributions in a graphical form.
+
+As explained in the limitations section, there is no API for loading a user's contributions. Instead this can be achieved by parsing the SVG image of a user's contributions
+
+![Contributions](http://imgur.com/4zp8SG2.png)
+
+This image can be loaded from https://github.com/users/user_name/contributions
+
+##### Loading contributions
+
+Each column in the image is made up of a set of rectangles, with three important attributes.
+
+```XML
+<g transform="translate(0, 0)">
+          <rect class="day" width="10" height="10" x="13" y="0" fill="#ebedf0" data-count="0" data-date="2016-04-10"></rect>
+          <rect class="day" width="10" height="10" x="13" y="12" fill="#ebedf0" data-count="0" data-date="2016-04-11"></rect>
+          <rect class="day" width="10" height="10" x="13" y="24" fill="#ebedf0" data-count="0" data-date="2016-04-12"></rect>
+          <rect class="day" width="10" height="10" x="13" y="36" fill="#ebedf0" data-count="0" data-date="2016-04-13"></rect>
+          <rect class="day" width="10" height="10" x="13" y="48" fill="#ebedf0" data-count="0" data-date="2016-04-14"></rect>
+          <rect class="day" width="10" height="10" x="13" y="60" fill="#ebedf0" data-count="0" data-date="2016-04-15"></rect>
+          <rect class="day" width="10" height="10" x="13" y="72" fill="#ebedf0" data-count="0" data-date="2016-04-16"></rect>
+      </g>
+```
+
+Firstly, the ```fill``` attribute provides the hexadecimal colour code used to draw the rectangle, which can be parsed and used to draw the image later.
+Secondly, the ```data-count``` attribute provides the number of contributions made for the particular day.
+Finally, the ```data-date``` attribute is the date represented by the rectangle in the format yyyy-mm-dd.
+
+In order to load the SVG, a request can be made to download it as a string.
+
+The ```ContributionsLoader``` class is used to load a user's contributions.
+
+#import "contributionsview/src/main/java/com/tpb/contributionsview/ContributionsLoader.java"
+
+The interface ```ContributionsRequestListener``` is used as a callback once the contributions information is loaded.
+As such, the ```ContributionsLoader``` constructor takes a ```ContributionsLoader``` and stores a ```WeakReference``` to it.
+
+The ```beginRequest``` method formats the user login and performs a get request to the URL of the SVG image.
+If the image is loaded successfully, the ```parse``` method is called.
+
+```parse``` uses two counters, ```first``` and ```last``` to iterate through each substring which is surrounded by the tags ```<rect``` and the closing tag ```/>```.
+The ```String``` ```indexOf``` method searches a string for a substring from a given position, 0 in the simpler overloaded method, returning -1 if the substring is not present.
+
+Each time the substring is found, the ```parse``` method adds a new ```ContributionsDay``` object to the contributions ```ArrayList```.
+
+```ContributionsDay``` contains the integer value of the ```fill``` attribute, the long value of the ```data-date``` attribute, and the integer value of the ```data-count``` attribute.
+
+Finally, if the ```ContributionsRequestListener``` is non null, the values are returned to it.
+
+##### Displaying contributions
+
+The ```ContributionsView``` is a custom descendant of ```View``` used to draw the contributions heatmap.
+
+#import "contributionsview/src/main/java/com/tpb/contributionsview/ContributionsView.java"
+
+The ```ContributionsView``` has attributes for its background colour, text colour, text size, and whether months should be displayed. A default user login can also be set via XML.
+
+As the ```View``` is being repeatedly drawn, it is important to ensure that as few objects as possible are allocated in the ```onDraw``` method.
+The single ```Paint``` objects for text and day (rectangle) painting are therefore re-used, as are the ```Rectangle``` used to store the ```View``` dimensions and the second ```Rectangle``` used to store text bounds.
+The ```Calendar``` used for parsing dates is static and used in all instances of ```ContributionsView```.
+
+The ```ContributionsView``` implements ```ContributionsRequestListener``` and contains the ```loadContributions``` method, which creates an anonymous ```ContributionsLoader``` and
+begins loading the contributions for the given user.
+In the ```onResponse``` method the ```ContributionsView``` stores the ```ArrayList``` of contributions and calls the ```invalidate``` method, forcing a redraw.
+It also checks if its listener has been set, and notifies it of the newly loaded ```ArrayList``` of ```ContributionsDay``` objects.
+
+The ```onDraw``` method needs to deal with two states, either the ```ContributionsView``` has a non empty list of ```ContributionsDays``` or it does not.
+
+#import "contributionsview/src/main/java/com/tpb/contributionsview/ContributionsView.java $void onDraw$"
+
+The ```onDraw``` method begins by measuring the size which it has to draw in.
+Next, the number of columns to show horizontally can be calculated, as either the number of contributions split across 7 day weeks, or 52 weeks.
+
+Each rectangle has an area of the view width over the horizontal number of contributions, however it must also account for the margin between each rectangle.
+For each rectangular segment of the canvas, 90% of the width will be filled with the block, and the remaining 10% left as a margin.
+
+Next the month text height is set as either the text size, or 0 depenedent on whether month text should be drawn.
+
+The first draw call is to draw the background behind the image. This call draws the background colour behind everything but the space for the month text.
+
+The next draw call is dependent on whether there are contributions to be drawn.
+The contributions are drawn based on the day of the week, which is calculated from the value stored in each ```ContributionsDay``` and the ```Calendar```.
+The y position is the day of the week multiplied by the total height of a rectangle plus the margin for drawing the month text.
+
+After computing the initial y position, the ```onDraw``` method uses a for-each loop to iterate through each ```ContributionsDay```, setting the colour of mDayPainter, drawing the rectangle, and calculating the day of the week.
+If the day of the week is 6, the week has ended; the x position is incremented by the width of rectangle and the y value is reset to the month text margin.
+Otherwise, the y value is incremented by the height of a rectangle.
+
+If there are no contributions to draw mDayPainter is set to the default background colour, and 364 rectangles are drawn to fill the 52 weeks with full 7 day weeks.
+
+The final set of draw calls occur if mShouldDisplayMonths is true.
+In this case mTextPainter is setup with mTextColor and the month text height, and the calendar is initialised to the current time, before subtracting 12 months to return to the start
+of the year.
+For each month in the year, the three letter month string is collected from the ```Calendar``` instance and the mTextBounds rectangle is used to store the measured bounds of the text,
+ensuring that it doesn't extend past the end of the ```Canvas```.
+After each draw call the ```Calendar``` month is incremented, and the x position is incremented by one twelfth of the ```Canvas``` width.
+
+The final call in ```onDraw``` is to set the ```LayoutParams``` of the ```ContributionsView``` to ensure that the ```Canvas``` is drawn across the full width available.
+

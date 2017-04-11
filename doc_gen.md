@@ -3703,7 +3703,7 @@ However, the full layout has not been calculated, so the animation cannot yet be
 
 In order to wait until the layout has been completed, an ```OnPreDrawListener``` is added to the ```ViewTreeObserver``` of the ```NetworkImageView``` mAvatar.
 
-When  ```onPreDraw``` is called, the listener checks that the the ```Intent``` contains the key ```intent_drawable```, and if it is present it sets the ```Bitmap`` of mAvatar 
+When  ```onPreDraw``` is called, the listener checks that the the ```Intent``` contains the key ```intent_drawable```, and if it is present it sets the ```Bitmap``` of mAvatar 
 as well as setting the text of the ```TextView``` mUserLogin.
 
 Due to the nature of ```View``` layouts and drawing, adding a listener to the ```ViewTreeObserver``` is computationally expensive. It is therefore important to remove the 
@@ -3729,3 +3729,20 @@ The method checks that the ```ImageView```'s ```Drawable``` is an instance of ``
 The ```instanceof``` comparator also performs a null check as the language specification defines the result of the operator to be "true if the value of the RelationalExpression is not null and the reference could be cast (§15.16) to the ReferenceType without raising a ClassCastException".
 
 If the ```BitmapDrawable``` is valid, it is added to the ```Intent```.
+
+#### Use of ViewSafeFragment
+
+When a ```UserFragment``` is created, there are two possible orders of events.
+
+The first is that ```onCreateView``` is called, and at some point in the future the network call to load the ```User``` returns, ```userLoaded``` is called and the ```Views``` are bound.
+The second is that the ```userLoaded``` is called before ```onCreateView```, which would result in a ```NullPointerException``` if an attempt was made to  bind data to null ```Views```.
+
+This is solved with two checks.
+
+In ```userLoaded``` the first line is ```mUser = user```, assigning the member variable ```mUser```.
+The second line is ```if(!mAreViewsValid) return``` which will ensure that no ```Views``` are bound to if they have not yet been created. This deals with the crash which could happen in
+the second case, however we must now ensure that the ```Views``` are bound once they have been created.
+
+This is achieved with the second check, the last line in ```onCreateView``` before returning the ```View```.
+This check is ```if(mUser != null) userLoaded(mUser)```. As mAreViewsValid has been set to true, this will bind the ```Views``` if the ```User``` was initially loaded before the ```Views``` were created.
+This structure is used throughout the different concrete implementations of ```UserFragment```.
