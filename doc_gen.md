@@ -4366,3 +4366,80 @@ After each draw call the ```Calendar``` month is incremented, and the x position
 
 The final call in ```onDraw``` is to set the ```LayoutParams``` of the ```ContributionsView``` to ensure that the ```Canvas``` is drawn across the full width available.
 
+##### Contributions statistics
+
+Returning to the ```UserInfoFragment``` we have the callback for ```contributionsLoaded```.
+This method computes numerous statistics about the user:
+- Their total number of contributions
+- Their average number of contributions per day
+- Their average number of contributions per active day
+- Their greatest number of contributions per day
+- Their longest uninterrupted 'streak' of active days
+
+**UserInfoFragment.java**
+``` java
+void contributionsLoaded(List<ContributionsLoader.ContributionsDay> contributions) {
+        int totalContributions = 0;
+        int daysActive = 0;
+        int maxContributions = 0;
+        int streak = 0;
+        int maxStreak = 0;
+        for(ContributionsLoader.ContributionsDay gd : contributions) {
+            if(gd.contributions > 0) {
+                totalContributions += gd.contributions;
+                daysActive += 1;
+                if(gd.contributions > maxContributions) {
+                    maxContributions = gd.contributions;
+                }
+                streak += 1;
+                if(streak > maxStreak) {
+                    maxStreak = streak;
+                }
+            } else {
+                streak = 0;
+            }
+        }
+        if(totalContributions > 0) {
+            final String info = getResources()
+                    .getQuantityString(R.plurals.text_user_contributions, totalContributions, totalContributions) +
+                    "\n" +
+                    String.format(getString(R.string.text_user_average),
+                            (float) totalContributions / contributions.size()
+                    ) +
+                    "\n" +
+                    String.format(getString(R.string.text_user_average_active),
+                            ((float) totalContributions / daysActive)
+                    ) +
+                    "\n" +
+                    String.format(getString(R.string.text_user_max_contributions), maxContributions) +
+                    "\n" +
+                    String.format(getString(R.string.text_user_streak), maxStreak);
+            final boolean isEmpty = mContributionsInfo.getText().toString().isEmpty();
+            mContributionsInfo.setText(info);
+            if(isEmpty) {
+                ObjectAnimator.ofInt(
+                        mContributionsInfo,
+                        "maxLines",
+                        0,
+                        mContributionsInfo.getLineCount()
+                ).setDuration(200).start();
+            }
+        } else {
+            mContributionsInfo.setText(getString(R.string.text_user_no_contributions));
+        }
+    }
+```
+
+5 counters are used for the computation.
+Each iteration of the loop checks if any contributions have been made.
+If any contributions have been made, the total number of contributions is incremented by the value, the number of active days is incremented, the number of contributions on that day
+is checked against the current maximum number of contributions, and streak counter is incremented before being checked against the current maxStreak value.
+If no contributions have been made, the streak counter is reset to 0.
+
+Once the computations have been made, the total number of contributions is made.
+If it is 0, the "No contributions" string resource is displayed.
+Otherwise, a string is built from 5 different format strings to display the information.
+
+Before setting the text of mContributionsInfo, a check is performed to see if it already contains any text.
+If the ```TextView``` is empty, then it will have 0 height (other than its margin), and setting its text would cause both it and its parent ```CardView``` to jump in size.
+Rather than allowing this, an ```ObjectAnimator``` is used to increment the maxLines count of the ```TextView``` from 0 to the required number over a period of 200 milliseconds.
