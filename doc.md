@@ -1368,7 +1368,7 @@ As explained in the background section, an Android app is made up of Activities 
 
 In order to implement the functionality listed above the app requires multiple activities to mimic the pages on the GitHub website.
 
-## User information Activity
+#### User information Activity
 
 The initial Activity should display the same information that a user would see when they navigated to their own GitHub page.
 
@@ -1755,9 +1755,9 @@ In order to maintain a cleaner application structure, it is normal to separate r
 
 ### BaseActivity
 
-In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
+In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, cancel network requests,  and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
 
-#include "app/src/main.java/com/tpb/projects/common/BaseActivity.java"
+#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java"
 
 #### onCreate
 
@@ -1773,6 +1773,19 @@ Next, the method checks if the ```Intent``` which started ```BaseActivity``` is 
 If the ```Intent``` is not from the homescreen, the ```Activity``` was launched from a URL which the user likely wants to view once they have signed in. This can be achieved by passing the launch ```Intent``` forward to the ```LoginActivity```.
 
 #### onDestroy
+
+##### Network cancelling
+
+Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
+The ```BaseActivity``` retains ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
+
+#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $void onAttachFragment$"
+
+```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
+
+#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $cancelNetworkRequests$"
+
+##### Memory Leak
 
 A bug introduced in Android 5.0, launched in November 2014, which results in a reference to the ```Activity``` being kept in the ```TransitionManager```.
 The memory leak can be solved by using reflection to remove the ```Activity``` from the ```TransitionManager``` map.
@@ -1815,5 +1828,17 @@ The back button shown in each ```Toolbar``` then references this method, which c
 Once a user has logged in, their account can be displayed.
 This is objective 2.
 
-The immediate sub-objectives of objective 2 are written to represent the different components shown when displaying a user in a paged ```Activity```.
+The immediate sub-objectives of objective 2 are written to represent the different components shown when displaying a user in a paged ```Activity``` as described in the proposed design.
+
+Each section will be shown as a ```Fragment``` within a ```ViewPager```.
+This makes the ```UserActivity``` layout and class simple, as most logic is kept separate, with each ```Fragment``` only concerned with its own purpose.
+
+#include "app/src/main/res/layout/activity_user.xml"
+
+The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Toolbar``` to scroll with the contents of any ```ScrollViews``` within the ```Fragments``` which are contained in the ```ViewPager```.
+
+#include "app/src/main/java/com/tpb/projects/user/UserActivity.java"
+
+When it is created, ```UserActivity``` calls the ```super``` method (```BaseActivity```) which performs the access check, allowing ```UserActivity``` to return if the app doesn't have an access token.
+If this check passes, ```onCreate``` method continues by checking theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
 
