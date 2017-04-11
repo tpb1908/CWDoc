@@ -1461,6 +1461,7 @@ If the request is successful the response will be a string containing the access
 
 In order to avoid duplication of values used throughout the GitHub API, I have used a single abstract class to contain the headers and path keys used throughout the project
 
+**APIHandler.java**
 ``` java
 package com.tpb.github.data;
 
@@ -1736,6 +1737,7 @@ Next each header map is initialised with the authorization token header, and the
 
 The class which actually stores the authorization information is ```GitHubSession```, which was used once above in ```APIHandler```.
 
+**GitHubSession.java**
 ``` java
 package com.tpb.github.data.auth;
 
@@ -1820,6 +1822,7 @@ The ```LoginActivity``` consists of two layouts, only one of which is visible at
  
 The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
 
+**LoginActivity.java**
 ``` java
 package com.tpb.projects.login;
 
@@ -2008,6 +2011,7 @@ The client checks if the url contains `?code=', and if so,  passes the segment a
 
 This completes objective 1.a
 
+**OAuthHandler.java**
 ``` java
 package com.tpb.github.data.auth;
 
@@ -2142,6 +2146,7 @@ If the user presses the authorize button, the page will be redirected through ur
 
 In on the overriden ```onPageStarted``` method of the ```OAuthWebViewClient``` this results in the ```code``` parameter being passed to the ```OAuthHandler``` through ```fetchAccessToken```.
 
+**LoginActivity.java**
 ``` java
 public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if(url.contains("?code=")) {
@@ -2153,6 +2158,7 @@ public void onPageStarted(WebView view, String url, Bitmap favicon) {
 ```
 
 
+**OAuthHandler.java**
 ``` java
 package com.tpb.github.data.auth;
 
@@ -2280,6 +2286,7 @@ Each endpoint returns either a single model, or a single dimensional array of mo
 
 All models used extend the abstract class ```DataModel``` which contains some of the commonly used keys, as well as the object creation date which is used across all models.
 
+**DataModel.java**
 ``` java
 package com.tpb.github.data.models;
 
@@ -2332,6 +2339,7 @@ Most uses of ```ItemLoader``` load an instance of ```DataModel```.
 An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority)```
 
 
+**Loader.java**
 ``` java
 loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
         get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
@@ -2358,6 +2366,7 @@ this method is used to load a single ```Issue``` model given a full repository n
 
 Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
 
+**Loader.java**
 ``` java
 loadProject(@Nullable final ItemLoader<Project> loader, int id) {
         final ANRequest req = get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
@@ -2505,6 +2514,7 @@ In order to maintain a cleaner application structure, it is normal to separate r
 
 In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, cancel network requests,  and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
 
+**BaseActivity.java**
 ``` java
 package com.tpb.projects.common;
 
@@ -2629,6 +2639,7 @@ If the ```Intent``` is not from the homescreen, the ```Activity``` was launched 
 Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
 The ```BaseActivity``` retains ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
 
+**BaseActivity.java**
 ``` java
 void onAttachFragment (Fragment fragment) {
         mWeakFragments.add(new WeakReference<>(fragment));
@@ -2637,6 +2648,7 @@ void onAttachFragment (Fragment fragment) {
 
 ```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
 
+**BaseActivity.java**
 ``` java
 cancelNetworkRequests();
     }
@@ -2699,13 +2711,15 @@ Rather than adding this method in all of the ```Activities```, it can be added t
     android:onClick="onToolbarBackPressed"/>
 ```
 
-The back button shown in each ```Toolbar``` then references this method, which calls the ```Activity``` method ```onBackPressed``` to perform the same behaviour as pressing the phones navigation back key.
+The back button shown in each ```Toolbar``` then references this method, which calls the ```Activity``` method ```onBackPressed``` to perform the same behaviour as pressing the navigation back key.
 
+<div style="page-break-after: always;"></div>
 
 ### NetworkImageView
 
 The ```NetworkImageView``` is a subclass of ```ImageView``` used to asynchronously load images from a given URL and display them once they have finished downloading.
 
+**NetworkImageView.java**
 ``` java
 package com.tpb.projects.common;
 
@@ -2868,6 +2882,7 @@ The ```NetworkImageView``` has three instance variables; the URL to be loaded as
 
 When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet``` for resource identifiers set in XML.
 
+**NetworkImageView.java**
 ``` java
 void init(AttributeSet attrs, int defStyleAttr) {
         final TypedArray array = getContext()
@@ -2884,6 +2899,7 @@ void init(AttributeSet attrs, int defStyleAttr) {
 
 The ```loadImage``` method is responsible for loading and displaying the image.
 
+**NetworkImageView.java**
 ``` java
 void loadImage(final boolean isInLayoutPass) {
         final int width = getWidth();
@@ -2982,6 +2998,7 @@ The immediate sub-objectives of objective 2 are written to represent the differe
 Each section will be shown as a ```Fragment``` within a ```ViewPager```.
 This makes the ```UserActivity``` layout and class simple, as most logic is kept separate, with each ```Fragment``` only concerned with its own purpose.
 
+**activity_user.xml**
 ``` xml
 <?xml version="1.0" encoding="utf-8"?>
 <android.support.design.widget.CoordinatorLayout
@@ -3048,6 +3065,7 @@ This makes the ```UserActivity``` layout and class simple, as most logic is kept
 
 The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Toolbar``` to scroll with the contents of any ```ScrollViews``` within the ```Fragments``` which are contained in the ```ViewPager```.
 
+**UserActivity.java**
 ``` java
 package com.tpb.projects.user;
 
@@ -3279,7 +3297,8 @@ public class UserActivity extends BaseActivity implements Loader.ItemLoader<User
     }
 }
 
-`````` xml
+```**fragment_user_info.xml**
+``` xml
 <?xml version="1.0" encoding="utf-8"?>
 
 <android.support.v4.widget.SwipeRefreshLayout
@@ -3372,6 +3391,7 @@ The ```UserInfoFragment``` is to fulfill objective 2.i, displaying information a
 
 The ```UserInfoFragment``` layout has two cards, the first displaying text based information about the user, and the second displaying a graph of the users' contributions.
 
+**fragment_user_info.xml**
 ``` xml
 <?xml version="1.0" encoding="utf-8"?>
 
@@ -3452,6 +3472,7 @@ The ```UserInfoFragment``` layout has two cards, the first displaying text based
 
 The layout included within the first ```CardView``` is the same layout used in ```LoginActivity``` to display the user's information
 
+**shard_user_info.xml**
 ``` xml
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
