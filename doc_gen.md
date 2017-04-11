@@ -2985,7 +2985,7 @@ The ```onResponse``` callback has two arguments, the response, and the isImmedia
 If both isImmediate and isInLayoutPass are true, the ```NetworkImageView``` has not yet been properly drawn an the image cannot yet be displayed.
 In this case, a ```post``` call is made, which will add a runnable to the UI thread ```MessageQueue``` for execution once all other work on the UI thread is complete.
 
-When the ```NetworkImageView``` is able to set the image, it checks whether the ```BitMap``` is non null, and sets either the ```BitMap``` or the default resource accordingly.
+When the ```NetworkImageView``` is able to set the image, it checks whether the ```Bitmap``` is non null, and sets either the ```Bitmap``` or the default resource accordingly.
 
 <div style="page-break-after: always;"></div>
 
@@ -3356,7 +3356,9 @@ public class UserActivity extends BaseActivity implements Loader.ItemLoader<User
     }
 }
 
-```**fragment_user_info.xml**
+```
+
+**fragment_user_info.xml**
 ``` xml
 <?xml version="1.0" encoding="utf-8"?>
 
@@ -3631,4 +3633,99 @@ The layout included within the first ```CardView``` is the same layout used in `
 
 and contains a ```LinearLayout``` to display the user's avatar and username, as well as another ```LinearLayout``` to display a list of the user's available information.
 
+Once inflated and bound with a ```User```'s information, the layout will be displayed as below.
 
+![UserInfoFragment](http://imgur.com/N7QriPz.png)
+
+#### Animation
+
+In Android 5.0, released November 2014, shared element transitions were introduced.
+
+These transitions allow a ```View``` to be shared between two ```Activities``` via the ```ViewOverlay``` which is drawn on top of all other ```Views```.
+A common use if for an ```ImageView``` to animate between two ```Activities```. This works well so long as the ```ImageView``` maintains its aspect ratio.
+
+A common case for the ```UserActivity``` being opened is when the user clicks on an avatar. The avatar can be animated from its original position to its new position in the ```UserActivity```. The user name can also be animated from one ```TextView``` to another.
+
+If the ```Activity``` had a single layout inflated in its ```onCreate``` method, this animation would be simple to perform, and wouldn't require any Java code only XML attributes.
+However, the ```NetworkImageView``` displaying the ```User``` avatar is shown in the ```UserInfoFragment``` which is inflated after the ```UserActivity```. Further, the image stored in 
+the ```NetworkImageView``` in the launching ```Activity``` was loaded from a URL, and the new ```NetworkImageView``` in the ```UserInfoFragment``` would load the image again, defeating 
+the purpose of the transition.
+
+The first problem is solved by postponing the entry transition.
+The line after ```View``` binding in ```UserActivity``` is the call ```postponeEnterTransition()``` which, as its name suggests, postpones the entry transition until the 
+```startPostponedEnterTransition``` is called.
+
+**UserInfoFragment.java**
+``` java
+View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_user_info, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mRefresher.setRefreshing(true);
+        mAvatar.getViewTreeObserver()
+               .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                   @Override
+                   public boolean onPreDraw() {
+                       if(getActivity().getIntent() != null && getActivity().getIntent().hasExtra(
+                               getString(R.string.intent_drawable))) {
+                           final Bitmap bm = getActivity().getIntent().getParcelableExtra(
+                                   getString(R.string.intent_drawable));
+                           mUserLogin.setText(getActivity().getIntent().getStringExtra(
+                                   getString(R.string.intent_username)));
+                           mAvatar.setImageBitmap(bm);
+                       }
+                       mAvatar.getViewTreeObserver().removeOnPreDrawListener(this);
+                       getActivity().startPostponedEnterTransition();
+                       return true;
+                   }
+               });
+        mRefresher.setOnRefreshListener(
+                () -> new Loader(getContext()).loadUser(new Loader.ItemLoader<User>() {
+                    @Override
+                    public void loadComplete(User user) {
+                        userLoaded(user);
+                    }
+
+                    @Override
+                    public void loadError(APIHandler.APIError error) {
+                        mRefresher.setRefreshing(false);
+                    }
+                }, mUser.getLogin())
+        );
+
+        mAreViewsValid = true;
+        if(mUser != null) userLoaded(mUser);
+        return view;
+    }
+```
+
+Once the ```View``` has been created in ```UserInfoFragment``` we have the ```NetworkImageView``` required to perform the transition.
+However, the full layout has not been calculated, so the animation cannot yet be performed.
+
+In order to wait until the layout has been completed, an ```OnPreDrawListener``` is added to the ```ViewTreeObserver``` of the ```NetworkImageView``` mAvatar.
+
+When  ```onPreDraw``` is called, the listener checks that the the ```Intent``` contains the key ```intent_drawable```, and if it is present it sets the ```Bitmap`` of mAvatar 
+as well as setting the text of the ```TextView``` mUserLogin.
+
+Due to the nature of ```View``` layouts and drawing, adding a listener to the ```ViewTreeObserver``` is computationally expensive. It is therefore important to remove the 
+```onPreDrawListener``` from the ```NetworkImageView```.
+
+Finally, ```startPostponedEnterTransition``` can be called on the ```UserInfoFragment```'s parent ```Activity```.
+
+The second problem, which was assumed to have been solved when setting the drawable above, is to provide the ```ImageView``` in the new ```Activity``` with the avatar to be drawn.
+This is done in the ```UI``` utility method ```setDrawableForIntent```
+
+**UI.java**
+``` java
+static void setDrawableForIntent(@NonNull ImageView iv, @NonNull Intent i) {
+        if(iv.getDrawable() instanceof BitmapDrawable) {
+            i.putExtra(iv.getResources().getString(R.string.intent_drawable),
+                    ((BitmapDrawable) iv.getDrawable()).getBitmap()
+            );
+        }
+    }
+```
+
+The method checks that the ```ImageView```'s ```Drawable``` is an instance of ```BitmapDrawable```, which it will be if loaded from a ```Bitmap``` as ```NetworkImageView``` does.
+The ```instanceof``` comparator also performs a null check as the language specification defines the result of the operator to be "true if the value of the RelationalExpression is not null and the reference could be cast (§15.16) to the ReferenceType without raising a ClassCastException".
+
+If the ```BitmapDrawable``` is valid, it is added to the ```Intent```.
