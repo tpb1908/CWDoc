@@ -3442,9 +3442,55 @@ Once the ```Views``` have been inflated, the ```UserActivity``` can continue by 
 
 The ```UserActivity``` then determines whether it has been started from a link to a user, in which case the ```User``` must be loaded, or if the app is starting from the homescreen to display the authenticated user.
 
-##UserFragment
+## UserFragment
 
-```UserFragment``` is an abstract class used to add a ```userLoaded``` method to the ```Fragment``` class, as well as 
+```UserFragment``` is an abstract class extending ```ViewSafeFragment``` used to add a ```User``` model instance, the ```userLoaded``` method , as well as to save and restore the ```User``` instance when the ```Fragment``` is added to or removed from the back stack.
+
+**UserFragment.java**
+``` java
+package com.tpb.projects.user.fragments;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.ViewSafeFragment;
+import com.tpb.projects.user.UserActivity;
+
+/**
+ * Created by theo on 10/03/17.
+ */
+
+public abstract class UserFragment extends ViewSafeFragment {
+
+    protected User mUser;
+
+    public abstract void userLoaded(User user);
+
+    protected UserActivity getParent() {
+        return (UserActivity) getActivity();
+    }
+
+    @Override
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        if(savedInstanceState != null && savedInstanceState
+                .containsKey(getString(R.string.parcel_user))) {
+            mUser = savedInstanceState.getParcelable(getString(R.string.parcel_user));
+            userLoaded(mUser);
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putParcelable(getString(R.string.parcel_user), mUser);
+    }
+
+}
+
+```
 
 ### UserInfoFragment
 
