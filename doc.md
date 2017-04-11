@@ -1915,9 +1915,11 @@ Once the ```Views``` have been inflated, the ```UserActivity``` can continue by 
 
 The ```UserActivity``` then determines whether it has been started from a link to a user, in which case the ```User``` must be loaded, or if the app is starting from the homescreen to display the authenticated user.
 
-##UserFragment
+## UserFragment
 
-```UserFragment``` is an abstract class used to add a ```userLoaded``` method to the ```Fragment``` class, as well as 
+```UserFragment``` is an abstract class extending ```ViewSafeFragment``` used to add a ```User``` model instance, the ```userLoaded``` method , as well as to save and restore the ```User``` instance when the ```Fragment``` is added to or removed from the back stack.
+
+#import "app/src/main/java/com/tpb/projects/user/UserFragment.java"
 
 ### UserInfoFragment
 

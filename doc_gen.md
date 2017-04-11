@@ -3586,4 +3586,3 @@ The layout included within the first ```CardView``` is the same layout used in `
 and contains a ```LinearLayout``` to display the user's avatar and username, as well as another ```LinearLayout``` to display a list of the user's available information.
 
 
-
