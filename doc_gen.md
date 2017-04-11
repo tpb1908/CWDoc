@@ -2989,6 +2989,48 @@ When the ```NetworkImageView``` is able to set the image, it checks whether the 
 
 <div style="page-break-after: always;"></div>
 
+### ViewSafeFragment
+
+The lifecycle of a ```Fragment``` is different than that of an ```Activity```.
+
+The first method called is ```onAttach``` when the ```Fragment``` is attached to an ```Activity```.
+Next, ```onCreate``` is called, which might be used to initialise non view-dependent logic.
+Most importantly, ```onCreateView``` is called.
+
+```onCreateView``` returns a ```View``` object and must created the layout for the ```Fragment```.
+
+As the ```Activity``` is created prior to the ```Fragment``` ```View```s being created, the ```Fragment``` may have data to bind before it has to ```Views``` to bind them to.
+
+In order to ensure that the ```Fragment``` doesn't attempt to bind data to a null ```View```, the ```Fragment``` has flag set when the its ```Views``` are created, and set back when its ```Views``` are destroyed.
+
+**ViewSafeFragment.java**
+``` java
+package com.tpb.projects.common;
+
+import android.support.v4.app.Fragment;
+
+/**
+ * Created by theo on 11/04/17.
+ */
+
+public class ViewSafeFragment extends Fragment {
+
+    protected boolean mAreViewsValid;
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        mAreViewsValid = false;
+    }
+
+}
+
+``` 
+
+In a concrete instance of ```ViewSafeFragment``` the mAreViewsValid flag should be set after inflation in ```onCreateView``` and used to check ```View``` validity before performing any binding.
+
+<div style="page-break-after: always;"></div>
+
 ### Utility methods
 
 The ```Util``` class contains numerous utility methods for formatting and finding array indices.
@@ -3400,6 +3442,9 @@ Once the ```Views``` have been inflated, the ```UserActivity``` can continue by 
 
 The ```UserActivity``` then determines whether it has been started from a link to a user, in which case the ```User``` must be loaded, or if the app is starting from the homescreen to display the authenticated user.
 
+##UserFragment
+
+```UserFragment``` is an abstract class used to add a ```userLoaded``` method to the ```Fragment``` class, as well as 
 
 ### UserInfoFragment
 
@@ -3539,5 +3584,6 @@ The layout included within the first ```CardView``` is the same layout used in `
 ```
 
 and contains a ```LinearLayout``` to display the user's avatar and username, as well as another ```LinearLayout``` to display a list of the user's available information.
+
 
 

@@ -2,5 +2,6 @@
 {
     "markdown.preview.scrollEditorWithPreview": false,
     "markdown.preview.doubleClickToSwitchToEditor": false,
-    "markdown.preview.scrollPreviewWithEditorSelection": false
+    "markdown.preview.scrollPreviewWithEditorSelection": false,
+    "python.linting.pylintEnabled": false
 }
