@@ -1506,7 +1506,7 @@ The ```LoginActivity``` consists of two layouts, only one of which is visible at
  
 The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
 
-#include "app/src/main/java/com/tpb/projects/login/LoginActivity.java"
+#import "app/src/main/java/com/tpb/projects/login/LoginActivity.java"
 
 The ```LoginActivity``` binds four views.
 
@@ -1757,7 +1757,7 @@ In order to maintain a cleaner application structure, it is normal to separate r
 
 In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, cancel network requests,  and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
 
-#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java"
+#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java"
 
 #### onCreate
 
@@ -1779,11 +1779,11 @@ If the ```Intent``` is not from the homescreen, the ```Activity``` was launched 
 Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
 The ```BaseActivity``` retains ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
 
-#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $void onAttachFragment$"
+#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java $void onAttachFragment$"
 
 ```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
 
-#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $cancelNetworkRequests$"
+#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java $cancelNetworkRequests$"
 
 ##### Memory Leak
 
@@ -1833,11 +1833,11 @@ The immediate sub-objectives of objective 2 are written to represent the differe
 Each section will be shown as a ```Fragment``` within a ```ViewPager```.
 This makes the ```UserActivity``` layout and class simple, as most logic is kept separate, with each ```Fragment``` only concerned with its own purpose.
 
-#include "app/src/main/res/layout/activity_user.xml"
+#import "app/src/main/res/layout/activity_user.xml"
 
 The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Toolbar``` to scroll with the contents of any ```ScrollViews``` within the ```Fragments``` which are contained in the ```ViewPager```.
 
-#include "app/src/main/java/com/tpb/projects/user/UserActivity.java"
+#import "app/src/main/java/com/tpb/projects/user/UserActivity.java"
 
 When it is created, ```UserActivity``` calls the ```super``` method (```BaseActivity```) which performs the access check, allowing ```UserActivity``` to return if the app doesn't have an access token.
 If this check passes, ```onCreate``` method continues by checking theme before inflating the ```activity_user``` layout and bindings its ```Views```. 

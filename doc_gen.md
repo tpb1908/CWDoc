@@ -1368,7 +1368,7 @@ As explained in the background section, an Android app is made up of Activities 
 
 In order to implement the functionality listed above the app requires multiple activities to mimic the pages on the GitHub website.
 
-## User information Activity
+#### User information Activity
 
 The initial Activity should display the same information that a user would see when they navigated to their own GitHub page.
 
@@ -1882,7 +1882,7 @@ public class OAuthHandler extends APIHandler {
     private final String mTokenUrl;
     private String mAccessToken;
 
-    private static final String AUTH_URL = "https://gitHub.com/login/oauth/aGituthorize?";
+    private static final String AUTH_URL = "https://gitHub.com/login/oauth/authorize?";
     private static final String TOKEN_URL = "https://gitHub.com/login/oauth/access_token?";
     private static final String SCOPE = "user public_repo repo gist";
 
@@ -1899,7 +1899,7 @@ public class OAuthHandler extends APIHandler {
         mListener = listener;
     }
 
-    public void fetchAccessToken(final String code) {
+    public void getAccessToken(final String code) {
         AndroidNetworking.get(mTokenUrl + "&code=" + code)
                          .build()
                          .getAsString(new StringRequestListener() {
@@ -1992,7 +1992,7 @@ In on the overriden ```onPageStarted``` method of the ```OAuthWebViewClient``` t
 public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if(url.contains("?code=")) {
                 final String[] parts = url.split("=");
-                mAuthHandler.fetchAccessToken(parts[1]);
+                mAuthHandler.getAccessToken(parts[1]);
             }
             super.onPageStarted(view, url, favicon);
         }
@@ -2000,7 +2000,51 @@ public void onPageStarted(WebView view, String url, Bitmap favicon) {
 
 
 ``` java
-void fetchAccessToken(final String code) {
+package com.tpb.github.data.auth;
+
+/**
+ * Created by theo on 15/12/16.
+ */
+
+import android.content.Context;
+import android.util.Log;
+
+import com.androidnetworking.AndroidNetworking;
+import com.androidnetworking.error.ANError;
+import com.androidnetworking.interfaces.JSONObjectRequestListener;
+import com.androidnetworking.interfaces.StringRequestListener;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.models.User;
+
+import org.json.JSONObject;
+
+public class OAuthHandler extends APIHandler {
+    private static final String TAG = OAuthHandler.class.getSimpleName();
+
+    private final GitHubSession mSession;
+    private final OAuthAuthenticationListener mListener;
+    private final String mAuthUrl;
+    private final String mTokenUrl;
+    private String mAccessToken;
+
+    private static final String AUTH_URL = "https://gitHub.com/login/oauth/authorize?";
+    private static final String TOKEN_URL = "https://gitHub.com/login/oauth/access_token?";
+    private static final String SCOPE = "user public_repo repo gist";
+
+    private static final String TOKEN_URL_FORMAT = TOKEN_URL + "client_id=%1$s&client_secret=%2$s&redirect_uri=%3$s";
+    private static final String AUTH_URL_FORMAT = AUTH_URL + "client_id=%1$s&scope=%2$s&redirect_uri=%3$s";
+
+    public OAuthHandler(Context context, String clientId, String clientSecret,
+                        String callbackUrl,
+                        OAuthAuthenticationListener listener) {
+        super(context);
+        mSession = GitHubSession.getSession(context);
+        mTokenUrl = String.format(TOKEN_URL_FORMAT, clientId, clientSecret, callbackUrl);
+        mAuthUrl = String.format(AUTH_URL_FORMAT, clientId, SCOPE, callbackUrl);
+        mListener = listener;
+    }
+
+    public void getAccessToken(final String code) {
         AndroidNetworking.get(mTokenUrl + "&code=" + code)
                          .build()
                          .getAsString(new StringRequestListener() {
@@ -2022,6 +2066,40 @@ void fetchAccessToken(final String code) {
                              }
                          });
     }
+
+    private void fetchUser() {
+        AndroidNetworking.get(GIT_BASE + SEGMENT_USER)
+                         .addHeaders(API_AUTH_HEADERS)
+                         .build()
+                         .getAsJSONObject(new JSONObjectRequestListener() {
+                             @Override
+                             public void onResponse(JSONObject response) {
+                                 mSession.storeUser(response);
+                                 mListener.userLoaded(mSession.getUser());
+                             }
+
+                             @Override
+                             public void onError(ANError anError) {
+                                 mListener.onFail(anError.getErrorDetail());
+                                 Log.e(TAG, "onError: " + anError.getErrorDetail());
+                             }
+                         });
+
+    }
+
+    public String getAuthUrl() {
+        return mAuthUrl;
+    }
+
+    public interface OAuthAuthenticationListener {
+        void onSuccess();
+
+        void onFail(String error);
+
+        void userLoaded(User user);
+
+    }
+}
 ```
 
 The ```fetchAccessToken``` method performs a get request to the token URL created with the apps client id and secret, adding the code as a path parameter.
@@ -2105,6 +2183,7 @@ loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issu
         get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
                 .addHeaders(API_AUTH_HEADERS)
                 .setPriority(highPriority ? Priority.HIGH : Priority.MEDIUM)
+                .setTag(loader)
                 .build()
                 .getAsJSONObject(new JSONObjectRequestListener() {
                     @Override
@@ -2129,6 +2208,7 @@ Some single methods also have prefetching when a null ```ItemLoader``` is passed
 loadProject(@Nullable final ItemLoader<Project> loader, int id) {
         final ANRequest req = get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
                 .addHeaders(PROJECTS_API_API_AUTH_HEADERS)
+                .setTag(loader)
                 .build();
         if(loader == null) {
             req.prefetch();
@@ -2269,9 +2349,9 @@ In order to maintain a cleaner application structure, it is normal to separate r
 
 ### BaseActivity
 
-In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
+In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, cancel network requests,  and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
 
-#include "app/src/main.java/com/tpb/projects/common/BaseActivity.java"
+#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java"
 
 #### onCreate
 
@@ -2287,6 +2367,19 @@ Next, the method checks if the ```Intent``` which started ```BaseActivity``` is 
 If the ```Intent``` is not from the homescreen, the ```Activity``` was launched from a URL which the user likely wants to view once they have signed in. This can be achieved by passing the launch ```Intent``` forward to the ```LoginActivity```.
 
 #### onDestroy
+
+##### Network cancelling
+
+Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
+The ```BaseActivity``` retains ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
+
+#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $void onAttachFragment$"
+
+```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
+
+#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $cancelNetworkRequests$"
+
+##### Memory Leak
 
 A bug introduced in Android 5.0, launched in November 2014, which results in a reference to the ```Activity``` being kept in the ```TransitionManager```.
 The memory leak can be solved by using reflection to remove the ```Activity``` from the ```TransitionManager``` map.
@@ -2329,5 +2422,17 @@ The back button shown in each ```Toolbar``` then references this method, which c
 Once a user has logged in, their account can be displayed.
 This is objective 2.
 
-The immediate sub-objectives of objective 2 are written to represent the different components shown when displaying a user in a paged ```Activity```.
+The immediate sub-objectives of objective 2 are written to represent the different components shown when displaying a user in a paged ```Activity``` as described in the proposed design.
+
+Each section will be shown as a ```Fragment``` within a ```ViewPager```.
+This makes the ```UserActivity``` layout and class simple, as most logic is kept separate, with each ```Fragment``` only concerned with its own purpose.
+
+#include "app/src/main/res/layout/activity_user.xml"
+
+The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Toolbar``` to scroll with the contents of any ```ScrollViews``` within the ```Fragments``` which are contained in the ```ViewPager```.
+
+#include "app/src/main/java/com/tpb/projects/user/UserActivity.java"
+
+When it is created, ```UserActivity``` calls the ```super``` method (```BaseActivity```) which performs the access check, allowing ```UserActivity``` to return if the app doesn't have an access token.
+If this check passes, ```onCreate``` method continues by checking theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
 
