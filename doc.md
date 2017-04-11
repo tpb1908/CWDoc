@@ -865,12 +865,6 @@ The client must implement the following features:
             </li>
             <li> Display the users that a user is following </li>
             <li> Display the users that are following a user </li>
-            <li> Events 
-                <ol type="i">
-                    <li> Display the events relevant to a user </li>
-                    <li> Display private events for the authenticated user </li>
-                </ol>
-            </li>
         </ol>
     </li>
     <li>Repositories
@@ -1823,6 +1817,43 @@ Rather than adding this method in all of the ```Activities```, it can be added t
 The back button shown in each ```Toolbar``` then references this method, which calls the ```Activity``` method ```onBackPressed``` to perform the same behaviour as pressing the phones navigation back key.
 
 
+### NetworkImageView
+
+The ```NetworkImageView``` is a subclass of ```ImageView``` used to asynchronously load images from a given URL and display them once they have finished downloading.
+
+#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java"
+
+The ```NetworkImageView``` has three instance variables; the URL to be loaded as well as two resource identifiers for the loading and error states.
+
+When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet``` for resource identifiers set in XML.
+
+#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $void init$"
+
+The ```loadImage``` method is responsible for loading and displaying the image.
+
+#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $void loadImage$"
+
+The first check performed in ```loadImage``` is whether the image can actually be drawn.
+
+The ```View``` width and height are collected, before the ```LayoutParams``` are checked to determine whether the ```NetworkImageView``` is of a fixed size, or should expand to the size of its image.
+If the ```NetworkImageView``` has 0 width and height, and doesn't wrap in either direction, then ```loadImage``` returns as it cannnot display the image.
+
+The second check is whether the URL is empty.
+If a null or empty url is passed, any current request is cancelled, and the default image is set.
+
+The third check is whether the URL which is currently being loaded, or has been loaded is the same as the URL passed to the ```NetworkImageView```.
+If the URL is already being loaded, ```loadImage``` returns, otherwise it cancels the current request in preparation for loading a new image.
+
+Finally, the maximum width and height of the ```NetworkImageView``` are determined and the image is loaded.
+
+The ```onResponse``` callback has two arguments, the response, and the isImmediate flag which indicates whether the response was returned form cache.
+
+If both isImmediate and isInLayoutPass are true, the ```NetworkImageView``` has not yet been properly drawn an the image cannot yet be displayed.
+In this case, a ```post``` call is made, which will add a runnable to the UI thread ```MessageQueue``` for execution once all other work on the UI thread is complete.
+
+When the ```NetworkImageView``` is able to set the image, it checks whether the ```BitMap``` is non null, and sets either the ```BitMap``` or the default resource accordingly.
+
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.
@@ -1837,8 +1868,27 @@ This makes the ```UserActivity``` layout and class simple, as most logic is kept
 
 The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Toolbar``` to scroll with the contents of any ```ScrollViews``` within the ```Fragments``` which are contained in the ```ViewPager```.
 
-#import "app/src/main/java/com/tpb/projects/user/UserActivity.java"
+#import "app/src/main/java/com/tpb/projects/user/UserActivity.java"#import "app/src/main/res/layout/fragment_user_info.xml"
 
 When it is created, ```UserActivity``` calls the ```super``` method (```BaseActivity```) which performs the access check, allowing ```UserActivity``` to return if the app doesn't have an access token.
-If this check passes, ```onCreate``` method continues by checking theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
+If this check passes, ```onCreate``` method continues by checking the theme theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
 
+Once the ```Views``` have been inflated, the ```UserActivity``` can continue by creating the ```FragmentPagerAdapter``` which is responsible for creating each of the ```Fragments```.
+
+The ```UserActivity``` then determines whether it has been started from a link to a user, in which case the ```User``` must be loaded, or if the app is starting from the homescreen to display the authenticated user.
+
+
+### UserInfoFragment
+
+The first ```Fragment``` to be displayed is the ```UserInfoFragment```.
+The ```UserInfoFragment``` is to fulfill objective 2.i, displaying information about the user.
+
+The ```UserInfoFragment``` layout has two cards, the first displaying text based information about the user, and the second displaying a graph of the users' contributions.
+
+#import "app/src/main/res/layout/fragment_user_info.xml"
+
+The layout included within the first ```CardView``` is the same layout used in ```LoginActivity``` to display the user's information
+
+#import "app/src/main/res/layout/shard_user_info.xml"
+
+and contains a ```LinearLayout``` to display the user's avatar and username, as well as another ```LinearLayout``` to display a list of the user's available information.

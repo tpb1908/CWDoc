@@ -1826,7 +1826,167 @@ The ```LoginActivity``` consists of two layouts, only one of which is visible at
  
 The first layout is a ```WebView``` which is used to display the user authentication page, and the second is a layout to display the user's information once they have signed in.
 
-#include "app/src/main/java/com/tpb/projects/login/LoginActivity.java"
+``` java
+package com.tpb.projects.login;
+
+import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.os.Bundle;
+import android.os.Handler;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.CardView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.CookieManager;
+import android.webkit.CookieSyncManager;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+
+import com.google.firebase.analytics.FirebaseAnalytics;
+import com.tpb.github.data.auth.OAuthHandler;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.BuildConfig;
+import com.tpb.projects.R;
+import com.tpb.projects.markdown.Spanner;
+import com.tpb.projects.user.UserActivity;
+import com.tpb.projects.util.Analytics;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+import static com.tpb.projects.flow.ProjectsApplication.mAnalytics;
+
+/**
+ * A login screen that offers login via email/password.
+ */
+public class LoginActivity extends AppCompatActivity implements OAuthHandler.OAuthAuthenticationListener {
+    private static final String TAG = LoginActivity.class.getSimpleName();
+    private boolean mLoginShown = false;
+
+    @BindView(R.id.login_webview) WebView mWebView;
+    @BindView(R.id.login_form) CardView mLogin;
+    @BindView(R.id.progress_spinner) ProgressBar mSpinner;
+    @BindView(R.id.user_details) LinearLayout mUserDetails;
+
+    private Intent mLaunchIntent;
+
+    private static final FrameLayout.LayoutParams FILL = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.FILL_PARENT,
+            ViewGroup.LayoutParams.FILL_PARENT
+    );
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_login);
+        ButterKnife.bind(this);
+
+        final OAuthHandler OAuthHandler = new OAuthHandler(this,
+                BuildConfig.GITHUB_CLIENT_ID,
+                BuildConfig.GITHUB_CLIENT_SECRET,
+                BuildConfig.GITHUB_REDIRECT_URL,
+                this
+        );
+
+        if(getIntent().hasExtra(Intent.EXTRA_INTENT)) {
+            mLaunchIntent = getIntent().getParcelableExtra(Intent.EXTRA_INTENT);
+        } else {
+            mLaunchIntent = new Intent(LoginActivity.this, UserActivity.class);
+        }
+
+        mWebView.setVerticalScrollBarEnabled(false);
+        mWebView.setHorizontalScrollBarEnabled(false);
+        mWebView.setWebViewClient(new OAuthWebViewClient(OAuthHandler));
+        mWebView.getSettings().setJavaScriptEnabled(true);
+        mWebView.loadUrl(OAuthHandler.getAuthUrl());
+        mWebView.setLayoutParams(FILL);
+
+        mUserDetails.setVisibility(View.GONE);
+        UI.expand(mLogin);
+    }
+
+    @Override
+    public void onSuccess() {
+        mWebView.setVisibility(View.GONE);
+        mSpinner.setVisibility(View.VISIBLE);
+    }
+
+    @Override
+    public void onFail(String error) {
+
+    }
+
+    @Override
+    public void userLoaded(User user) {
+        mSpinner.setVisibility(View.GONE);
+        Spanner.displayUser(mUserDetails, user);
+        final Bundle bundle = new Bundle();
+        bundle.putString(Analytics.TAG_LOGIN, Analytics.VALUE_SUCCESS);
+        mAnalytics.logEvent(FirebaseAnalytics.Event.LOGIN, bundle);
+        new Handler().postDelayed(() -> {
+            CookieSyncManager.createInstance(this);
+            final CookieManager cookieManager = CookieManager.getInstance();
+            cookieManager.removeAllCookie();
+            startActivity(mLaunchIntent);
+            overridePendingTransition(R.anim.slide_up, R.anim.none);
+            finish();
+        }, 1500);
+    }
+
+    private void ensureWebViewVisible() {
+        if(!mLoginShown) {
+            new Handler().postDelayed(() -> {
+                mWebView.setVisibility(View.VISIBLE);
+                mSpinner.setVisibility(View.GONE);
+                mLoginShown = true;
+            }, 150);
+        }
+
+    }
+
+
+    private class OAuthWebViewClient extends WebViewClient {
+        private final OAuthHandler mAuthHandler;
+
+        OAuthWebViewClient(OAuthHandler handler) {
+            mAuthHandler = handler;
+        }
+
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            return !(url.startsWith("https://github.com/login/oauth/authorize") ||
+                    url.startsWith("https://github.com/login?") ||
+                    url.startsWith("https://github.com/session") ||
+                    url.startsWith(BuildConfig.GITHUB_REDIRECT_URL));
+        }
+
+        @Override
+        public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            if(url.contains("?code=")) {
+                final String[] parts = url.split("=");
+                mAuthHandler.getAccessToken(parts[1]);
+            }
+            super.onPageStarted(view, url, favicon);
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            ensureWebViewVisible();
+            super.onPageFinished(view, url);
+        }
+
+    }
+
+}
+
+
+```
 
 The ```LoginActivity``` binds four views.
 
@@ -2351,7 +2511,109 @@ In order to maintain a cleaner application structure, it is normal to separate r
 
 In this case ```BaseActivity``` is used to check that there is an authentication token stored, to provide an onClick method for the toolbar back button, cancel network requests,  and to fix a memory leak caused by Android system transitions keeping a reference to the ```DecorView``` which in turn references the ```Activity```.
 
-#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java"
+``` java
+package com.tpb.projects.common;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.transition.Transition;
+import android.support.transition.TransitionManager;
+import android.support.v4.app.Fragment;
+import android.support.v7.app.AppCompatActivity;
+import android.util.ArrayMap;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.androidnetworking.AndroidNetworking;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.projects.login.LoginActivity;
+import com.tpb.projects.notifications.receivers.NotificationEventReceiver;
+
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Created by theo on 10/03/17.
+ */
+
+public abstract class BaseActivity extends AppCompatActivity {
+
+    public boolean mHasAccess = true;
+    private final List<WeakReference<Fragment>> mWeakFragments = new ArrayList<>();
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        if(GitHubSession.getSession(this).hasAccessToken()) {
+            mHasAccess = true;
+            NotificationEventReceiver.setupAlarm(getApplicationContext());
+        } else {
+            mHasAccess = false;
+            final Intent intent = new Intent(BaseActivity.this, LoginActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+            if(getIntent() != null && !getIntent().getAction().equals(Intent.ACTION_MAIN)) {
+                intent.putExtra(Intent.EXTRA_INTENT, getIntent());
+            }
+            startActivity(intent);
+            finish();
+        }
+
+    }
+
+    public void onToolbarBackPressed(View view) {
+        onBackPressed();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        removeActivityFromTransitionManager();
+        cancelNetworkRequests();
+    }
+
+    private void removeActivityFromTransitionManager() {
+        final Class transitionManagerClass = TransitionManager.class;
+        try {
+            final Field runningTransitionsField = transitionManagerClass
+                    .getDeclaredField("sRunningTransitions");
+            runningTransitionsField.setAccessible(true);
+            //noinspection unchecked
+            final ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitions
+                    = (ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>>)
+                    runningTransitionsField.get(transitionManagerClass);
+            if(runningTransitions.get() == null || runningTransitions.get().get() == null) {
+                return;
+            }
+            ArrayMap map = runningTransitions.get().get();
+            View decorView = getWindow().getDecorView();
+            if(map.containsKey(decorView)) {
+                map.remove(decorView);
+            }
+        } catch(Exception ignored) {
+        }
+    }
+
+    @Override
+    public void onAttachFragment (Fragment fragment) {
+        mWeakFragments.add(new WeakReference<>(fragment));
+    }
+
+    private void cancelNetworkRequests() {
+        AndroidNetworking.cancel(this);
+        for(WeakReference<Fragment> ref : mWeakFragments) {
+            if(ref.get() != null) {
+                AndroidNetworking.cancel(ref.get());
+            }
+        }
+    }
+
+}
+
+```
 
 #### onCreate
 
@@ -2373,11 +2635,40 @@ If the ```Intent``` is not from the homescreen, the ```Activity``` was launched 
 Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
 The ```BaseActivity``` retains ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
 
-#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $void onAttachFragment$"
+``` java
+void onAttachFragment (Fragment fragment) {
+        mWeakFragments.add(new WeakReference<>(fragment));
+    }
+```
 
 ```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
 
-#include "app/src/main/java/com/tpb/projects/common/BaseActivity.java $cancelNetworkRequests$"
+``` java
+cancelNetworkRequests();
+    }
+
+    private void removeActivityFromTransitionManager() {
+        final Class transitionManagerClass = TransitionManager.class;
+        try {
+            final Field runningTransitionsField = transitionManagerClass
+                    .getDeclaredField("sRunningTransitions");
+            runningTransitionsField.setAccessible(true);
+            //noinspection unchecked
+            final ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitions
+                    = (ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>>)
+                    runningTransitionsField.get(transitionManagerClass);
+            if(runningTransitions.get() == null || runningTransitions.get().get() == null) {
+                return;
+            }
+            ArrayMap map = runningTransitions.get().get();
+            View decorView = getWindow().getDecorView();
+            if(map.containsKey(decorView)) {
+                map.remove(decorView);
+            }
+        } catch(Exception ignored) {
+        }
+    }
+```
 
 ##### Memory Leak
 
@@ -2427,11 +2718,315 @@ The immediate sub-objectives of objective 2 are written to represent the differe
 Each section will be shown as a ```Fragment``` within a ```ViewPager```.
 This makes the ```UserActivity``` layout and class simple, as most logic is kept separate, with each ```Fragment``` only concerned with its own purpose.
 
-#include "app/src/main/res/layout/activity_user.xml"
+``` xml
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.design.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <android.support.design.widget.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <android.support.v7.widget.Toolbar
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_scrollFlags="scroll|enterAlwaysCollapsed">
+
+            <!--suppress AndroidMissingOnClickHandler -->
+            <ImageButton
+                android:id="@+id/back_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
+                android:src="@drawable/ic_arrow_back"
+                android:onClick="onToolbarBackPressed"
+                android:contentDescription="@string/content_description_back"
+                android:layout_marginStart="16dp"/>
+
+            <TextView
+                android:id="@+id/title_user"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/title_activity_user"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:textAppearance="@android:style/TextAppearance.Material.Title"/>
+
+        </android.support.v7.widget.Toolbar>
+
+        <android.support.design.widget.TabLayout
+            android:id="@+id/user_fragment_tablayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            app:layout_scrollFlags="scroll|snap|enterAlways"
+            app:tabMode="scrollable"
+            app:tabGravity="center">
+
+        </android.support.design.widget.TabLayout>
+
+    </android.support.design.widget.AppBarLayout>
+
+    <android.support.v4.view.ViewPager
+        android:id="@+id/user_fragment_viewpager"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+    </android.support.v4.view.ViewPager>
+
+
+</android.support.design.widget.CoordinatorLayout>
+```
 
 The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Toolbar``` to scroll with the contents of any ```ScrollViews``` within the ```Fragments``` which are contained in the ```ViewPager```.
 
-#include "app/src/main/java/com/tpb/projects/user/UserActivity.java"
+``` java
+package com.tpb.projects.user;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.view.ViewPager;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.TextView;
+
+import com.androidnetworking.AndroidNetworking;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.BaseActivity;
+import com.tpb.projects.user.fragments.UserEventsFragment;
+import com.tpb.projects.user.fragments.UserFollowersFragment;
+import com.tpb.projects.user.fragments.UserFollowingFragment;
+import com.tpb.projects.user.fragments.UserFragment;
+import com.tpb.projects.user.fragments.UserGistsFragment;
+import com.tpb.projects.user.fragments.UserInfoFragment;
+import com.tpb.projects.user.fragments.UserReposFragment;
+import com.tpb.projects.user.fragments.UserStarsFragment;
+import com.tpb.projects.util.SettingsActivity;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 10/03/17.
+ */
+
+public class UserActivity extends BaseActivity {
+    private static final String TAG = UserActivity.class.getSimpleName();
+
+    @BindView(R.id.title_user) TextView mTitle;
+    @BindView(R.id.user_fragment_tablayout) TabLayout mTabs;
+    @BindView(R.id.user_fragment_viewpager) ViewPager mPager;
+
+    private UserFragmentAdapter mAdapter;
+    private User mUser;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if(!mHasAccess) return;
+        setTheme(SettingsActivity.Preferences.getPreferences(this).isDarkThemeEnabled()
+                ? R.style.AppTheme_Dark : R.style.AppTheme);
+        setContentView(R.layout.activity_user);
+        ButterKnife.bind(this);
+        postponeEnterTransition();
+
+        if(mAdapter == null) mAdapter = new UserFragmentAdapter(getSupportFragmentManager());
+        final String user;
+        final Loader loader = new Loader(this);
+
+        if(getIntent() != null && getIntent().hasExtra(getString(R.string.intent_username))) {
+            user = getIntent().getStringExtra(getString(R.string.intent_username));
+            mTitle.setText(user);
+            loader.loadUser(new Loader.ItemLoader<User>() {
+                @Override
+                public void loadComplete(User u) {
+                    mUser = u;
+                    mAdapter.notifyUserLoaded();
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, user);
+
+        } else {
+            if(isTaskRoot()) {
+                findViewById(R.id.back_button).setVisibility(View.GONE);
+            }
+            final GitHubSession session = GitHubSession.getSession(this);
+            mUser = session.getUser();
+            mTitle.setText(session.getUserLogin());
+            mAdapter.notifyUserLoaded();
+        }
+        mTabs.setupWithViewPager(mPager);
+        mPager.setAdapter(mAdapter);
+        mPager.setOffscreenPageLimit(7);
+
+    }
+
+    @Override
+    public void onAttachFragment(Fragment fragment) {
+        super.onAttachFragment(fragment);
+        if(mAdapter == null) mAdapter = new UserFragmentAdapter(getSupportFragmentManager());
+        mAdapter.ensureAttached((UserFragment) fragment);
+    }
+
+    private class UserFragmentAdapter extends FragmentPagerAdapter {
+
+        private UserFragment[] fragments = new UserFragment[7];
+
+        UserFragmentAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            switch(position) {
+                case 0:
+                    fragments[0] = new UserInfoFragment();
+                    break;
+                case 1:
+                    fragments[1] = new UserReposFragment();
+                    break;
+                case 2:
+                    fragments[2] = new UserStarsFragment();
+                    break;
+                case 3:
+                    fragments[3] = new UserGistsFragment();
+                    break;
+                case 4:
+                    fragments[4] = new UserFollowingFragment();
+                    break;
+                case 5:
+                    fragments[5] = new UserFollowersFragment();
+                    break;
+                case 6:
+                    fragments[6] = new UserEventsFragment();
+                    break;
+            }
+            if(mUser != null) fragments[position].userLoaded(mUser);
+            return fragments[position];
+        }
+
+        void ensureAttached(UserFragment fragment) {
+            if(fragment instanceof UserInfoFragment) fragments[0] = fragment;
+            else if(fragment instanceof UserReposFragment) fragments[1] = fragment;
+            else if(fragment instanceof UserStarsFragment) fragments[2] = fragment;
+            else if(fragment instanceof UserGistsFragment) fragments[3] = fragment;
+            else if(fragment instanceof UserFollowingFragment) fragments[4] = fragment;
+            else if(fragment instanceof UserFollowersFragment) fragments[5] = fragment;
+            else if(fragment instanceof UserEventsFragment) fragments[6] = fragment;
+        }
+
+        void notifyUserLoaded() {
+            for(UserFragment f : fragments) {
+                if(f != null) f.userLoaded(mUser);
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 7;
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            switch(position) {
+                case 0:
+                    return getString(R.string.title_user_info_fragment);
+                case 1:
+                    return getString(R.string.title_user_repos_fragment);
+                case 2:
+                    return getString(R.string.title_user_stars_fragment);
+                case 3:
+                    return getString(R.string.title_user_gists_fragment);
+                case 4:
+                    return getString(R.string.title_user_following_fragment);
+                case 5:
+                    return getString(R.string.title_user_followers_fragment);
+                case 6:
+                    return getString(R.string.title_user_events_fragment);
+                default:
+                    return "Error";
+            }
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        //TODO Pass to fragment
+        getMenuInflater().inflate(R.menu.menu_activity, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+//        switch(item.getItemId()) {
+//            case R.id.menu_settings:
+//                startActivity(new Intent(UserActivity.this, SettingsActivity.class));
+//                break;
+//            case R.id.menu_source:
+//                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
+//                break;
+//            case R.id.menu_share:
+//                final Intent share = new Intent();
+//                share.setAction(Intent.ACTION_SEND);
+//                share.putExtra(Intent.EXTRA_TEXT, "https://github.com/" + mUser.getLogin());
+//                share.setType("text/plain");
+//                startActivity(share);
+//                break;
+//            case R.id.menu_save_to_homescreen:
+//                final ShortcutDialog dialog = new ShortcutDialog();
+//                final Bundle args = new Bundle();
+//                args.putInt(getString(R.string.intent_title_res), R.string.title_save_user_shortcut);
+//                args.putBoolean(getString(R.string.intent_drawable), mUserImage.getDrawable() != null);
+//                args.putString(getString(R.string.intent_name), mUserName.getText().toString());
+//
+//                dialog.setArguments(args);
+//                dialog.setListener((name, iconFlag) -> {
+//                    final Intent i = new Intent(getApplicationContext(), UserActivity.class);
+//                    i.putExtra(getString(R.string.intent_username), mUserName.getText().toString());
+//
+//                    final Intent add = new Intent();
+//                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
+//                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
+//                    add.putExtra("duplicate", false);
+//                    if(iconFlag) {
+//                        add.putExtra(Intent.EXTRA_SHORTCUT_ICON, ((BitmapDrawable) mUserImage.getDrawable()).getBitmap());
+//                    } else {
+//                        add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(getApplicationContext(), R.mipmap.ic_launcher));
+//                    }
+//                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
+//                    getApplicationContext().sendBroadcast(add);
+//                });
+//                dialog.show(getSupportFragmentManager(), TAG);
+//                break;
+//        }
+        return true;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        AndroidNetworking.cancelAll();
+    }
+}
+
+```
 
 When it is created, ```UserActivity``` calls the ```super``` method (```BaseActivity```) which performs the access check, allowing ```UserActivity``` to return if the app doesn't have an access token.
 If this check passes, ```onCreate``` method continues by checking theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
