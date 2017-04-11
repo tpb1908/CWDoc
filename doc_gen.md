@@ -865,12 +865,6 @@ The client must implement the following features:
             </li>
             <li> Display the users that a user is following </li>
             <li> Display the users that are following a user </li>
-            <li> Events 
-                <ol type="i">
-                    <li> Display the events relevant to a user </li>
-                    <li> Display private events for the authenticated user </li>
-                </ol>
-            </li>
         </ol>
     </li>
     <li>Repositories
@@ -2708,6 +2702,276 @@ Rather than adding this method in all of the ```Activities```, it can be added t
 The back button shown in each ```Toolbar``` then references this method, which calls the ```Activity``` method ```onBackPressed``` to perform the same behaviour as pressing the phones navigation back key.
 
 
+### NetworkImageView
+
+The ```NetworkImageView``` is a subclass of ```ImageView``` used to asynchronously load images from a given URL and display them once they have finished downloading.
+
+``` java
+package com.tpb.projects.common;
+
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.support.annotation.IdRes;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v7.widget.AppCompatImageView;
+import android.text.TextUtils;
+import android.util.AttributeSet;
+import android.view.ViewGroup;
+
+import com.androidnetworking.error.ANError;
+import com.androidnetworking.internal.ANImageLoader;
+import com.tpb.projects.R;
+
+/**
+ * Created by theo on 01/04/17.
+ */
+
+public class NetworkImageView extends AppCompatImageView {
+
+    private String mUrl;
+
+    @IdRes private int mDefaultImageResId;
+    @IdRes private int mErrorImageResId;
+
+    private ANImageLoader.ImageContainer mImageContainer;
+
+    public NetworkImageView(Context context) {
+        super(context);
+    }
+
+    public NetworkImageView(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        if(attrs != null) init(attrs, 0);
+    }
+
+    public NetworkImageView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        if(attrs != null) init(attrs, defStyleAttr);
+    }
+
+    private void init(AttributeSet attrs, int defStyleAttr) {
+        final TypedArray array = getContext()
+                .obtainStyledAttributes(attrs, R.styleable.NetworkImageView, defStyleAttr, 0);
+        mDefaultImageResId = array
+                .getResourceId(R.styleable.NetworkImageView_default_image_resource,
+                        R.drawable.ic_avatar_default
+                );
+        mErrorImageResId = array
+                .getResourceId(R.styleable.NetworkImageView_error_image_resource, 0);
+        array.recycle();
+    }
+
+    public void setImageUrl(@NonNull String url) {
+        mUrl = url;
+        loadImage(false);
+    }
+
+    public void setDefaultImageResId(@IdRes int defaultImage) {
+        mDefaultImageResId = defaultImage;
+    }
+
+    public void setErrorImageResId(@IdRes int errorImage) {
+        mErrorImageResId = errorImage;
+    }
+
+    private void loadImage(final boolean isInLayoutPass) {
+        final int width = getWidth();
+        final int height = getHeight();
+
+
+        boolean wrapWidth = false, wrapHeight = false;
+        if(getLayoutParams() != null) {
+            wrapWidth = getLayoutParams().width == ViewGroup.LayoutParams.WRAP_CONTENT;
+            wrapHeight = getLayoutParams().height == ViewGroup.LayoutParams.WRAP_CONTENT;
+        }
+
+        if(width == 0 && height == 0 && !(wrapWidth && wrapHeight)) {
+            //Can't display the image as not size
+            return;
+        }
+
+        if(TextUtils.isEmpty(mUrl)) {
+            if(mImageContainer != null) {
+                mImageContainer.cancelRequest();
+                mImageContainer = null;
+            }
+            setDefaultImage();
+            return;
+        }
+
+        if(mImageContainer != null && mImageContainer.getRequestUrl() != null) {
+            if(mImageContainer.getRequestUrl().equals(mUrl)) {
+                return;
+            } else {
+                mImageContainer.cancelRequest();
+            }
+        }
+
+        final int maxWidth = wrapWidth ? 0 : width;
+        final int maxHeight = wrapHeight ? 0 : height;
+
+        final ScaleType scaleType = getScaleType();
+        mImageContainer = ANImageLoader.getInstance().get(mUrl,
+                new ANImageLoader.ImageListener() {
+                    @Override
+                    public void onResponse(final ANImageLoader.ImageContainer response,
+                                           boolean isImmediate) {
+                        if(isImmediate && isInLayoutPass) {
+                            post(() -> onResponse(response, false));
+                            return;
+                        }
+
+                        if(response.getBitmap() != null) {
+                            setImageBitmap(response.getBitmap());
+                        } else if(mDefaultImageResId != 0) {
+                            setDefaultImage();
+                        }
+                    }
+
+                    @Override
+                    public void onError(ANError error) {
+                        if(mErrorImageResId != 0) {
+                            setImageResource(mErrorImageResId);
+                        }
+                    }
+                }, maxWidth, maxHeight, scaleType
+        );
+
+    }
+
+    private void setDefaultImage() {
+        if(getDrawable() != null) return; //Drawable has been set manually
+        if(mDefaultImageResId != 0) {
+            setImageResource(mDefaultImageResId);
+        } else {
+            setImageBitmap(null);
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        loadImage(true);
+    }
+
+    @Override
+    protected void drawableStateChanged() {
+        super.drawableStateChanged();
+        invalidate();
+    }
+}
+
+```
+
+The ```NetworkImageView``` has three instance variables; the URL to be loaded as well as two resource identifiers for the loading and error states.
+
+When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet``` for resource identifiers set in XML.
+
+``` java
+void init(AttributeSet attrs, int defStyleAttr) {
+        final TypedArray array = getContext()
+                .obtainStyledAttributes(attrs, R.styleable.NetworkImageView, defStyleAttr, 0);
+        mDefaultImageResId = array
+                .getResourceId(R.styleable.NetworkImageView_default_image_resource,
+                        R.drawable.ic_avatar_default
+                );
+        mErrorImageResId = array
+                .getResourceId(R.styleable.NetworkImageView_error_image_resource, 0);
+        array.recycle();
+    }
+```
+
+The ```loadImage``` method is responsible for loading and displaying the image.
+
+``` java
+void loadImage(final boolean isInLayoutPass) {
+        final int width = getWidth();
+        final int height = getHeight();
+
+
+        boolean wrapWidth = false, wrapHeight = false;
+        if(getLayoutParams() != null) {
+            wrapWidth = getLayoutParams().width == ViewGroup.LayoutParams.WRAP_CONTENT;
+            wrapHeight = getLayoutParams().height == ViewGroup.LayoutParams.WRAP_CONTENT;
+        }
+
+        if(width == 0 && height == 0 && !(wrapWidth && wrapHeight)) {
+            //Can't display the image as not size
+            return;
+        }
+
+        if(TextUtils.isEmpty(mUrl)) {
+            if(mImageContainer != null) {
+                mImageContainer.cancelRequest();
+                mImageContainer = null;
+            }
+            setDefaultImage();
+            return;
+        }
+
+        if(mImageContainer != null && mImageContainer.getRequestUrl() != null) {
+            if(mImageContainer.getRequestUrl().equals(mUrl)) {
+                return;
+            } else {
+                mImageContainer.cancelRequest();
+            }
+        }
+
+        final int maxWidth = wrapWidth ? 0 : width;
+        final int maxHeight = wrapHeight ? 0 : height;
+
+        final ScaleType scaleType = getScaleType();
+        mImageContainer = ANImageLoader.getInstance().get(mUrl,
+                new ANImageLoader.ImageListener() {
+                    @Override
+                    public void onResponse(final ANImageLoader.ImageContainer response,
+                                           boolean isImmediate) {
+                        if(isImmediate && isInLayoutPass) {
+                            post(() -> onResponse(response, false));
+                            return;
+                        }
+
+                        if(response.getBitmap() != null) {
+                            setImageBitmap(response.getBitmap());
+                        } else if(mDefaultImageResId != 0) {
+                            setDefaultImage();
+                        }
+                    }
+
+                    @Override
+                    public void onError(ANError error) {
+                        if(mErrorImageResId != 0) {
+                            setImageResource(mErrorImageResId);
+                        }
+                    }
+                }, maxWidth, maxHeight, scaleType
+        );
+
+    }
+```
+
+The first check performed in ```loadImage``` is whether the image can actually be drawn.
+
+The ```View``` width and height are collected, before the ```LayoutParams``` are checked to determine whether the ```NetworkImageView``` is of a fixed size, or should expand to the size of its image.
+If the ```NetworkImageView``` has 0 width and height, and doesn't wrap in either direction, then ```loadImage``` returns as it cannnot display the image.
+
+The second check is whether the URL is empty.
+If a null or empty url is passed, any current request is cancelled, and the default image is set.
+
+The third check is whether the URL which is currently being loaded, or has been loaded is the same as the URL passed to the ```NetworkImageView```.
+If the URL is already being loaded, ```loadImage``` returns, otherwise it cancels the current request in preparation for loading a new image.
+
+Finally, the maximum width and height of the ```NetworkImageView``` are determined and the image is loaded.
+
+The ```onResponse``` callback has two arguments, the response, and the isImmediate flag which indicates whether the response was returned form cache.
+
+If both isImmediate and isInLayoutPass are true, the ```NetworkImageView``` has not yet been properly drawn an the image cannot yet be displayed.
+In this case, a ```post``` call is made, which will add a runnable to the UI thread ```MessageQueue``` for execution once all other work on the UI thread is complete.
+
+When the ```NetworkImageView``` is able to set the image, it checks whether the ```BitMap``` is non null, and sets either the ```BitMap``` or the default resource accordingly.
+
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.
@@ -2787,6 +3051,8 @@ The ```UserActivity``` layout contains an ```AppBarLayout``` allowing the ```Too
 ``` java
 package com.tpb.projects.user;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.design.widget.TabLayout;
@@ -2806,7 +3072,7 @@ import com.tpb.github.data.auth.GitHubSession;
 import com.tpb.github.data.models.User;
 import com.tpb.projects.R;
 import com.tpb.projects.common.BaseActivity;
-import com.tpb.projects.user.fragments.UserEventsFragment;
+import com.tpb.projects.common.ShortcutDialog;
 import com.tpb.projects.user.fragments.UserFollowersFragment;
 import com.tpb.projects.user.fragments.UserFollowingFragment;
 import com.tpb.projects.user.fragments.UserFragment;
@@ -2823,8 +3089,9 @@ import butterknife.ButterKnife;
  * Created by theo on 10/03/17.
  */
 
-public class UserActivity extends BaseActivity {
+public class UserActivity extends BaseActivity implements Loader.ItemLoader<User> {
     private static final String TAG = UserActivity.class.getSimpleName();
+    private static final String URL = "https://github.com/tpb1908/AndroidProjectsClient/blob/master/app/src/main/java/com/tpb/projects/user/UserActivity.java";
 
     @BindView(R.id.title_user) TextView mTitle;
     @BindView(R.id.user_fragment_tablayout) TabLayout mTabs;
@@ -2844,37 +3111,33 @@ public class UserActivity extends BaseActivity {
         postponeEnterTransition();
 
         if(mAdapter == null) mAdapter = new UserFragmentAdapter(getSupportFragmentManager());
-        final String user;
         final Loader loader = new Loader(this);
 
         if(getIntent() != null && getIntent().hasExtra(getString(R.string.intent_username))) {
-            user = getIntent().getStringExtra(getString(R.string.intent_username));
+            final String user = getIntent().getStringExtra(getString(R.string.intent_username));
             mTitle.setText(user);
-            loader.loadUser(new Loader.ItemLoader<User>() {
-                @Override
-                public void loadComplete(User u) {
-                    mUser = u;
-                    mAdapter.notifyUserLoaded();
-                }
-
-                @Override
-                public void loadError(APIHandler.APIError error) {
-
-                }
-            }, user);
-
+            loader.loadUser(this, user);
         } else {
             if(isTaskRoot()) {
                 findViewById(R.id.back_button).setVisibility(View.GONE);
             }
-            final GitHubSession session = GitHubSession.getSession(this);
-            mUser = session.getUser();
-            mTitle.setText(session.getUserLogin());
-            mAdapter.notifyUserLoaded();
+            loadComplete(GitHubSession.getSession(this).getUser());
         }
         mTabs.setupWithViewPager(mPager);
         mPager.setAdapter(mAdapter);
         mPager.setOffscreenPageLimit(7);
+
+    }
+
+    @Override
+    public void loadComplete(User user) {
+        mUser = user;
+        mTitle.setText(mUser.getLogin());
+        mAdapter.notifyUserLoaded();
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
 
     }
 
@@ -2887,7 +3150,7 @@ public class UserActivity extends BaseActivity {
 
     private class UserFragmentAdapter extends FragmentPagerAdapter {
 
-        private UserFragment[] fragments = new UserFragment[7];
+        private UserFragment[] mFragments = new UserFragment[6];
 
         UserFragmentAdapter(FragmentManager fm) {
             super(fm);
@@ -2897,50 +3160,46 @@ public class UserActivity extends BaseActivity {
         public Fragment getItem(int position) {
             switch(position) {
                 case 0:
-                    fragments[0] = new UserInfoFragment();
+                    mFragments[0] = new UserInfoFragment();
                     break;
                 case 1:
-                    fragments[1] = new UserReposFragment();
+                    mFragments[1] = new UserReposFragment();
                     break;
                 case 2:
-                    fragments[2] = new UserStarsFragment();
+                    mFragments[2] = new UserStarsFragment();
                     break;
                 case 3:
-                    fragments[3] = new UserGistsFragment();
+                    mFragments[3] = new UserGistsFragment();
                     break;
                 case 4:
-                    fragments[4] = new UserFollowingFragment();
+                    mFragments[4] = new UserFollowingFragment();
                     break;
                 case 5:
-                    fragments[5] = new UserFollowersFragment();
-                    break;
-                case 6:
-                    fragments[6] = new UserEventsFragment();
+                    mFragments[5] = new UserFollowersFragment();
                     break;
             }
-            if(mUser != null) fragments[position].userLoaded(mUser);
-            return fragments[position];
+            if(mUser != null) mFragments[position].userLoaded(mUser);
+            return mFragments[position];
         }
 
         void ensureAttached(UserFragment fragment) {
-            if(fragment instanceof UserInfoFragment) fragments[0] = fragment;
-            else if(fragment instanceof UserReposFragment) fragments[1] = fragment;
-            else if(fragment instanceof UserStarsFragment) fragments[2] = fragment;
-            else if(fragment instanceof UserGistsFragment) fragments[3] = fragment;
-            else if(fragment instanceof UserFollowingFragment) fragments[4] = fragment;
-            else if(fragment instanceof UserFollowersFragment) fragments[5] = fragment;
-            else if(fragment instanceof UserEventsFragment) fragments[6] = fragment;
+            if(fragment instanceof UserInfoFragment) mFragments[0] = fragment;
+            else if(fragment instanceof UserReposFragment) mFragments[1] = fragment;
+            else if(fragment instanceof UserStarsFragment) mFragments[2] = fragment;
+            else if(fragment instanceof UserGistsFragment) mFragments[3] = fragment;
+            else if(fragment instanceof UserFollowingFragment) mFragments[4] = fragment;
+            else if(fragment instanceof UserFollowersFragment) mFragments[5] = fragment;
         }
 
         void notifyUserLoaded() {
-            for(UserFragment f : fragments) {
+            for(UserFragment f : mFragments) {
                 if(f != null) f.userLoaded(mUser);
             }
         }
 
         @Override
         public int getCount() {
-            return 7;
+            return mFragments.length;
         }
 
         @Override
@@ -2958,8 +3217,6 @@ public class UserActivity extends BaseActivity {
                     return getString(R.string.title_user_following_fragment);
                 case 5:
                     return getString(R.string.title_user_followers_fragment);
-                case 6:
-                    return getString(R.string.title_user_events_fragment);
                 default:
                     return "Error";
             }
@@ -2975,47 +3232,43 @@ public class UserActivity extends BaseActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-//        switch(item.getItemId()) {
-//            case R.id.menu_settings:
-//                startActivity(new Intent(UserActivity.this, SettingsActivity.class));
-//                break;
-//            case R.id.menu_source:
-//                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
-//                break;
-//            case R.id.menu_share:
-//                final Intent share = new Intent();
-//                share.setAction(Intent.ACTION_SEND);
-//                share.putExtra(Intent.EXTRA_TEXT, "https://github.com/" + mUser.getLogin());
-//                share.setType("text/plain");
-//                startActivity(share);
-//                break;
-//            case R.id.menu_save_to_homescreen:
-//                final ShortcutDialog dialog = new ShortcutDialog();
-//                final Bundle args = new Bundle();
-//                args.putInt(getString(R.string.intent_title_res), R.string.title_save_user_shortcut);
-//                args.putBoolean(getString(R.string.intent_drawable), mUserImage.getDrawable() != null);
-//                args.putString(getString(R.string.intent_name), mUserName.getText().toString());
-//
-//                dialog.setArguments(args);
-//                dialog.setListener((name, iconFlag) -> {
-//                    final Intent i = new Intent(getApplicationContext(), UserActivity.class);
-//                    i.putExtra(getString(R.string.intent_username), mUserName.getText().toString());
-//
-//                    final Intent add = new Intent();
-//                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
-//                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
-//                    add.putExtra("duplicate", false);
-//                    if(iconFlag) {
-//                        add.putExtra(Intent.EXTRA_SHORTCUT_ICON, ((BitmapDrawable) mUserImage.getDrawable()).getBitmap());
-//                    } else {
-//                        add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(getApplicationContext(), R.mipmap.ic_launcher));
-//                    }
-//                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
-//                    getApplicationContext().sendBroadcast(add);
-//                });
-//                dialog.show(getSupportFragmentManager(), TAG);
-//                break;
-//        }
+        switch(item.getItemId()) {
+            case R.id.menu_settings:
+                startActivity(new Intent(UserActivity.this, SettingsActivity.class));
+                break;
+            case R.id.menu_source:
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
+                break;
+            case R.id.menu_share:
+                final Intent share = new Intent();
+                share.setAction(Intent.ACTION_SEND);
+                share.putExtra(Intent.EXTRA_TEXT, mUser.getHtmlUrl());
+                share.addCategory(Intent.CATEGORY_BROWSABLE);
+                share.setType("text/plain");
+                startActivity(share);
+                break;
+            case R.id.menu_save_to_homescreen:
+                final ShortcutDialog dialog = new ShortcutDialog();
+                final Bundle args = new Bundle();
+                args.putInt(getString(R.string.intent_title_res), R.string.title_save_user_shortcut);
+                args.putString(getString(R.string.intent_name), mUser.getLogin());
+
+                dialog.setArguments(args);
+                dialog.setListener((name, iconFlag) -> {
+                    final Intent i = new Intent(getApplicationContext(), UserActivity.class);
+                    i.putExtra(getString(R.string.intent_username), mUser.getLogin());
+
+                    final Intent add = new Intent();
+                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
+                    add.putExtra("duplicate", false);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(getApplicationContext(), R.mipmap.ic_launcher));
+                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
+                    getApplicationContext().sendBroadcast(add);
+                });
+                dialog.show(getSupportFragmentManager(), TAG);
+                break;
+        }
         return true;
     }
 
@@ -3026,8 +3279,225 @@ public class UserActivity extends BaseActivity {
     }
 }
 
+`````` xml
+<?xml version="1.0" encoding="utf-8"?>
+
+<android.support.v4.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/user_info_refresher"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+    <android.support.v4.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                      xmlns:app="http://schemas.android.com/apk/res-auto"
+                      android:orientation="vertical"
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent">
+
+            <android.support.v7.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_margin="8dp">
+
+                <include layout="@layout/shard_user_info"/>
+
+            </android.support.v7.widget.CardView>
+
+            <android.support.v7.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_margin="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/text_user_activity"
+                        android:textAppearance="@android:style/TextAppearance.Material.Large"/>
+
+                    <com.tpb.contributionsview.ContributionsView
+                        android:id="@+id/user_contributions"
+                        android:layout_width="match_parent"
+                        android:layout_height="80dp"
+                        app:textSize="12sp"
+                        app:textColor="?android:textColorPrimary"/>
+
+                    <TextView
+                        android:id="@+id/user_contributions_info"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"/>
+
+                </LinearLayout>
+
+            </android.support.v7.widget.CardView>
+
+        </LinearLayout>
+
+    </android.support.v4.widget.NestedScrollView>
+
+</android.support.v4.widget.SwipeRefreshLayout>
+
+
 ```
 
 When it is created, ```UserActivity``` calls the ```super``` method (```BaseActivity```) which performs the access check, allowing ```UserActivity``` to return if the app doesn't have an access token.
-If this check passes, ```onCreate``` method continues by checking theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
+If this check passes, ```onCreate``` method continues by checking the theme theme before inflating the ```activity_user``` layout and bindings its ```Views```. 
 
+Once the ```Views``` have been inflated, the ```UserActivity``` can continue by creating the ```FragmentPagerAdapter``` which is responsible for creating each of the ```Fragments```.
+
+The ```UserActivity``` then determines whether it has been started from a link to a user, in which case the ```User``` must be loaded, or if the app is starting from the homescreen to display the authenticated user.
+
+
+### UserInfoFragment
+
+The first ```Fragment``` to be displayed is the ```UserInfoFragment```.
+The ```UserInfoFragment``` is to fulfill objective 2.i, displaying information about the user.
+
+The ```UserInfoFragment``` layout has two cards, the first displaying text based information about the user, and the second displaying a graph of the users' contributions.
+
+``` xml
+<?xml version="1.0" encoding="utf-8"?>
+
+<android.support.v4.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/user_info_refresher"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+    <android.support.v4.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                      xmlns:app="http://schemas.android.com/apk/res-auto"
+                      android:orientation="vertical"
+                      android:layout_width="match_parent"
+                      android:layout_height="match_parent">
+
+            <android.support.v7.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_margin="8dp">
+
+                <include layout="@layout/shard_user_info"/>
+
+            </android.support.v7.widget.CardView>
+
+            <android.support.v7.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_margin="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/text_user_activity"
+                        android:textAppearance="@android:style/TextAppearance.Material.Large"/>
+
+                    <com.tpb.contributionsview.ContributionsView
+                        android:id="@+id/user_contributions"
+                        android:layout_width="match_parent"
+                        android:layout_height="80dp"
+                        app:textSize="12sp"
+                        app:textColor="?android:textColorPrimary"/>
+
+                    <TextView
+                        android:id="@+id/user_contributions_info"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"/>
+
+                </LinearLayout>
+
+            </android.support.v7.widget.CardView>
+
+        </LinearLayout>
+
+    </android.support.v4.widget.NestedScrollView>
+
+</android.support.v4.widget.SwipeRefreshLayout>
+
+
+```
+
+The layout included within the first ```CardView``` is the same layout used in ```LoginActivity``` to display the user's information
+
+``` xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    android:id="@+id/user_details"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_gravity="top"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <com.tpb.projects.common.NetworkImageView
+            android:id="@+id/user_avatar"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_margin="16dp"
+            android:layout_gravity="center_vertical"
+            android:transitionName="@string/transition_user_image"/>
+
+        <TextView
+            android:id="@+id/user_login"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="@string/text_placeholder"
+            android:textAppearance="@android:style/TextAppearance.Material.Title"
+            android:transitionName="@string/transition_username"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/user_info_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp"
+        android:orientation="vertical">
+
+    </LinearLayout>
+
+</LinearLayout>
+```
+
+and contains a ```LinearLayout``` to display the user's avatar and username, as well as another ```LinearLayout``` to display a list of the user's available information.

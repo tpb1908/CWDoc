@@ -1816,6 +1816,7 @@ Rather than adding this method in all of the ```Activities```, it can be added t
 
 The back button shown in each ```Toolbar``` then references this method, which calls the ```Activity``` method ```onBackPressed``` to perform the same behaviour as pressing the phones navigation back key.
 
+#page
 
 ### NetworkImageView
 
