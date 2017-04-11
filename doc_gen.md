@@ -1993,7 +1993,7 @@ The ```LoginActivity``` binds four views.
 4. The ```LinearLayout``` which will be filled with views showing the user's information
 
 
-In the ```onCreate``` method the ```WebView``` is set up not to allow scrolling, to enable JavaScript, and to use a custom client to override page loading.
+In the ```onCreate``` method the ```WebView``` is set up not to allow scrolling, to enable JavaScript, and to use a client implementation to override page loading.
 
 ``` java
 mWebView.setVerticalScrollBarEnabled(false);
@@ -3960,7 +3960,7 @@ Finally, if the ```ContributionsRequestListener``` is non null, the values are r
 
 ##### Displaying contributions
 
-The ```ContributionsView``` is a custom descendant of ```View``` used to draw the contributions heatmap.
+The ```ContributionsView``` is a descendant of ```View``` used to draw the contributions heatmap.
 
 **ContributionsView.java**
 ``` java

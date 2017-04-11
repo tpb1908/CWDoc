@@ -1891,6 +1891,62 @@ The next method, ```formatDateLocally``` is used to format a date in the expecte
 
 Finally, the ```insertString``` methods are used to insert a string at the currently selected position in an ```EditText```, before moving the cursor to the end of the inserted string, or to a provided offset.
 
+#page 
+
+### Logging
+
+As explained in the analysis, logs are printed with the ```Log``` class and are a useful method of debugging. However, log messages should only be shown in the debug variant of the
+application.
+The ```Logger``` class wraps the methods in ```Log``` with checks for the ```BuildConfig``` flag ```IS_IN_DEBUG```.
+
+#import "app/src/main/java/com/tpb/projects/util/Logger.java"
+
+The ```Logger``` class also contains the ```LoggingInterceptor``` class which is a network interceptor used to log all network request made throughout the app.
+
+The ```LoggingInterceptor``` is added in the ```ProjectsApplication``` class.
+It produces two log messages for each call, the first defailts the request being sent, for example a request to the notifications API:
+```
+Sending request https://api.github.com/notifications on Connection{api.github.com:443, proxy=DIRECT@ hostAddress=api.github.com/192.30.253.116:443 cipherSuite=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 protocol=http/1.1}
+                                       Accept: application/vnd.github.v3+json
+                                       Authorization: token an_authorization_token
+                                       Cache-Control: no-store
+                                       Host: api.github.com
+                                       Connection: Keep-Alive
+                                       Accept-Encoding: gzip
+                                       User-Agent: okhttp/3.6.0
+```
+
+and the received response:
+```
+Received response for https://api.github.com/notifications in 419.7ms
+                                       Server: GitHub.com
+                                       Date: Tue, 11 Apr 2017 23:36:57 GMT
+                                       Content-Type: application/json; charset=utf-8
+                                       Content-Length: 2
+                                       Status: 200 OK
+                                       X-RateLimit-Limit: 5000
+                                       X-RateLimit-Remaining: 4959
+                                       X-RateLimit-Reset: 1491955996
+                                       Cache-Control: private, max-age=60, s-maxage=60
+                                       Vary: Accept, Authorization, Cookie, X-GitHub-OTP
+                                       ETag: "3ef243829743ac436b782dbd8981e769"
+                                       X-Poll-Interval: 60
+                                       X-OAuth-Scopes: gist, repo, user
+                                       X-Accepted-OAuth-Scopes: notifications, repo
+                                       X-OAuth-Client-Id: the_client_id_of_the_app
+                                       X-GitHub-Media-Type: github.v3; format=json
+                                       Access-Control-Expose-Headers: ETag, Link, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval
+                                       Access-Control-Allow-Origin: *
+                                       Content-Security-Policy: default-src 'none'
+                                       Strict-Transport-Security: max-age=31536000; includeSubdomains; preload
+                                       X-Content-Type-Options: nosniff
+                                       X-Frame-Options: deny
+                                       X-XSS-Protection: 1; mode=block
+                                       Vary: Accept-Encoding
+                                       X-Served-By: 07ff1c8a09e44b62e277fae50a1b1dc4
+                                       X-GitHub-Request-Id: A8DC:2A61:2B933E:372939:58ED6898
+```
+
 
 ## User Activity
 
@@ -2008,7 +2064,7 @@ Objective 2.i.d is to display the user's contributions in a graphical form.
 
 As explained in the limitations section, there is no API for loading a user's contributions. Instead this can be achieved by parsing the SVG image of a user's contributions
 
-![Contributions](http://imgur.com/4zp8SG2.png)
+![Contributions](http://imgur.com/KcQx5U4.png)
 
 This image can be loaded from https://github.com/users/user_name/contributions
 
