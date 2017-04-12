@@ -1848,7 +1848,7 @@ import com.tpb.github.data.auth.OAuthHandler;
 import com.tpb.github.data.models.User;
 import com.tpb.projects.BuildConfig;
 import com.tpb.projects.R;
-import com.tpb.projects.markdown.Spanner;
+import com.tpb.projects.markdown.Formatter;
 import com.tpb.projects.user.UserActivity;
 import com.tpb.projects.util.Analytics;
 import com.tpb.projects.util.UI;
@@ -1922,7 +1922,7 @@ public class LoginActivity extends AppCompatActivity implements OAuthHandler.OAu
     @Override
     public void userLoaded(User user) {
         mSpinner.setVisibility(View.GONE);
-        Spanner.displayUser(mUserDetails, user);
+        Formatter.displayUser(mUserDetails, user);
         final Bundle bundle = new Bundle();
         bundle.putString(Analytics.TAG_LOGIN, Analytics.VALUE_SUCCESS);
         mAnalytics.logEvent(FirebaseAnalytics.Event.LOGIN, bundle);
@@ -4832,3 +4832,116 @@ Otherwise, a string is built from 5 different format strings to display the info
 Before setting the text of mContributionsInfo, a check is performed to see if it already contains any text.
 If the ```TextView``` is empty, then it will have 0 height (other than its margin), and setting its text would cause both it and its parent ```CardView``` to jump in size.
 Rather than allowing this, an ```ObjectAnimator``` is used to increment the maxLines count of the ```TextView``` from 0 to the required number over a period of 200 milliseconds.
+
+#### Displaying user information
+
+The level of information which a user provides is not constant. While some provide information about their location, company, email and bio, others provide no information.
+
+The ```displayUser``` method in ```Formatter``` is used in both the ```LoginActivity``` and ```UserInfoLayout``` to bind data to the ```Views``` in an inflated ```shared_user_info```
+layout.
+
+**Formatter.java**
+``` java
+void displayUser(ViewGroup userInfoParent, User user) {
+        userInfoParent.setVisibility(View.VISIBLE);
+
+        final NetworkImageView avatar = ButterKnife.findById(userInfoParent, R.id.user_avatar);
+        avatar.setImageUrl(user.getAvatarUrl());
+        final TextView login = ButterKnife.findById(userInfoParent, R.id.user_login);
+        login.setText(user.getLogin());
+
+        final Context context = userInfoParent.getContext();
+        final LinearLayout infoList = ButterKnife.findById(userInfoParent, R.id.user_info_layout);
+        infoList.removeAllViews();
+        TextView tv;
+        final LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, UI.pxFromDp(4), 0, UI.pxFromDp(4));
+        if(user.getName() != null) {
+            tv = getInfoTextView(context, R.drawable.ic_person);
+            tv.setText(user.getName());
+            infoList.addView(tv, params);
+        }
+        tv = getInfoTextView(context, R.drawable.ic_date);
+        tv.setText(
+                String.format(
+                        context.getString(R.string.text_user_created_at),
+                        Util.formatDateLocally(
+                                context,
+                                new Date(user.getCreatedAt())
+                        )
+                )
+        );
+        infoList.addView(tv, params);
+        if(user.getEmail() != null) {
+            tv = getInfoTextView(context, R.drawable.ic_email);
+            tv.setAutoLinkMask(Linkify.EMAIL_ADDRESSES);
+            tv.setText(user.getEmail());
+            infoList.addView(tv, params);
+        }
+        if(user.getBlog() != null) {
+            tv = getInfoTextView(context, R.drawable.ic_blog);
+            tv.setAutoLinkMask(Linkify.WEB_URLS);
+            tv.setText(user.getBlog());
+            infoList.addView(tv, params);
+        }
+        if(user.getCompany() != null) {
+            tv = getInfoTextView(context, R.drawable.ic_company);
+            tv.setText(user.getCompany());
+            infoList.addView(tv, params);
+        }
+        if(user.getLocation() != null) {
+            tv = getInfoTextView(context, R.drawable.ic_location);
+            tv.setText(user.getLocation());
+            infoList.addView(tv, params);
+        }
+        if(user.getRepos() > 0) {
+            tv = getInfoTextView(context, R.drawable.ic_repo);
+            tv.setText(context.getResources().getQuantityString(
+                    R.plurals.text_user_repositories,
+                    user.getRepos(),
+                    user.getRepos()
+                    ));
+            infoList.addView(tv, params);
+        }
+        if(user.getGists() > 0) {
+            tv = getInfoTextView(context, R.drawable.ic_gist);
+            tv.setText(context.getResources().getQuantityString(
+                    R.plurals.text_user_gists,
+                    user.getGists(),
+                    user.getGists()
+                    ));
+            infoList.addView(tv, params);
+        }
+        if(user.getBio() != null) {
+            tv = getInfoTextView(context, R.drawable.ic_bio);
+            tv.setText(user.getBio());
+            infoList.addView(tv, params);
+        }
+        UI.expand(infoList);
+    }
+```
+
+The method first finds the ```NetworkImageView``` to display the user's avatar, and the ```TextView``` to display their username.
+Once the username and avatar URL have been bound, a ```LayoutParams``` instance is created to ensure that each ```TextView``` uses the same margins.
+
+The ```getInfoTextView``` method takes the ```Context``` required to instantiate a ```View``` and a drawable resource id to display at the start of the ```TextView```.
+
+**Formatter.java**
+``` java
+static TextView getInfoTextView(Context context, @DrawableRes int drawableRes) {
+        final TextView tv = new TextView(context);
+        tv.setCompoundDrawablePadding(UI.pxFromDp(4));
+        tv.setCompoundDrawablesRelativeWithIntrinsicBounds(drawableRes, 0, 0, 0);
+        return tv;
+    }
+```
+
+```displayUser``` checks each value string value to be displayed, and if it is non null, the string is added to its own row with a corresponding icon.
+Numeric values greater than 0 are also displayed, however they require extra formatting.
+Correct grammar is achieved using plural strings, string resources with multiple values for different quantities.
+
+Once each ```TextView``` row has been added to the ```LinearLayout```, the ```LinearLayout``` is expanded with the ```UI``` ```expand``` method.
+
