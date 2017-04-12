@@ -3030,6 +3030,52 @@ public class ViewSafeFragment extends Fragment {
 
 In a concrete instance of ```ViewSafeFragment``` the mAreViewsValid flag should be set after inflation in ```onCreateView``` and used to check ```View``` validity before performing any binding.
 
+### FabHideScrollListener
+
+A ```FloatingActionButton``` is a button which, as its name suggests, floats over other ```Views```. It is often positioned in the bottom right of a screen to provide a button for the 
+primary action.
+The floating nature of the button can cause problems when it is displayed over a ```RecyclerView``` as it obscures the bottom most item.
+
+To solve this the ```FloatingActionButton``` should hide when the ```RecyclerView``` scrolls down, and show again when it scrolls back up.
+
+**FabHideScrollListener.java**
+``` java
+package com.tpb.projects.common.fab;
+
+import android.support.v7.widget.RecyclerView;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class FabHideScrollListener extends RecyclerView.OnScrollListener {
+
+    private FloatingActionButton mFab;
+
+    public FabHideScrollListener(FloatingActionButton fab) {
+        mFab = fab;
+    }
+
+    public void setFab(FloatingActionButton fab) {
+        mFab = fab;
+    }
+
+    @Override
+    public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+        super.onScrolled(recyclerView, dx, dy);
+        if(mFab == null) return;
+        if(dy > 10) {
+            mFab.hide(true);
+        } else if(dy < -10) {
+            mFab.show(true);
+        }
+    }
+}
+
+```
+
+The ```FabHideScrollListener``` extends  ```RecyclerView.OnScrollListener``` and overrides ```onScrolled```, checking if the change in the y value is sufficient to indicate scrolling.
+
 <div style="page-break-after: always;"></div>
 
 ### Utility methods

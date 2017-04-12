@@ -1647,6 +1647,8 @@ public interface ListLoader<T> {
 
 which is used to return objects parsed from a JSONArray as a list of ```DataModels```.
 
+The ```Loader``` is a singleton accessed by ```Loader.getLoader```
+
 #### Models
 
 Numerous different models are required to fulfill different objectives
@@ -2300,3 +2302,37 @@ The ```onClickListener``` disables the button, to prevent multiple requests, sta
 unfollow the user.
 
 Finally, the ```Button``` is enabled, and the ```SwipeRefreshLayout``` is stopped.
+
+The ```UserInfoFragment``` completes all objectives in 2.i
+
+### UserReposFragment
+
+The ```UserReposFragment``` is used to display the repositories which a user has contributed to.
+
+As multiple different ```Fragments``` contain only a ```SwipeRefreshLayout``` and a ```RecyclerView``` there is no need to create an individual layout file for each of them.
+Instead they can each use the same layout file:
+
+#import "app/src/main/res/layout/fragment_recycler.xml"
+
+The ```UserReposFragment``` contains very little logic, as it only has to load the ```User``` and then pass this ```User``` to the ```RecyclerView``` adapter which contains logic for
+loading the user's repositories and binding them to a list of ```Views```.
+
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserReposFragment.java"
+
+Following the same ```View``` binding structure as other ```Fragments``` the ```UserRepoFragment``` inflates its layout in ```onCreateView```.
+
+One function of the ```UserReposFragment``` is to listen for the ```RecyclerView``` scrolling.
+The GitHub API is paginated, returning a maximum of 30 items per request. In order to load further items a page number must be specified in the request.
+The ```RepositoriesAdapter``` tracks its page number when loading ```Repositories``` and is notified that its ```RecyclerView``` is approaching the bottom of its content by the 
+```UserReposFragment```  ```OnScrollListener```.
+
+The second function of the ```UserReposFragment``` is to launch the ```RepoActivity``` for displaying a repository when an item in the ```RecyclerView``` is clicked.
+
+```openRepo``` creates the ```Intent``` to launch the ```RepoActivity```, begins preloading the data which wil be used in ```RepoActvitiy```, and then launches ```RepoActivity```.
+
+### RepositoriesAdapter
+
+The ```RepositoriesAdapter``` is used in two places, displaying the repositories that a user contributes to and displaying the repositories that a user has starred.
+When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.ii.f).
+
+#import "app/src/main/java/com/tpb/projects/common/RepositoriesAdapter.java"
