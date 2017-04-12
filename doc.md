@@ -1875,6 +1875,18 @@ In order to ensure that the ```Fragment``` doesn't attempt to bind data to a nul
 
 In a concrete instance of ```ViewSafeFragment``` the mAreViewsValid flag should be set after inflation in ```onCreateView``` and used to check ```View``` validity before performing any binding.
 
+### FabHideScrollListener
+
+A ```FloatingActionButton``` is a button which, as its name suggests, floats over other ```Views```. It is often positioned in the bottom right of a screen to provide a button for the 
+primary action.
+The floating nature of the button can cause problems when it is displayed over a ```RecyclerView``` as it obscures the bottom most item.
+
+To solve this the ```FloatingActionButton``` should hide when the ```RecyclerView``` scrolls down, and show again when it scrolls back up.
+
+#import "app/src/main/java/com/tpb/projects/common/fab/FabHideScrollListener.java"
+
+The ```FabHideScrollListener``` extends  ```RecyclerView.OnScrollListener``` and overrides ```onScrolled```, checking if the change in the y value is sufficient to indicate scrolling.
+
 #page
 
 ### Utility methods

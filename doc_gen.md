@@ -5007,5 +5007,7 @@ void updated(Boolean isFollowing) {
 
 ```updated``` first checks if the ```Button``` has ben created, creating it if not.
 It then sets the appropriate resource string for the button and adds an ```onClickListener```.
-The ```onClickListener``` disables the button, to prevent multiple requests, enables the ```SwipeRefreshLayout``` to indicate loading, and then calls the ```Editor``` to follow or
+The ```onClickListener``` disables the button, to prevent multiple requests, starts the```SwipeRefreshLayout``` to indicate loading, and then calls the ```Editor``` to follow or
 unfollow the user.
+
+Finally, the ```Button``` is enabled, and the ```SwipeRefreshLayout``` is stopped.
