@@ -2229,3 +2229,26 @@ Otherwise, a string is built from 5 different format strings to display the info
 Before setting the text of mContributionsInfo, a check is performed to see if it already contains any text.
 If the ```TextView``` is empty, then it will have 0 height (other than its margin), and setting its text would cause both it and its parent ```CardView``` to jump in size.
 Rather than allowing this, an ```ObjectAnimator``` is used to increment the maxLines count of the ```TextView``` from 0 to the required number over a period of 200 milliseconds.
+
+#### Displaying user information
+
+The level of information which a user provides is not constant. While some provide information about their location, company, email and bio, others provide no information.
+
+The ```displayUser``` method in ```Formatter``` is used in both the ```LoginActivity``` and ```UserInfoLayout``` to bind data to the ```Views``` in an inflated ```shared_user_info```
+layout.
+
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $void displayUser$"
+
+The method first finds the ```NetworkImageView``` to display the user's avatar, and the ```TextView``` to display their username.
+Once the username and avatar URL have been bound, a ```LayoutParams``` instance is created to ensure that each ```TextView``` uses the same margins.
+
+The ```getInfoTextView``` method takes the ```Context``` required to instantiate a ```View``` and a drawable resource id to display at the start of the ```TextView```.
+
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $static TextView getInfoTextView$"
+
+```displayUser``` checks each value string value to be displayed, and if it is non null, the string is added to its own row with a corresponding icon.
+Numeric values greater than 0 are also displayed, however they require extra formatting.
+Correct grammar is achieved using plural strings, string resources with multiple values for different quantities.
+
+Once each ```TextView``` row has been added to the ```LinearLayout```, the ```LinearLayout``` is expanded with the ```UI``` ```expand``` method.
+
