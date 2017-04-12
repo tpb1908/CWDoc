@@ -865,6 +865,7 @@ The client must implement the following features:
             </li>
             <li> Display the users that a user is following </li>
             <li> Display the users that are following a user </li>
+            <li> Implement following and unfollowing of users </li>
         </ol>
     </li>
     <li>Repositories
@@ -4833,6 +4834,8 @@ Before setting the text of mContributionsInfo, a check is performed to see if it
 If the ```TextView``` is empty, then it will have 0 height (other than its margin), and setting its text would cause both it and its parent ```CardView``` to jump in size.
 Rather than allowing this, an ```ObjectAnimator``` is used to increment the maxLines count of the ```TextView``` from 0 to the required number over a period of 200 milliseconds.
 
+This completes objectives 2.i.d and 2.i.e
+
 #### Displaying user information
 
 The level of information which a user provides is not constant. While some provide information about their location, company, email and bio, others provide no information.
@@ -4926,6 +4929,9 @@ void displayUser(ViewGroup userInfoParent, User user) {
 
 The method first finds the ```NetworkImageView``` to display the user's avatar, and the ```TextView``` to display their username.
 Once the username and avatar URL have been bound, a ```LayoutParams``` instance is created to ensure that each ```TextView``` uses the same margins.
+| | |
+| --- | --- |
+| ![Little information](http://imgur.com/rutNtT6.png) |![]() |
 
 The ```getInfoTextView``` method takes the ```Context``` required to instantiate a ```View``` and a drawable resource id to display at the start of the ```TextView```.
 
@@ -4945,3 +4951,61 @@ Correct grammar is achieved using plural strings, string resources with multiple
 
 Once each ```TextView``` row has been added to the ```LinearLayout```, the ```LinearLayout``` is expanded with the ```UI``` ```expand``` method.
 
+This completes objectives 2.i.a, 2.i.b, and 2.i.c
+
+#### Following and unfollowing users
+
+Objective 2.vii requires the implementation of following and unfollowing users.
+This can be implemented as a ```Button``` below their information, displaying either "follow" if the user is not currently followed, or "unfollow" if they are currently followed.
+
+The ```Loader``` method to check whether a user is followed requires an ```ItemLoader<Boolean>``` and the user's login, while the ```Editor``` methods to follow or unfollow a user 
+require an ```UpdateListener<Boolean>```, as well as the user's login.
+
+The ```Button``` should only be shown if the user being displayed is not the authenticated user.
+
+This check if performed in the ```userLoaded``` method:
+
+```java
+if(!GitHubSession.getSession(getContext()).getUserLogin().equals(user.getLogin())) {
+    new Loader(getContext()).checkIfFollowing(this, user.getLogin());
+}
+```
+
+The ```updated``` method is used for binding the following information, and ```loadComplete``` pases its return value through to ```updated```.
+
+**UserInfoFragment.java**
+``` java
+void updated(Boolean isFollowing) {
+        if(mFollowButton == null) {
+            mFollowButton = new Button(getContext());
+            mFollowButton.setBackground(null);
+            mFollowButton.setLayoutParams(
+                    new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                    ));
+            mUserInfoParent.addView(mFollowButton);
+        }
+
+        if(isFollowing) {
+            mFollowButton.setText(R.string.text_unfollow_user);
+        } else {
+            mFollowButton.setText(R.string.text_follow_user);
+        }
+        mFollowButton.setOnClickListener(v -> {
+            mFollowButton.setEnabled(false);
+            mRefresher.setRefreshing(true);
+            if(isFollowing) {
+                new Editor(getContext()).unfollowUser(UserInfoFragment.this, mUser.getLogin());
+            } else {
+                new Editor(getContext()).followUser(UserInfoFragment.this, mUser.getLogin());
+            }
+        });
+        mFollowButton.setEnabled(true);
+        mRefresher.setRefreshing(false);
+    }
+```
+
+```updated``` first checks if the ```Button``` has ben created, creating it if not.
+It then sets the appropriate resource string for the button and adds an ```onClickListener```.
+The ```onClickListener``` disables the button, to prevent multiple requests, enables the ```SwipeRefreshLayout``` to indicate loading, and then calls the ```Editor``` to follow or
+unfollow the user.
