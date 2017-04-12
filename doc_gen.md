@@ -2359,6 +2359,7 @@ loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issu
                         loader.loadError(parseError(anError));
                     }
                 });
+        return this;
     }
 ```
 
@@ -2389,6 +2390,7 @@ loadProject(@Nullable final ItemLoader<Project> loader, int id) {
                 }
             });
         }
+        return this;
     }
 ```
 
@@ -2409,6 +2411,8 @@ public interface ListLoader<T> {
 ```
 
 which is used to return objects parsed from a JSONArray as a list of ```DataModels```.
+
+The ```Loader``` is a singleton accessed by ```Loader.getLoader```
 
 #### Models
 
@@ -3624,7 +3628,7 @@ public class UserActivity extends BaseActivity implements Loader.ItemLoader<User
         postponeEnterTransition();
 
         if(mAdapter == null) mAdapter = new UserFragmentAdapter(getSupportFragmentManager());
-        final Loader loader = new Loader(this);
+        final Loader loader = Loader.getLoader(this);
 
         if(getIntent() != null && getIntent().hasExtra(getString(R.string.intent_username))) {
             final String user = getIntent().getStringExtra(getString(R.string.intent_username));
@@ -4115,7 +4119,7 @@ View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nulla
                    }
                });
         mRefresher.setOnRefreshListener(
-                () -> new Loader(getContext()).loadUser(new Loader.ItemLoader<User>() {
+                () -> Loader.getLoader(getContext()).loadUser(new Loader.ItemLoader<User>() {
                     @Override
                     public void loadComplete(User user) {
                         userLoaded(user);
@@ -5041,9 +5045,9 @@ void updated(Boolean isFollowing) {
             mFollowButton.setEnabled(false);
             mRefresher.setRefreshing(true);
             if(isFollowing) {
-                new Editor(getContext()).unfollowUser(UserInfoFragment.this, mUser.getLogin());
+                Editor.getEditor(getContext()).unfollowUser(UserInfoFragment.this, mUser.getLogin());
             } else {
-                new Editor(getContext()).followUser(UserInfoFragment.this, mUser.getLogin());
+                Editor.getEditor(getContext()).followUser(UserInfoFragment.this, mUser.getLogin());
             }
         });
         mFollowButton.setEnabled(true);
@@ -5057,3 +5061,479 @@ The ```onClickListener``` disables the button, to prevent multiple requests, sta
 unfollow the user.
 
 Finally, the ```Button``` is enabled, and the ```SwipeRefreshLayout``` is stopped.
+
+The ```UserInfoFragment``` completes all objectives in 2.i
+
+### UserReposFragment
+
+The ```UserReposFragment``` is used to display the repositories which a user has contributed to.
+
+As multiple different ```Fragments``` contain only a ```SwipeRefreshLayout``` and a ```RecyclerView``` there is no need to create an individual layout file for each of them.
+Instead they can each use the same layout file:
+
+**fragment_recycler.xml**
+``` xml
+<?xml version="1.0" encoding="utf-8"?>
+
+<android.support.v4.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/fragment_refresher"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+    <com.tpb.animatingrecyclerview.AnimatingRecyclerView
+        android:id="@+id/fragment_recycler"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="8dp"/>
+
+</android.support.v4.widget.SwipeRefreshLayout>
+
+
+
+```
+
+The ```UserReposFragment``` contains very little logic, as it only has to load the ```User``` and then pass this ```User``` to the ```RecyclerView``` adapter which contains logic for
+loading the user's repositories and binding them to a list of ```Views```.
+
+**UserReposFragment.java**
+``` java
+package com.tpb.projects.user.fragments;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.repo.RepoActivity;
+import com.tpb.projects.common.RepositoriesAdapter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 10/03/17.
+ */
+
+public class UserReposFragment extends UserFragment implements RepositoriesAdapter.RepoOpener {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    private RepositoriesAdapter mAdapter;
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+
+        final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
+        mRecycler.setLayoutManager(manager);
+        mRecycler.enableLineDecoration();
+        mAdapter = new RepositoriesAdapter(getActivity(), this, mRefresher);
+        mRecycler.setAdapter(mAdapter);
+
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mAreViewsValid = true;
+        if(mUser != null) userLoaded(mUser);
+        return view;
+    }
+
+    @Override
+    public void userLoaded(User user) {
+        mUser = user;
+        if(!mAreViewsValid) return;
+        mAdapter.setUser(user.getLogin(), false);
+    }
+
+    @Override
+    public void openRepo(Repository repo) {
+        final Intent i = new Intent(getContext(), RepoActivity.class);
+        i.putExtra(getString(R.string.intent_repo), repo);
+        Loader.getLoader(getContext())
+              .loadProjects(null, repo.getFullName())
+              .loadIssues(null, repo.getFullName(), State.OPEN, null, null, 0)
+              .loadProjects(null, repo.getFullName());
+        startActivity(i);
+        getActivity().overridePendingTransition(R.anim.slide_up, R.anim.none);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+Following the same ```View``` binding structure as other ```Fragments``` the ```UserRepoFragment``` inflates its layout in ```onCreateView```.
+
+One function of the ```UserReposFragment``` is to listen for the ```RecyclerView``` scrolling.
+The GitHub API is paginated, returning a maximum of 30 items per request. In order to load further items a page number must be specified in the request.
+The ```RepositoriesAdapter``` tracks its page number when loading ```Repositories``` and is notified that its ```RecyclerView``` is approaching the bottom of its content by the 
+```UserReposFragment```  ```OnScrollListener```.
+
+The second function of the ```UserReposFragment``` is to launch the ```RepoActivity``` for displaying a repository when an item in the ```RecyclerView``` is clicked.
+
+```openRepo``` creates the ```Intent``` to launch the ```RepoActivity```, begins preloading the data which wil be used in ```RepoActvitiy```, and then launches ```RepoActivity```.
+
+### RepositoriesAdapter
+
+The ```RepositoriesAdapter``` is used in two places, displaying the repositories that a user contributes to and displaying the repositories that a user has starred.
+When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.ii.f).
+
+**RepositoriesAdapter.java**
+``` java
+package com.tpb.projects.common;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Repository;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.util.Util;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 14/12/16.
+ */
+
+public class RepositoriesAdapter extends RecyclerView.Adapter<RepositoriesAdapter.RepoHolder> implements Loader.ListLoader<Repository> {
+    private static final String TAG = RepositoriesAdapter.class.getSimpleName();
+
+    private final Loader mLoader;
+    private final SwipeRefreshLayout mRefresher;
+    private final ArrayList<Repository> mRepos = new ArrayList<>();
+    private final String mAuthenticatedUser;
+    private String mUser;
+    private final RepoPinChecker mPinChecker;
+    private final RepoOpener mOpener;
+    private final Activity mActivity;
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private boolean mIsShowingStars = false;
+
+    public RepositoriesAdapter(Activity activity, RepoOpener opener, SwipeRefreshLayout refresher) {
+        mActivity = activity;
+        mLoader = Loader.getLoader(activity);
+        mOpener = opener;
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            final int oldSize = mRepos.size();
+            mRepos.clear();
+            notifyItemRangeRemoved(0, oldSize);
+            loadReposForUser(true);
+        });
+        mPinChecker = new RepoPinChecker(activity);
+        mAuthenticatedUser = GitHubSession.getSession(activity).getUserLogin();
+    }
+
+    public void setUser(String user, boolean isShowingStars) {
+        mUser = user;
+        mIsShowingStars = isShowingStars;
+        mRepos.clear();
+        loadReposForUser(true);
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadReposForUser(false);
+        }
+    }
+
+    private void loadReposForUser(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        if(mIsShowingStars) {
+            mLoader.loadStarredRepositories(this, mUser, mPage);
+        } else if(mUser.equals(mAuthenticatedUser)) { //The session user
+            mLoader.loadRepositories(this, mPage);
+        } else {
+            mLoader.loadRepositories(this, mUser, mPage);
+        }
+        mPinChecker.setKey(mUser);
+
+    }
+
+    @Override
+    public RepoHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new RepoHolder(LayoutInflater.from(parent.getContext())
+                                            .inflate(R.layout.viewholder_repo, parent, false));
+    }
+
+    @SuppressLint("SetTextI18n")
+    @Override
+    public void onBindViewHolder(RepoHolder holder, int position) {
+        final int pos = holder.getAdapterPosition();
+        final Repository r = mRepos.get(pos);
+        holder.mName.setText(
+                (r.getUserLogin().equals(mUser) ? r.getName() : r.getFullName()) + (r
+                        .isFork() ? " (Forked) " : "")
+        );
+        if(Util.isNotNullOrEmpty(r.getLanguage())) {
+            holder.mLanguage.setVisibility(View.VISIBLE);
+            holder.mLanguage.setText(r.getLanguage());
+        } else {
+            holder.mLanguage.setVisibility(View.GONE);
+        }
+        if(Util.isNotNullOrEmpty(r.getDescription())) {
+            holder.mDescription.setVisibility(View.VISIBLE);
+            holder.mDescription.setMarkdown(Markdown.formatMD(r.getDescription(), r.getFullName()));
+        } else {
+            holder.mDescription.setVisibility(View.GONE);
+        }
+        if(mIsShowingStars) {
+            holder.mImage.setImageUrl(r.getUserAvatarUrl());
+            IntentHandler.addOnClickHandler(mActivity, holder.mImage, r.getUserLogin());
+        } else {
+            final boolean isPinned = mPinChecker.isPinned(r.getFullName());
+            holder.isPinned = isPinned;
+            holder.mImage
+                    .setImageResource(isPinned ? R.drawable.ic_pinned : R.drawable.ic_not_pinned);
+        }
+        holder.mForks.setText(Integer.toString(r.getForks()));
+        holder.mStars.setText(Integer.toString(r.getStarGazers()));
+        holder.mLastUpdated.setText(DateUtils.getRelativeTimeSpanString(r.getUpdatedAt()));
+    }
+
+    private void togglePin(int pos) {
+        final Repository r = mRepos.get(pos);
+        if(mPinChecker.isPinned(r.getFullName())) {
+            mRepos.remove(pos);
+            final int newPos = mPinChecker.initialPosition(r.getFullName());
+            mRepos.add(newPos, r);
+            mPinChecker.unpin(r.getFullName());
+            notifyItemMoved(pos, newPos);
+        } else {
+            mRepos.remove(pos);
+            mRepos.add(0, r);
+            mPinChecker.pin(r.getFullName());
+            notifyItemMoved(pos, 0);
+
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return mRepos.size();
+    }
+
+    @Override
+    public void listLoadComplete(List<Repository> repos) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(repos.size() > 0) {
+            int oldLength = mRepos.size();
+            if(mPage == 1) mRepos.clear();
+            if(mIsShowingStars) {
+                mRepos.addAll(repos);
+            } else {
+                if(mPage == 1) {
+                    for(Repository r : repos) {
+                        if(mPinChecker.isPinned(r.getFullName())) {
+                            mRepos.add(0, r);
+                        } else {
+                            mRepos.add(r);
+                        }
+                    }
+                    mPinChecker.setInitialPositions(mRepos);
+                    ensureLoadOfPinnedRepos();
+                } else {
+                    for(Repository repo : repos) {
+                        if(!mRepos.contains(repo)) mRepos.add(repo);
+                    }
+                    mPinChecker.appendInitialPositions(repos);
+                }
+            }
+            notifyItemRangeInserted(oldLength, mRepos.size());
+
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mIsLoading = false;
+        mRefresher.setRefreshing(false);
+    }
+
+    private void ensureLoadOfPinnedRepos() {
+        for(String repo : mPinChecker.findNonLoadedPinnedRepositories()) {
+            mLoader.loadRepository(new Loader.ItemLoader<Repository>() {
+                @Override
+                public void loadComplete(Repository data) {
+                    if(!mRepos.contains(data)) {
+                        mRepos.add(0, data);
+                        mPinChecker.appendPinnedPosition(data.getFullName());
+                        notifyItemInserted(0);
+                    }
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, repo);
+        }
+    }
+
+    private void openItem(int pos) {
+        mOpener.openRepo(mRepos.get(pos));
+    }
+
+    class RepoHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.repo_name) TextView mName;
+        @BindView(R.id.repo_description) MarkdownTextView mDescription;
+        @BindView(R.id.repo_forks) TextView mForks;
+        @BindView(R.id.repo_stars) TextView mStars;
+        @BindView(R.id.repo_language) TextView mLanguage;
+        @BindView(R.id.repo_last_updated) TextView mLastUpdated;
+        @BindView(R.id.repo_icon) NetworkImageView mImage;
+        private boolean isPinned = false;
+
+        RepoHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            view.setOnClickListener(v -> openItem(getAdapterPosition()));
+            mDescription.setOnClickListener(v -> openItem(getAdapterPosition()));
+            if(!mIsShowingStars) {
+                mImage.setOnClickListener((v) -> {
+                    togglePin(getAdapterPosition());
+                    isPinned = !isPinned;
+                    mImage.setImageResource(
+                            isPinned ? R.drawable.ic_pinned : R.drawable.ic_not_pinned);
+                });
+            }
+        }
+
+    }
+
+    private class RepoPinChecker {
+
+        private final SharedPreferences prefs;
+        private static final String PREFS_KEY = "PINS";
+        private String KEY;
+        private final ArrayList<String> pins = new ArrayList<>();
+        private final ArrayList<String> mInitialPositions = new ArrayList<>();
+
+        RepoPinChecker(Context context) {
+            prefs = context.getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE);
+        }
+
+        void setKey(String key) {
+            KEY = key;
+            final String[] savedPins = Util.stringArrayFromPrefs(prefs.getString(KEY, ""));
+            pins.clear();
+            pins.addAll(Arrays.asList(savedPins));
+        }
+
+        void pin(String path) {
+            if(!pins.contains(path)) {
+                pins.add(path);
+                prefs.edit().putString(KEY, Util.stringArrayForPrefs(pins)).apply();
+            }
+        }
+
+        void unpin(String path) {
+            pins.remove(path);
+            prefs.edit().putString(KEY, Util.stringArrayForPrefs(pins)).apply();
+        }
+
+        void setInitialPositions(List<Repository> repos) {
+            mInitialPositions.clear();
+            for(Repository r : repos) mInitialPositions.add(r.getFullName());
+        }
+
+        void appendInitialPositions(List<Repository> repos) {
+            for(Repository r : repos) mInitialPositions.add(r.getFullName());
+        }
+
+        void appendPinnedPosition(String key) {
+            mInitialPositions.add(0, key);
+        }
+
+        int initialPosition(String key) {
+            return mInitialPositions.indexOf(key);
+        }
+
+        boolean isPinned(String path) {
+            return pins.contains(path);
+        }
+
+        List<String> findNonLoadedPinnedRepositories() {
+            final List<String> repos = new ArrayList<>();
+            for(String pin : pins) {
+                if(!mInitialPositions.contains(pin)) repos.add(pin);
+            }
+            return repos;
+        }
+
+    }
+
+    public interface RepoOpener {
+
+        void openRepo(Repository repo);
+
+    }
+
+}
+
+```
