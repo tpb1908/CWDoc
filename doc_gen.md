@@ -3937,7 +3937,7 @@ public abstract class UserFragment extends ViewSafeFragment {
 ### UserInfoFragment
 
 The first ```Fragment``` to be displayed is the ```UserInfoFragment```.
-The ```UserInfoFragment``` is to fulfill objective 2.i, displaying information about the user.
+The ```UserInfoFragment``` is to fulfill objective 2.a, displaying information about the user.
 
 The ```UserInfoFragment``` layout has two cards, the first displaying text based information about the user, and the second displaying a graph of the users' contributions.
 
@@ -4189,7 +4189,7 @@ This structure is used throughout the different concrete implementations of ```U
 
 #### ContributionsView
 
-Objective 2.i.d is to display the user's contributions in a graphical form.
+Objective 2.a.iv is to display the user's contributions in a graphical form.
 
 As explained in the limitations section, there is no API for loading a user's contributions. Instead this can be achieved by parsing the SVG image of a user's contributions
 
@@ -4884,7 +4884,7 @@ Before setting the text of mContributionsInfo, a check is performed to see if it
 If the ```TextView``` is empty, then it will have 0 height (other than its margin), and setting its text would cause both it and its parent ```CardView``` to jump in size.
 Rather than allowing this, an ```ObjectAnimator``` is used to increment the maxLines count of the ```TextView``` from 0 to the required number over a period of 200 milliseconds.
 
-This completes objectives 2.i.d and 2.i.e
+This completes objectives 2.a.iv and 2.a.v
 
 #### Displaying user information
 
@@ -4979,9 +4979,6 @@ void displayUser(ViewGroup userInfoParent, User user) {
 
 The method first finds the ```NetworkImageView``` to display the user's avatar, and the ```TextView``` to display their username.
 Once the username and avatar URL have been bound, a ```LayoutParams``` instance is created to ensure that each ```TextView``` uses the same margins.
-| | |
-| --- | --- |
-| ![Little information](http://imgur.com/rutNtT6.png) |![]() |
 
 The ```getInfoTextView``` method takes the ```Context``` required to instantiate a ```View``` and a drawable resource id to display at the start of the ```TextView```.
 
@@ -5001,11 +4998,11 @@ Correct grammar is achieved using plural strings, string resources with multiple
 
 Once each ```TextView``` row has been added to the ```LinearLayout```, the ```LinearLayout``` is expanded with the ```UI``` ```expand``` method.
 
-This completes objectives 2.i.a, 2.i.b, and 2.i.c
+This completes objectives 2.a.i, 2.a.ii, and 2.a.iii
 
 #### Following and unfollowing users
 
-Objective 2.vii requires the implementation of following and unfollowing users.
+Objective 2.g requires the implementation of following and unfollowing users.
 This can be implemented as a ```Button``` below their information, displaying either "follow" if the user is not currently followed, or "unfollow" if they are currently followed.
 
 The ```Loader``` method to check whether a user is followed requires an ```ItemLoader<Boolean>``` and the user's login, while the ```Editor``` methods to follow or unfollow a user 
@@ -5062,7 +5059,7 @@ unfollow the user.
 
 Finally, the ```Button``` is enabled, and the ```SwipeRefreshLayout``` is stopped.
 
-The ```UserInfoFragment``` completes all objectives in 2.i
+The ```UserInfoFragment``` completes all objectives in 2.a
 
 ### UserReposFragment
 
@@ -5206,7 +5203,7 @@ The second function of the ```UserReposFragment``` is to launch the ```RepoActiv
 ### RepositoriesAdapter
 
 The ```RepositoriesAdapter``` is used in two places, displaying the repositories that a user contributes to and displaying the repositories that a user has starred.
-When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.ii.f).
+When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.b.vi).
 
 **RepositoriesAdapter.java**
 ``` java
