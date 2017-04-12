@@ -1893,6 +1893,38 @@ Finally, the ```insertString``` methods are used to insert a string at the curre
 
 #page 
 
+### User Interface utility methods
+
+The ```UI``` class contains numerous helper methods for performing unit conversions as well as helping with ```View``` animations.
+
+#import "app/src/main/java/com/tpb/projects/util/UI.java"
+
+The first two methods, ```setViewPositionForIntent``` and ```setClickPositionForIntent``` are used when passing the position of a ```View``` or the position of a click to a new 
+```Activity```, allowing it to launch form a point.
+
+The ```expand``` and ```collapse``` methods are used to animate ```Views```.
+```expand``` animates a ```View``` from no height to its measured height, and ```collapse``` shrinks a ```View``` from its measured height to no height before hiding it. 
+
+```flashViewBackground``` is a method used to fade the background colour of a ```View``` from its original colour to a highlight colour, and back again.
+This method can be used to highlight an important ```View```, such as when jumping to a search result.
+
+The next four methods are used for unit conversion, converting pixels to density independent pixels, as well as converting density independent pixels or scale independent pixels to pixels.
+
+As its name suggest, ```setStatusBarColor``` is used to set the status bar color for a ```Window```, which is required if the ```Activity``` uses a theme with transparency.
+
+Finally, ```getSafeNavigationBarTransitionPair```is a utility for shared element transitions.
+When a ```View``` in a ```RecyclerView``` is used in a shared element transition between two ```Activities```, the ```View``` is drawn throught the ```ViewOverlay``` layer, which draws above the software navigation bar.
+If a ```View``` is partially below the navigation bar it will jump in elevation to display above the navigation bar, and jump back under it on the return transition.
+In order to prevent this jumpy transition, the navigation bar can be added to the transition, resulting in it being drawn in the ```ViewOverlay``` above the transitioning ```View```.
+
+The navigation bar can be found by searching an ```Activity``` for the id ```android.R.id.navigationBarBackground```, however it may not exist.
+Many devices, notably Samsung phones, do not use software navigation keys, and the null ```View``` returned from ```findViewById``` would result in a crash.
+
+In order to prevent this, a ```Pair``` containing an empty ```View``` instance with an unused key is returned if the navigation bar does not exist.
+
+
+#page
+
 ### Logging
 
 As explained in the analysis, logs are printed with the ```Log``` class and are a useful method of debugging. However, log messages should only be shown in the debug variant of the

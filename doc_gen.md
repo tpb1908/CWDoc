@@ -3199,6 +3199,19 @@ Received response for https://api.github.com/notifications in 419.7ms
                                        X-GitHub-Request-Id: A8DC:2A61:2B933E:372939:58ED6898
 ```
 
+### Analytics
+
+In order to help debug crashes which happen when not connected to a computer, I have chosen to incorporate Google's FireBase analytics service to log crashes and other events.
+
+If a crash occurs, the information about the crash is exported and can then be to debug the issue later.
+
+Each issue shows the version codes for which it occured, as well as more detailed information about the circumstances of the crash.
+
+![Issue info](http://imgur.com/7yqPZjf.png)
+
+The crash information contains the full stack trace as well as information about the device on which the crash occured.
+
+![Device info](http://imgur.com/tPfFzWS.png)
 
 ## User Activity
 
