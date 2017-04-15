@@ -3095,6 +3095,129 @@ The ```FabHideScrollListener``` extends  ```RecyclerView.OnScrollListener``` and
 
 <div style="page-break-after: always;"></div>
 
+
+### SimpleTextChangeWatcher
+
+The ```SimpleTextChangeWatcher``` is a simplified abstract implementation of ```TextWatcher``` which forwards the ```onTextChanged``` call to ```textChanged``` without any parameters,
+rather than requiring the implementation of ```beforeTextChanged```, ```onTextChanged```, and ```afterTextChanged``` when the logic only needs to know that the text has changed.
+
+**SimpleTextChangeWatcher.java**
+``` java
+package com.tpb.projects.util.input;
+
+import android.text.Editable;
+import android.text.TextWatcher;
+
+/**
+ * Created by theo on 24/02/17.
+ * Simplified TextWatcher which updates onTextChanged
+ */
+
+public abstract class SimpleTextChangeWatcher implements TextWatcher {
+
+    @Override
+    public final void beforeTextChanged(CharSequence s, int start, int count, int after) {
+    }
+
+    @Override
+    public final void afterTextChanged(Editable s) {
+    }
+
+    @Override
+    public final void onTextChanged(CharSequence s, int start, int before, int count) {
+        textChanged();
+    }
+
+    /**
+     * Called onTextChanged
+     */
+    public abstract void textChanged();
+}
+
+```
+
+<div style="page-break-after: always;"></div>
+
+### KeyBoardVisibilityChecker
+
+A long running gripe with Android's text input system is that there is no standard way to detect whether the keyboard is currently visible, or listen for when its visibility changes.
+
+This functionality is achieved by listening for changes on the ```ViewTreeObserver``` of the root ```View``` of an ```Activity``` and comparing it to the display frame size.
+
+**KeyBoardVisibilityChecker.java**
+``` java
+package com.tpb.projects.util.input;
+
+import android.graphics.Rect;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.view.View;
+
+/**
+ * Created by theo on 21/02/17.
+ * Utility for listening for keyboard state
+ */
+
+public class KeyBoardVisibilityChecker {
+
+    private boolean mIsKeyboardOpen = false;
+
+    public KeyBoardVisibilityChecker(@NonNull View content) {
+        this(content, null);
+    }
+
+    public KeyBoardVisibilityChecker(@NonNull View content, @Nullable KeyBoardVisibilityListener listener) {
+        content.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            final Rect r = new Rect();
+            content.getWindowVisibleDisplayFrame(r);
+            final int screenHeight = content.getRootView().getHeight();
+
+            // r.bottom is the position above soft keypad or device button.
+            // if keypad is shown, the r.bottom is smaller than that before.
+            final int kbHeight = screenHeight - r.bottom;
+
+            if(kbHeight > screenHeight * 0.15) { // 0.15 ratio is perhaps enough to determine keypad height.
+                mIsKeyboardOpen = true;
+                if(listener != null) listener.keyboardShown();
+            } else {
+                mIsKeyboardOpen = false;
+                if(listener != null) listener.keyboardHidden();
+            }
+        });
+    }
+
+    public boolean isKeyboardOpen() {
+        return mIsKeyboardOpen;
+    }
+
+    /**
+     * Interface for listening to {@link KeyBoardVisibilityChecker}
+     */
+    public interface KeyBoardVisibilityListener {
+
+        void keyboardShown();
+
+        void keyboardHidden();
+
+    }
+
+}
+
+```
+
+The ```KeyBoardVisibilityChecker``` adds an ```onGlobalLayoutListener``` which checks the size of the window with ```getWindowVisibleDisplayFrame```.
+This method applies the dimensions of "the overall visible display size in which the window this view is attached to has been positioned in" to a given ```Rect```.
+
+When the keyboard is shown, the root content layout is pushed upward and resized. The bottom of the content layout is therefore at the same position as the top of the keyboard.
+
+Next the screen height is found from the height of the root ```View``` returned by the content layout.
+
+If the calculated height is greater than 15% of the screen, it can be assumed that the keyboard is showing.
+
+The ```KeyBoardVisibilityListener``` is an interface which can be used to listen for changes in keyboard visibility.
+
+<div style="page-break-after: always;"></div>
+
 ### Utility methods
 
 The ```Util``` class contains numerous utility methods for formatting and finding array indices.
@@ -3503,6 +3626,18 @@ The crash information contains the full stack trace as well as information about
 ## Markdown
 
 As GitHub uses Markdown throughout its content, a method for displaying Markdown must be implemented before the creation of the rest of the user interface.
+
+GitHub flavoured Markdown follows the CommonMark specification while extending it with extra features, however these features are not present in the Markdown returned from the GitHub
+API.
+
+The simplest way to display Markdown would be to display the Markdown as HTML in a ```WebView```, however the performance of a ```WebView``` is not acceptable when displaying
+multiple different sections of text.
+
+Instead, the Markdown must be displayed in a ```TextView```. The ```TextView``` has no native support for Markdown formatting, nor does it have direct support for HTML.
+In order to display styled text without applying the styling to the entire text body, spans are used.
+
+The ```Spanned``` interface is "the interface for text that has markup objects attached to ranges of it.".
+
 
 
 ## User Activity
