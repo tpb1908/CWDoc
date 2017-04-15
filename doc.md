@@ -1893,6 +1893,37 @@ The ```FabHideScrollListener``` extends  ```RecyclerView.OnScrollListener``` and
 
 #page
 
+
+### SimpleTextChangeWatcher
+
+The ```SimpleTextChangeWatcher``` is a simplified abstract implementation of ```TextWatcher``` which forwards the ```onTextChanged``` call to ```textChanged``` without any parameters,
+rather than requiring the implementation of ```beforeTextChanged```, ```onTextChanged```, and ```afterTextChanged``` when the logic only needs to know that the text has changed.
+
+#import "app/src/main/java/com/tpb/projects/util/input/SimpleTextChangeWatcher.java"
+
+#page
+
+### KeyBoardVisibilityChecker
+
+A long running gripe with Android's text input system is that there is no standard way to detect whether the keyboard is currently visible, or listen for when its visibility changes.
+
+This functionality is achieved by listening for changes on the ```ViewTreeObserver``` of the root ```View``` of an ```Activity``` and comparing it to the display frame size.
+
+#import "app/src/main/java/com/tpb/projects/util/input/KeyBoardVisibilityChecker.java"
+
+The ```KeyBoardVisibilityChecker``` adds an ```onGlobalLayoutListener``` which checks the size of the window with ```getWindowVisibleDisplayFrame```.
+This method applies the dimensions of "the overall visible display size in which the window this view is attached to has been positioned in" to a given ```Rect```.
+
+When the keyboard is shown, the root content layout is pushed upward and resized. The bottom of the content layout is therefore at the same position as the top of the keyboard.
+
+Next the screen height is found from the height of the root ```View``` returned by the content layout.
+
+If the calculated height is greater than 15% of the screen, it can be assumed that the keyboard is showing.
+
+The ```KeyBoardVisibilityListener``` is an interface which can be used to listen for changes in keyboard visibility.
+
+#page
+
 ### Utility methods
 
 The ```Util``` class contains numerous utility methods for formatting and finding array indices.
@@ -2013,6 +2044,18 @@ The crash information contains the full stack trace as well as information about
 ## Markdown
 
 As GitHub uses Markdown throughout its content, a method for displaying Markdown must be implemented before the creation of the rest of the user interface.
+
+GitHub flavoured Markdown follows the CommonMark specification while extending it with extra features, however these features are not present in the Markdown returned from the GitHub
+API.
+
+The simplest way to display Markdown would be to display the Markdown as HTML in a ```WebView```, however the performance of a ```WebView``` is not acceptable when displaying
+multiple different sections of text.
+
+Instead, the Markdown must be displayed in a ```TextView```. The ```TextView``` has no native support for Markdown formatting, nor does it have direct support for HTML.
+In order to display styled text without applying the styling to the entire text body, spans are used.
+
+The ```Spanned``` interface is "the interface for text that has markup objects attached to ranges of it.".
+
 
 
 ## User Activity

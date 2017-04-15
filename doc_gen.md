@@ -1002,6 +1002,7 @@ The client must implement the following features:
                         <ol type="1">
                             <li>The user that created the comment</li>
                             <li>The date that the comment was created</li>
+                            <li>The reactions to the comment</li>
                             <li>The comment body </li>
                          </ol>
                     </li>
@@ -1053,6 +1054,7 @@ The client must implement the following features:
                         <ol type="1"> 
                             <li>The user that created the comment</li>
                             <li>The date that the comment was created</li>
+                            <li>The reactions to the comment</li>
                             <li>The comment body </li>
                         </ol>
                     </li>
@@ -1490,15 +1492,17 @@ public abstract class APIHandler {
     private static final String PROJECTS_PREVIEW_ACCEPT_HEADER = "application/vnd.github.inertia-preview+json";
     private static final String REPO_LICENSE_PREVIEW_ACCEPT_HEADER = "application/vnd.github.drax-preview+json";
     private static final String PAGES_PREVIEW_ACCEPT_HEADER = "application/vnd.github.mister-fantastic-preview+json";
+    private static final String REACTIONS_PREVIEW_ACCEPT_HEADER = "  application/vnd.github.squirrel-girl-preview";
     private static final String AUTHORIZATION_HEADER_KEY = "Authorization";
     private static final String AUTHORIZATION_TOKEN_FORMAT = "token %1$s";
     private static GitHubSession mSession;
 
     protected static final HashMap<String, String> API_AUTH_HEADERS = new HashMap<>();
-    static final HashMap<String, String> PROJECTS_API_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> PROJECTS_API_AUTH_HEADERS = new HashMap<>();
     static final HashMap<String, String> ORGANIZATIONS_API_AUTH_HEADERS = new HashMap<>();
-    static final HashMap<String, String> LICENSES_API_API_AUTH_HEADERS = new HashMap<>();
-    static final HashMap<String, String> PAGES_API_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> LICENSES_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> PAGES_API_AUTH_HEADERS = new HashMap<>();
+    static final HashMap<String, String> REACTIONS_API_PREVIEW_AUTH_HEADERS = new HashMap<>();
 
     protected static final String SEGMENT_USER = "/user";
     static final String SEGMENT_USERS = "/users";
@@ -1542,20 +1546,25 @@ public abstract class APIHandler {
         );
         ORGANIZATIONS_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, ORGANIZATIONS_PREVIEW_ACCEPT_HEADER);
 
-        PROJECTS_API_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+        PROJECTS_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
                 String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
         );
-        PROJECTS_API_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, PROJECTS_PREVIEW_ACCEPT_HEADER);
+        PROJECTS_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, PROJECTS_PREVIEW_ACCEPT_HEADER);
 
-        LICENSES_API_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+        LICENSES_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
                 String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
         );
-        LICENSES_API_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, REPO_LICENSE_PREVIEW_ACCEPT_HEADER);
+        LICENSES_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, REPO_LICENSE_PREVIEW_ACCEPT_HEADER);
 
-        PAGES_API_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+        PAGES_API_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
                 String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
         );
-        PAGES_API_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, PAGES_PREVIEW_ACCEPT_HEADER);
+        PAGES_API_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, PAGES_PREVIEW_ACCEPT_HEADER);
+
+        REACTIONS_API_PREVIEW_AUTH_HEADERS.put(AUTHORIZATION_HEADER_KEY,
+                String.format(AUTHORIZATION_TOKEN_FORMAT, accessToken)
+        );
+        REACTIONS_API_PREVIEW_AUTH_HEADERS.put(ACCEPT_HEADER_KEY, REACTIONS_PREVIEW_ACCEPT_HEADER);
     }
 
     private static final String CONNECTION_ERROR = "connectionError";
@@ -2344,7 +2353,7 @@ An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoF
 ``` java
 loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
         get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
-                .addHeaders(API_AUTH_HEADERS)
+                .addHeaders(REACTIONS_API_PREVIEW_AUTH_HEADERS)
                 .setPriority(highPriority ? Priority.HIGH : Priority.MEDIUM)
                 .setTag(loader)
                 .build()
@@ -2372,7 +2381,7 @@ Some single methods also have prefetching when a null ```ItemLoader``` is passed
 ``` java
 loadProject(@Nullable final ItemLoader<Project> loader, int id) {
         final ANRequest req = get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
-                .addHeaders(PROJECTS_API_API_AUTH_HEADERS)
+                .addHeaders(PROJECTS_API_AUTH_HEADERS)
                 .setTag(loader)
                 .build();
         if(loader == null) {
@@ -3022,6 +3031,10 @@ public class ViewSafeFragment extends Fragment {
 
     protected boolean mAreViewsValid;
 
+    protected boolean areViewsValid() {
+        return mAreViewsValid && getActivity() != null;
+    }
+
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -3486,6 +3499,11 @@ Each issue shows the version codes for which it occured, as well as more detaile
 The crash information contains the full stack trace as well as information about the device on which the crash occured.
 
 ![Device info](http://imgur.com/tPfFzWS.png)
+
+## Markdown
+
+As GitHub uses Markdown throughout its content, a method for displaying Markdown must be implemented before the creation of the rest of the user interface.
+
 
 ## User Activity
 
@@ -4819,6 +4837,7 @@ This method computes numerous statistics about the user:
 **UserInfoFragment.java**
 ``` java
 void contributionsLoaded(List<ContributionsLoader.ContributionsDay> contributions) {
+        if(!areViewsValid()) return;
         int totalContributions = 0;
         int daysActive = 0;
         int maxContributions = 0;
@@ -4956,7 +4975,7 @@ void displayUser(ViewGroup userInfoParent, User user) {
                     R.plurals.text_user_repositories,
                     user.getRepos(),
                     user.getRepos()
-                    ));
+            ));
             infoList.addView(tv, params);
         }
         if(user.getGists() > 0) {
@@ -4965,7 +4984,7 @@ void displayUser(ViewGroup userInfoParent, User user) {
                     R.plurals.text_user_gists,
                     user.getGists(),
                     user.getGists()
-                    ));
+            ));
             infoList.addView(tv, params);
         }
         if(user.getBio() != null) {
@@ -5164,7 +5183,7 @@ public class UserReposFragment extends UserFragment implements RepositoriesAdapt
     @Override
     public void userLoaded(User user) {
         mUser = user;
-        if(!mAreViewsValid) return;
+        if(!areViewsValid()) return;
         mAdapter.setUser(user.getLogin(), false);
     }
 
@@ -5378,31 +5397,34 @@ public class RepositoriesAdapter extends RecyclerView.Adapter<RepositoriesAdapte
         mIsLoading = false;
         if(repos.size() > 0) {
             int oldLength = mRepos.size();
-            if(mPage == 1) mRepos.clear();
             if(mIsShowingStars) {
                 mRepos.addAll(repos);
             } else {
-                if(mPage == 1) {
-                    for(Repository r : repos) {
-                        if(mPinChecker.isPinned(r.getFullName())) {
-                            mRepos.add(0, r);
-                        } else {
-                            mRepos.add(r);
-                        }
-                    }
-                    mPinChecker.setInitialPositions(mRepos);
-                    ensureLoadOfPinnedRepos();
-                } else {
-                    for(Repository repo : repos) {
-                        if(!mRepos.contains(repo)) mRepos.add(repo);
-                    }
-                    mPinChecker.appendInitialPositions(repos);
-                }
+                insertPinnedRepos(repos);
             }
             notifyItemRangeInserted(oldLength, mRepos.size());
 
         } else {
             mMaxPageReached = true;
+        }
+    }
+
+    private void insertPinnedRepos(List<Repository> repos) {
+        if(mPage == 1) {
+            for(Repository r : repos) {
+                if(mPinChecker.isPinned(r.getFullName())) {
+                    mRepos.add(0, r);
+                } else {
+                    mRepos.add(r);
+                }
+            }
+            mPinChecker.setInitialPositions(mRepos);
+            ensureLoadOfPinnedRepos();
+        } else {
+            for(Repository repo : repos) {
+                if(!mRepos.contains(repo)) mRepos.add(repo);
+            }
+            mPinChecker.appendInitialPositions(repos);
         }
     }
 
@@ -5534,3 +5556,5 @@ public class RepositoriesAdapter extends RecyclerView.Adapter<RepositoriesAdapte
 }
 
 ```
+
+
