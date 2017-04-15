@@ -1002,6 +1002,7 @@ The client must implement the following features:
                         <ol type="1">
                             <li>The user that created the comment</li>
                             <li>The date that the comment was created</li>
+                            <li>The reactions to the comment</li>
                             <li>The comment body </li>
                          </ol>
                     </li>
@@ -1053,6 +1054,7 @@ The client must implement the following features:
                         <ol type="1"> 
                             <li>The user that created the comment</li>
                             <li>The date that the comment was created</li>
+                            <li>The reactions to the comment</li>
                             <li>The comment body </li>
                         </ol>
                     </li>
@@ -2008,6 +2010,11 @@ The crash information contains the full stack trace as well as information about
 
 ![Device info](http://imgur.com/tPfFzWS.png)
 
+## Markdown
+
+As GitHub uses Markdown throughout its content, a method for displaying Markdown must be implemented before the creation of the rest of the user interface.
+
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.
@@ -2333,3 +2340,5 @@ The ```RepositoriesAdapter``` is used in two places, displaying the repositories
 When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.b.vi).
 
 #import "app/src/main/java/com/tpb/projects/common/RepositoriesAdapter.java"
+
+
