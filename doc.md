@@ -2122,8 +2122,33 @@ The formatted markdown is to be appended to a ```StringBuilder``` as the array o
 Each format method is to take the character array, current position, and the ```StringBuilder``` and attempt to append the formatted markdown to the ```StringBuilder``` before returning
 the new position to continue from in the character array.
 
-#import "markdowntextview/src/main.java/com/tpb/mdtext/Markdown.java $static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames)$"
 
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $boolean isWhiteSpace(char c)$"
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $boolean isLineEnding(char[] cs, int i)$"
+
+```isWhiteSpace``` and ```isLineEnding``` are both utility methods. ```isWhiteSpace``` checks if the character is a space, a tab, a newline, a line tabulation character, a carriage return, or a form feed, while ```isLineEnding``` checks whether the character is a new line or carriage return or the position is the last in the character array.
+
+The ```formatMD``` method the Markdown ```String```, an optional repository path, and a flag for linking usernames.
+
+Within each iteration, the first check is for usernames.
+If the current character is the "@" key used for usernames, and the previous character is whitespace the position is jumped with a call to ```parseUsername```.
+If the current character is the "#" key used for issues, and the previous character is whitespace, and the repository name is non-null the position is jumped with a call to ```parseIssue```.
+
+The next three checks deal with formatting GitHub's checkbox lists to use ballot characters rather than non-formatted [ ] and [x] sequences.
+The first check is for an upper or lowercase "x" contained between two square braces. The last two two characters are removed from the builder and the unicode "ballot box with check" is added.
+The second two checks are both for ballot boxes without checks, either written as "[]" or "[ ]".
+
+The next check is for image links, which need to be parsed both in order to deal with links relative to the repository and to add spacing around them as they will be displayed as images.
+
+The next check is for emojis, which are contained between two colons.
+
+If there is a sequence of three backticks, every character from the backticks onward is appended without formatting until the next set of backticks is found.
+
+Finally, if none of the above conditions apply, the character is appended to the builder.
+
+At the end of each iteration the previous and previous previous characters are updated.
 #### Username menetions
 
 GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.

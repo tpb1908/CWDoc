@@ -3636,8 +3636,131 @@ multiple different sections of text.
 Instead, the Markdown must be displayed in a ```TextView```. The ```TextView``` has no native support for Markdown formatting, nor does it have direct support for HTML.
 In order to display styled text without applying the styling to the entire text body, spans are used.
 
+### Spans
+
 The ```Spanned``` interface is "the interface for text that has markup objects attached to ranges of it.".
 
+There are three key interfaces and an abstract class for different types of span used in the ```TextView```.
+
+#### CharacterStyle
+
+The abstract class ```CharacterStyle``` is used for spans which affect character level text formatting.
+
+```CharacterStyle``` has three methods.
+
+The first, ```updateDrawState``` takes the ```TextPaint``` used to draw the ```TextView``` in order to allow changes to be made to the text styling.
+
+The second and third methods are used when a single ```CharacterStyle``` needs to be applied to multiple different regions of a ```Spanned```.
+The ```wrap``` method takes a ```CharacterStyle``` which will actually perform the text manipulation. When a ```CharacterStyle``` is used, the ```getUnderlying``` method is called, which
+should return `this` for instances which actually perform manipulation, or return the wrapping ```CharacterStyle``` for spans which are only placeholders for actual implementations.
+
+Implementations of ```CharacterStyle``` include ```BackgroundColorSpan```, ```ForegroundColorSpan```, and ```UnderLineSpan``` which each change a single parameter on ```TextPaint```.
+
+#### ParagraphStyle
+
+As its name suggest, ```ParagraphStyle``` affects paragraph level text formatting.
+
+The interface has no methods, and is instead used only as a marker to indicate that the span or span interface affects text at a wider level.
+
+Direct span implemenations of ```ParagraphStyle``` include ```BulletSpan```, ```QuoteSpan```, and ```DrawableMarginSpan```, while numerous interfaces such as ```AlignmentSpan``` and ```LeadingMarginSpan``` also extend from it.
+
+#### UpdateAppearance
+
+The ```UpdateAppearance``` interface is for spans which affect character-level text "in a way that modifies their appearance when one is added or removed".
+
+Implementations include ```AbsoluteSizeSpan``` which is used to scae text using either density independent pixels, or an absolute pixel size.
+
+#### UpdateLayout
+
+The ```UpdateLayout``` interface is an extension of ```UpdateApperance``` with the difference being that the modifications made by an implementation of ```UpdateLayout``` are such that a
+text layout update is triggered when one is added or removed.
+
+Implementations include ```SuperscriptSpan```, ```SubscriptSpan```, and ```ImageSpan```.
+
+
+#### ReplacementSpan
+
+An important implementation of ```CharacterStyle``` is ```ReplacementSpan```.
+
+Rather than simply allowing updates to ```TextPaint```, the ```ReplacementSpan``` is able to draw directly to the canvas.
+
+The two abstract methods defined in ```ReplacementSpan``` are ```getSize``` and ```draw```.
+
+```getSize``` takes a ```Paint``` object, the ```CharSequence``` displayed in the ```TextView```, the start and end 
+positions of the span within the ```CharSequence```, and the ```FontMetrics``` being used to draw the text. Is is expected to return the width of the span.
+
+```draw``` takes the ```Canvas```, the ```CharSequence``` displayed in the ```TextView```, the start and end positions of the span within the ```CharSequence```, a ```Paint``` object, and
+the x, y, top, and bottom positions of the span on the ```Canvas```.
+
+
+
+### Implementing GitHub Markdown features
+
+#### General strategy
+
+None of the markings used are more than three characters in length, meaning that at any one time only the previous two characters need be retained.
+
+The formatted markdown is to be appended to a ```StringBuilder``` as the array of characters in the markdown is formatted.
+Each format method is to take the character array, current position, and the ```StringBuilder``` and attempt to append the formatted markdown to the ```StringBuilder``` before returning
+the new position to continue from in the character array.
+
+**Markdown.java**
+``` java
+static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames) {
+        final StringBuilder builder = new StringBuilder();
+        char p = ' ';
+        char pp = ' ';
+        final char[] chars = ("\n" + s).toCharArray();
+        for(int i = 0; i < chars.length; i++) {
+            if(linkUsernames && chars[i] == '@' && (p == ' ' || p == '\n')) {
+                //Max username length is 39 characters
+                //Usernames can be alphanumeric with single hyphens
+                i = parseUsername(builder, chars, i);
+            } else if(chars[i] == '#' && (p == ' ' || p == '\n') && fullRepoPath != null) {
+                i = parseIssue(builder, chars, i, fullRepoPath);
+            } else if(pp == '[' && (p == 'x' || p == 'X') && chars[i] == ']') {
+                builder.setLength(builder.length() - 2);
+                builder.append("\u2611");  //☑ ballot box with check
+            } else if(p == '[' && chars[i] == ']') { //Closed box
+                builder.setLength(builder.length() - 1);
+                builder.append("\u2610"); //☐ ballot box
+            } else if(pp == '[' && p == ' ' && chars[i] == ']') {//Open box
+                builder.setLength(builder.length() - 2);
+                builder.append("\u2610");
+            } else if(chars[i] == '(') {
+                builder.append("(");
+                i = parseImageLink(builder, chars, i, fullRepoPath);
+            } else if(pp == '`' && p == '`' && chars[i] == '`') {
+                //We jump over the code block
+                pp = ' ';
+                p = ' ';
+                int j = i;
+                for(; j < chars.length; j++) {
+                    builder.append(chars[j]);
+                    if(pp == '`' && p == '`' && chars[j] == '`') {
+                        i = j;
+                        p = ' ';
+                        break;
+                    } else {
+                        pp = p;
+                        p = chars[j];
+                    }
+                }
+            } else if(chars[i] == ':') {
+                i = parseEmoji(builder, chars, i);
+            } else {
+                builder.append(chars[i]);
+            }
+            pp = p;
+            p = chars[i];
+        }
+        return builder.toString();
+    }
+```
+
+#### Username menetions
+
+GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.
 
 
 ## User Activity
