@@ -2150,7 +2150,7 @@ Finally, if none of the above conditions apply, the character is appended to the
 
 At the end of each iteration the previous and previous previous characters are updated.
 
-#### Username menetions
+#### Username mentions
 
 GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.
 
@@ -2237,6 +2237,123 @@ The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags 
 ```getEmojiForAlias``` also checks whether the alias is in the ":alias:" format and strips the colons before searching.
 
 ##### Displaying Emoji
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseEmoji(StringBuilder builder, char[] cs, int pos)$"
+
+```parseEmoji``` iterates through the character array after a colon, adding each alphanumeric or underscore character to a ```StringBuilder```.
+
+If another colon is reached, the ```Emoji``` is loaded from ```EmojiLoader``` and if it is non null, the emoji unicode string is added to the parsed text.
+Otherwise the colon is appended and the original position is returned.
+
+### Text Utilities and Android Regex patterns
+
+#### Linkify
+
+```Linkify``` is Andriod's utility for adding clickable links to text. It can match URLs, email addresses, phone numbers, and map addresses.
+There is no need to match phone numbers and map addresses in GitHub Markdown, however URLs and email addresses should be linked.
+
+The Android regex for URLs is quite large.
+It contains the IANA (Internet Assigned Numbers Authority) top level domain names, as well as the characters in the RFC 3987 specification which extends upon the Uniform Resource Identifier scheme.
+
+
+The ```Pattern``` class also contains the WORD_BOUNDARY regex which is "(?:\b|$|^)".
+
+The regex begins with "?:". This begins a non-capturing group, which matches a pattern, but does not include it in the result.
+The "\b" character is an anchor which matches any word boundary position. A word boundary is any of the three following positions
+- Before the first character in the string, if the first character is a word character.
+- After the last character in the string, if the last character is a word character.
+- Between two characters in the string, where one is a word character and the other is not a word character.
+
+The dollar, "$", is used to match the position before the first newline in a string.
+
+Finally, the hat, "^", is used to match the beginning of a string.
+
+This pattern is used to ensure that invalid domain names such as ".coma" do not match as valid domain names such as ".com"
+
+The ```Pattern``` used for autolinking web URLs is  ""(" + WEB_URL_WITH_PROTOCOL + "|" + WEB_URL_WITHOUT_PROTOCOL + ")"" which matches any URL with or without a protocol.
+
+This ```Pattern``` is likely to cause problems with code in the Markdown.
+
+For example, "System.out.println()" would be matched as a URL.
+
+This problem can be fixed by modifying the regex to required that the character after the URL is whitespace or a line ending, making the regex
+""(" + WEB_URL_WITH_PROTOCOL + "|" + WEB_URL_WITHOUT_PROTOCOL + ")($|\\s)")"
+
+The regex patterns, for autolinking URLs and email addresses can then be combined to a single pattern "AUTOLINK_WEB_URL + "|" + AUTOLINK_EMAIL_ADDRESS"
+
+These patterns are included in the ```MDPattern``` class as they are private in the ```Pattern``` source class.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/MDPattern.java"
+
+#### Adding links
+
+Having defined the regex for matching URLs and emails, the ```addLinks``` method can be explained.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static boolean addLinks(@NonNull Spannable spannable))$"
+
+The method uses a matcher from the SPACED_MATCH_PATTERN and sets a ```CleanURLSpan```, a subclass of ```URLSpan``` to be explained later, across the indices of the match.
+
+The ```Spanned.SPAN_EXCLUSIVE_EXCLUSIVE``` flag means that if a character or another span is inserted at either end of the ```CleanURLSpan``` it will not be viewed as part of the ```CleanURLSpan```.
+
+#### Multiple pattern matching and string escaping
+
+In order not to attempt to display HTML tags in titles, and to replace HTML tags in order to stop Android capturing them, multiple string replace calls must be used.
+
+Rather than calling the replace method multiple times, each incurring a full traversal of the string, multiple matches can be compiled into a single pattern.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $static Pattern generatePattern(@NonNull Set<String> keys)$"
+
+```generateKeys``` takes a ```Set``` of strings and builds an or separated pattern from the strings.
+
+In order to ensure that the strings themselves are only matched as text, they must be escaped.
+
+Each match key is escaped with the "[\\<\\(\\[\\{\\\\\\^\\-\\=\\$\\!\\|\\]\\}\\)‌​\\?\\*\\+\\.\\>]" pattern, which matches regex control characters and allows them to be replaced with their escaped form.
+
+Once a valid pattern has been generated, a single ```Matcher``` can be used to replace a set of key value pairs from a ```Map```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $static String replace(@Nullable String s, Map<String, String> replacements, Pattern pattern)$"
+
+In each iteration of the while loop ```appendReplacement``` appends all of the text between the previous match and the current one.
+Finally, the ```appendTail``` call appends any text after the final match.
+
+#### Background colour selection
+
+When displaying text on a coloured background, as will happen when displaying labels, it is important to ensure that the foreground text is a suitable colour to ensure legibility.
+
+In order to determine the background colour, the relative luminance is used.
+
+For linear RGB values, the relative luminance is given by Y = 0.2126R + 0.7152G + 0.0722B. This formula shows that green contributes most to the human perception of luminosity, and blue the least.
+
+In order to use this formula, an inverse gamma function must be applied to the RGB values to account for the non-linear relationship between the intensity of the primary colours and the actual values stored.
+
+The numeric approximation to the function is given below
+
+![Inverse gamma function](http://imgur.com/tyOWS3j.png)
+
+Each RGB value is then used in the relative luminance formula to determine whether to use a light or dark text colour.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static int getTextColorForBackground(int bg)$"
+
+#### Other utility methods
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java"
+
+The four other methods in ```TextUtils``` are ```isValidUrl```, ```capitaliseFirst```, ```instancesOf```, and ```isInteger```.
+
+```isValidURL``` matches a string against the AUTOLINK_WEB_URL pattern.
+
+```capitaliseFirst``` capitalises the first character of a string.
+
+```instancesOf``` determines the number of instances of a substring in another.
+It first performs a check for whether either of the strings are empty, or if the substring is larger than the string to be searched.
+Otherwise, ```instancesOf``` searches the string for the substring, each time searching from the index after the previous position found.
+
+```isInteger``` is used to determine whether a ```String``` is a an integer in a given base.
+It first checks if the string is empty.
+If the string is not empty the method iterates through each character in the string.
+If the first character of the string is a minus, "-", and the string is longer than one character, the string may still be valid.
+Otherwise, each iteration checks the character for its numeric value in the given base with the ```Character``` class, which will return -1 if the character has no numeric value in the given base.
+
 
 #page
 

@@ -3966,6 +3966,8 @@ If the URL does not end with an image extension, it is just added to the builder
 
 Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile:" should be rendered as 😄.
 
+##### Loading Emoji
+
 In order to parse each alias to a unicode string, and later allow searching, a table of emojis is required.
 I used the emoji json file used in GitHub's gemoji, a Ruby gem for "character information about native emoji".
 After stripping the unicode version, ios version, and fitzpatrick information from the file, and minifying it I reduced it from 298kb to 139kb.
@@ -4148,6 +4150,8 @@ For each ```Emoji``` succesfully created the object is added to EMOJIS, added to
 The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags or aliases.
 
 ```getEmojiForAlias``` also checks whether the alias is in the ":alias:" format and strips the colons before searching.
+
+##### Displaying Emoji
 
 <div style="page-break-after: always;"></div>
 
