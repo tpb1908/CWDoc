@@ -2354,9 +2354,11 @@ If the string is not empty the method iterates through each character in the str
 If the first character of the string is a minus, "-", and the string is longer than one character, the string may still be valid.
 Otherwise, each iteration checks the character for its numeric value in the given base with the ```Character``` class, which will return -1 if the character has no numeric value in the given base.
 
-
 #page
 
+### Displaying README files
+
+#page
 
 ## User Activity
 
