@@ -5135,6 +5135,80 @@ horizontally.
 These events can be can be overriden by calling ```requestDisallowInterceptTouchEvent``` on the ```WebView```'s parent, however we must only call this method for touch events which are on the code blocks, 
 otherwise all events will be intercepted by the ```WebView``` and the user will not be able to exit the ```Fragment```.
 
+This is achieved by adding touch listeners in Javascript and then notifying the ```WebView``` through Javascript interface methods
+
+**md_preview.js**
+``` js
+function touchStart(event) {
+    TouchIntercept.beginTouchIntercept();
+}
+
+function touchEnd(event) {
+    TouchIntercept.endTouchIntercept();
+}
+
+function preview(md_html) {
+    if(md_html == "") {
+        return false;
+    }
+    document.getElementById("preview").innerHTML = md_html.replace(/\\n/g, "\n")
+    var codes = document.getElementsByClassName('code');
+    for(var i = 0; i < codes.length; i++) {
+        codes[i].style.display = 'block';
+        codes[i].style.wordWrap = 'normal';
+        codes[i].style.overflowX = 'scroll';
+        if(!codes[i].innerHTML.includes("license")) {
+            hljs.highlightBlock(codes[i]);
+        }
+        codes[i].addEventListener("touchstart", touchStart, false);
+        codes[i].addEventListener("touchend", touchEnd, false)
+    }
+
+    var pres = document.getElementsByTagName('pre');
+    for(var i = 0; i < pres.length; i++) {
+        pres[i].addEventListener("touchstart", touchStart, false);
+        pres[i].addEventListener("touchend", touchEnd, false)
+    }
+    var tables = document.getElementsByTagName('table');
+    for(var i = 0; i < tables.length; i++) {
+        tables[i].addEventListener("touchstart", touchStart, false);
+        tables[i].addEventListener("touchend", touchEnd, false)
+    }
+}
+```
+
+The Javascript above first sets the inner HTML of the preview div mentioned earlier, and then searches for each of the elements which scroll.
+
+The style on each code element is set such that it scrolls on any overflow in x, and if it is not displaying a license it is highlighted.
+
+All code, pre, and table elements are assigned event listeners for the "touchstart" and "touchend" events which call the Java methods in the ```WebView```.
+
+The two Java methods are ```beginTouchIntercept``` and ```endTouchIntercept``` which set the mInterceptTouchEvent flag.
+
+``` java
+@JavascriptInterface
+public void beginTouchIntercept() {
+    mInterceptTouchEvent = true;
+}
+
+@JavascriptInterface
+public void endTouchIntercept() {
+    mInterceptTouchEvent = false;
+}
+
+```
+
+In the ```onTouchEvent``` method shown in the section above, the flag is checked:
+
+``` java
+if(mInterceptTouchEvent && getParent() != null) {
+    getParent().requestDisallowInterceptTouchEvent(mInterceptTouchEvent);
+    return super.onTouchEvent(ev);
+}
+```
+
+and the event is intercepted if the user is touching a code, pre, or table element.
+
 <div style="page-break-after: always;"></div>
 
 ## User Activity
