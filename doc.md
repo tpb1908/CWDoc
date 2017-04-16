@@ -2379,7 +2379,7 @@ These methods are annotated with the @JavascriptInterface annotations, which mak
 
 In order to call JavaScript functions from the Java code the ```evaulateJavascript``` function is called, which evaulates a string of JavaScript.
 
-#import "markdowntextview/src/main/java/com/tpb/WebView/MarkdownWebView.java $private void init()$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/webview/MarkdownWebView.java $private void init()$"
 
 The ```init``` method sets a custom ```WebView``` client which evalutates the Javascript string used to load the rendered Markdown into the WebView once the page has finished loading.
 It also adds a Javascript interface called "TouchIntercept" to the ```WebView```.
@@ -2425,7 +2425,7 @@ This scrolling behaviour only occurs when the scrolling child implements ```Nest
 
 Most of the methods in ```NestedScrollingChild``` are forward through to a ```NestedScrollingChildHelper``` which deals with the interpretation of the touch events.
 
-```
+``` java
 @Override
 public boolean onTouchEvent(MotionEvent ev) {
     if(mInterceptTouchEvent && getParent() != null) {
@@ -2539,6 +2539,42 @@ horizontally.
 
 These events can be can be overriden by calling ```requestDisallowInterceptTouchEvent``` on the ```WebView```'s parent, however we must only call this method for touch events which are on the code blocks, 
 otherwise all events will be intercepted by the ```WebView``` and the user will not be able to exit the ```Fragment```.
+
+This is achieved by adding touch listeners in Javascript and then notifying the ```WebView``` through Javascript interface methods
+
+#import "markdowntextview/src/main/assets/html/js/md_preview.js"
+
+The Javascript above first sets the inner HTML of the preview div mentioned earlier, and then searches for each of the elements which scroll.
+
+The style on each code element is set such that it scrolls on any overflow in x, and if it is not displaying a license it is highlighted.
+
+All code, pre, and table elements are assigned event listeners for the "touchstart" and "touchend" events which call the Java methods in the ```WebView```.
+
+The two Java methods are ```beginTouchIntercept``` and ```endTouchIntercept``` which set the mInterceptTouchEvent flag.
+
+``` java
+@JavascriptInterface
+public void beginTouchIntercept() {
+    mInterceptTouchEvent = true;
+}
+
+@JavascriptInterface
+public void endTouchIntercept() {
+    mInterceptTouchEvent = false;
+}
+
+```
+
+In the ```onTouchEvent``` method shown in the section above, the flag is checked:
+
+``` java
+if(mInterceptTouchEvent && getParent() != null) {
+    getParent().requestDisallowInterceptTouchEvent(mInterceptTouchEvent);
+    return super.onTouchEvent(ev);
+}
+```
+
+and the event is intercepted if the user is touching a code, pre, or table element.
 
 #page
 
