@@ -2182,7 +2182,60 @@ If we are at the end of the character array the final character must be checked 
 The link is built, and if the counter is not at the end of the array the original whitespace is appended.
 If the characater was not a valid issue link, the hash, "#", is appended and the original index is returned.
 
+#### Relative links
+
+When Markdown is rendered in a GitHub repository, links can be relative to the repository.
+In order to load content from these links they need to be changed to a full link including the repository path.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static String concatenateRawContentUrl(String url, String fullRepoName)$"
+
+A relative URL can be only a file name or it can start with either "/" or "./" specifying a path in the repository.
+
+If the URL begins with "http://" or "https://" it is assumed to be valid and returned.
+Otherwise, the offset is calculated and the url is added as the file path in a link to githubusercontent.
+
+The ```concatenateRawContentUrl``` function is used when parsing image links, as well as when checking links in a repository README.
+
+#### Image links
+
+Image links are checked both to ensure that they are not relative, and to add spacing around each image so that it does not interfere with the text line spacing.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseImageLink$"
+
+Recalling that a markdown image link is formatted as ```![Description](link)```, ```parseImageLink``` must check the text between the opening bracket, "(", and the closing bracket ")".
+
+If whitespace is found, the function can break early.
+When the closing bracket is found, the extension can be checked for any of the image extensions supported by Android.
+If the URL is already valid, it is added to the builder. Otherwise the concatenated URL is added.
+Finally, the closing bracket and breaks are added.
+
+If the URL does not end with an image extension, it is just added to the builder.
+
+#### Emoji
+
+Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile:" should be rendered as 😄.
+
+In order to parse each alias to a unicode string, and later allow searching, a table of emojis is required.
+I used the emoji json file used in GitHub's gemoji, a Ruby gem for "character information about native emoji".
+After stripping the unicode version, ios version, and fitzpatrick information from the file, and minifying it I reduced it from 298kb to 139kb.
+
+Each Emoji contains its description, aliases, tags, and unicode string.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/emoji/Emoji.java"
+
+The emoji are loaded from the resource directory and added to a master list of emojis as well as maps for aliases and tags.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/emoji/EmojiLoader.java"
+
+The json file is opened as an ```InputStream``` which is then converted to a ```String``` which can be read as a ```JSONArray``` for conversion to ```Emoji``` objects.
+For each ```Emoji``` succesfully created the object is added to EMOJIS, added to ALIAS_MAP, and added to a ```HashSet``` of ```Emojis``` in TAG_MAP.
+
+The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags or aliases.
+
+```getEmojiForAlias``` also checks whether the alias is in the ":alias:" format and strips the colons before searching.
+
 #page
+
 
 ## User Activity
 

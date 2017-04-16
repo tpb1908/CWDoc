@@ -3709,11 +3709,13 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
         char pp = ' ';
         final char[] chars = ("\n" + s).toCharArray();
         for(int i = 0; i < chars.length; i++) {
+            Log.i("Test", "Repos is " +fullRepoPath + ", isWhiteSpace " + isWhiteSpace(p));
             if(linkUsernames && chars[i] == '@' && isWhiteSpace(p)) {
                 //Max username length is 39 characters
                 //Usernames can be alphanumeric with single hyphens
                 i = parseUsername(builder, chars, i);
             } else if(chars[i] == '#' && isWhiteSpace(p) && fullRepoPath != null) {
+                Log.i("Test", "Parsing issue");
                 i = parseIssue(builder, chars, i, fullRepoPath);
             } else if(pp == '[' && (p == 'x' || p == 'X') && chars[i] == ']') {
                 builder.setLength(builder.length() - 2);
@@ -3849,6 +3851,49 @@ Once the name has been added, the counter position is returned.
 If the name is not valid, the loop breaks, "@" character is appended, and the original position is returned.
 
 #### Issue links
+
+GitHub issue links are hashes, "#", followed by integer strings.
+
+**Markdown.java**
+``` java
+private static int parseIssue(StringBuilder builder, char[] cs, int pos, String fullRepoPath) {
+        final StringBuilder numBuilder = new StringBuilder();
+        for(int i = pos + 1; i < cs.length; i++) {
+            if(cs[i] >= '0' && cs[i] <= '9' && i != cs.length - 1) {
+                numBuilder.append(cs[i]);
+            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i))) {
+                if(i == cs.length - 1) {
+                    if(cs[i] >= '0' && cs[i] <= '9') {
+                        numBuilder.append(cs[i]);
+                    } else {
+                        break;
+                    }
+                }
+                builder.append("[#");
+                builder.append(numBuilder.toString());
+                builder.append("](https://github.com/");
+                builder.append(fullRepoPath);
+                builder.append("/issues/");
+                builder.append(numBuilder.toString());
+                builder.append(")");
+                if(i != cs.length - 1) {
+                    builder.append(cs[i]); // We still need to append the whitespace
+                }
+                return i;
+            } else {
+                break;
+            }
+        }
+        builder.append("#");
+        return pos;
+    }
+```
+
+```parseIssue``` checks if each character is a numeric value, adding it to numBuilder if so.
+If the character is instead whitespace or a line ending the issue link may be valid.
+If we are at the end of the character array the final character must be checked for validity, and added to numBuilder, otherwise the loop breaks.
+The link is built, and if the counter is not at the end of the array the original whitespace is appended.
+If the characater was not a valid issue link, the hash, "#", is appended and the original index is returned.
 
 <div style="page-break-after: always;"></div>
 
