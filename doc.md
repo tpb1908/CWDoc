@@ -2172,6 +2172,16 @@ If the name is not valid, the loop breaks, "@" character is appended, and the or
 
 #### Issue links
 
+GitHub issue links are hashes, "#", followed by integer strings.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseIssue(StringBuilder builder, char[] cs, int pos, String fullRepoPath)$"
+
+```parseIssue``` checks if each character is a numeric value, adding it to numBuilder if so.
+If the character is instead whitespace or a line ending the issue link may be valid.
+If we are at the end of the character array the final character must be checked for validity, and added to numBuilder, otherwise the loop breaks.
+The link is built, and if the counter is not at the end of the array the original whitespace is appended.
+If the characater was not a valid issue link, the hash, "#", is appended and the original index is returned.
+
 #page
 
 ## User Activity

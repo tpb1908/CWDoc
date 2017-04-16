@@ -2170,51 +2170,7 @@ public void onPageStarted(WebView view, String url, Bitmap favicon) {
 
 **OAuthHandler.java**
 ``` java
-package com.tpb.github.data.auth;
-
-/**
- * Created by theo on 15/12/16.
- */
-
-import android.content.Context;
-import android.util.Log;
-
-import com.androidnetworking.AndroidNetworking;
-import com.androidnetworking.error.ANError;
-import com.androidnetworking.interfaces.JSONObjectRequestListener;
-import com.androidnetworking.interfaces.StringRequestListener;
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.models.User;
-
-import org.json.JSONObject;
-
-public class OAuthHandler extends APIHandler {
-    private static final String TAG = OAuthHandler.class.getSimpleName();
-
-    private final GitHubSession mSession;
-    private final OAuthAuthenticationListener mListener;
-    private final String mAuthUrl;
-    private final String mTokenUrl;
-    private String mAccessToken;
-
-    private static final String AUTH_URL = "https://gitHub.com/login/oauth/authorize?";
-    private static final String TOKEN_URL = "https://gitHub.com/login/oauth/access_token?";
-    private static final String SCOPE = "user public_repo repo gist";
-
-    private static final String TOKEN_URL_FORMAT = TOKEN_URL + "client_id=%1$s&client_secret=%2$s&redirect_uri=%3$s";
-    private static final String AUTH_URL_FORMAT = AUTH_URL + "client_id=%1$s&scope=%2$s&redirect_uri=%3$s";
-
-    public OAuthHandler(Context context, String clientId, String clientSecret,
-                        String callbackUrl,
-                        OAuthAuthenticationListener listener) {
-        super(context);
-        mSession = GitHubSession.getSession(context);
-        mTokenUrl = String.format(TOKEN_URL_FORMAT, clientId, clientSecret, callbackUrl);
-        mAuthUrl = String.format(AUTH_URL_FORMAT, clientId, SCOPE, callbackUrl);
-        mListener = listener;
-    }
-
-    public void getAccessToken(final String code) {
+public void getAccessToken(final String code) {
         AndroidNetworking.get(mTokenUrl + "&code=" + code)
                          .build()
                          .getAsString(new StringRequestListener() {
@@ -2236,40 +2192,6 @@ public class OAuthHandler extends APIHandler {
                              }
                          });
     }
-
-    private void fetchUser() {
-        AndroidNetworking.get(GIT_BASE + SEGMENT_USER)
-                         .addHeaders(API_AUTH_HEADERS)
-                         .build()
-                         .getAsJSONObject(new JSONObjectRequestListener() {
-                             @Override
-                             public void onResponse(JSONObject response) {
-                                 mSession.storeUser(response);
-                                 mListener.userLoaded(mSession.getUser());
-                             }
-
-                             @Override
-                             public void onError(ANError anError) {
-                                 mListener.onFail(anError.getErrorDetail());
-                                 Log.e(TAG, "onError: " + anError.getErrorDetail());
-                             }
-                         });
-
-    }
-
-    public String getAuthUrl() {
-        return mAuthUrl;
-    }
-
-    public interface OAuthAuthenticationListener {
-        void onSuccess();
-
-        void onFail(String error);
-
-        void userLoaded(User user);
-
-    }
-}
 ```
 
 The ```fetchAccessToken``` method performs a get request to the token URL created with the apps client id and secret, adding the code as a path parameter.
@@ -2351,7 +2273,7 @@ An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoF
 
 **Loader.java**
 ``` java
-loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
+public Loader loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
         get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
                 .addHeaders(REACTIONS_API_PREVIEW_AUTH_HEADERS)
                 .setPriority(highPriority ? Priority.HIGH : Priority.MEDIUM)
@@ -2379,7 +2301,7 @@ Some single methods also have prefetching when a null ```ItemLoader``` is passed
 
 **Loader.java**
 ``` java
-loadProject(@Nullable final ItemLoader<Project> loader, int id) {
+public Loader loadProject(@Nullable final ItemLoader<Project> loader, int id) {
         final ANRequest req = get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
                 .addHeaders(PROJECTS_API_AUTH_HEADERS)
                 .setTag(loader)
@@ -2655,7 +2577,7 @@ The ```BaseActivity``` retains a ```WeakReferences``` to each of the ```Fragment
 
 **BaseActivity.java**
 ``` java
-void onAttachFragment (Fragment fragment) {
+public void onAttachFragment (Fragment fragment) {
         mWeakFragments.add(new WeakReference<>(fragment));
     }
 ```
@@ -2664,28 +2586,12 @@ void onAttachFragment (Fragment fragment) {
 
 **BaseActivity.java**
 ``` java
-cancelNetworkRequests();
-    }
-
-    private void removeActivityFromTransitionManager() {
-        final Class transitionManagerClass = TransitionManager.class;
-        try {
-            final Field runningTransitionsField = transitionManagerClass
-                    .getDeclaredField("sRunningTransitions");
-            runningTransitionsField.setAccessible(true);
-            //noinspection unchecked
-            final ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitions
-                    = (ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>>)
-                    runningTransitionsField.get(transitionManagerClass);
-            if(runningTransitions.get() == null || runningTransitions.get().get() == null) {
-                return;
+private void cancelNetworkRequests() {
+        AndroidNetworking.cancel(this);
+        for(WeakReference<Fragment> ref : mWeakFragments) {
+            if(ref.get() != null) {
+                AndroidNetworking.cancel(ref.get());
             }
-            ArrayMap map = runningTransitions.get().get();
-            View decorView = getWindow().getDecorView();
-            if(map.containsKey(decorView)) {
-                map.remove(decorView);
-            }
-        } catch(Exception ignored) {
         }
     }
 ```
@@ -2695,7 +2601,7 @@ cancelNetworkRequests();
 A bug introduced in Android 5.0, launched in November 2014, which results in a reference to the ```Activity``` being kept in the ```TransitionManager```.
 The memory leak can be solved by using reflection to remove the ```Activity``` from the ```TransitionManager``` map.
 
-```
+``` java
 final ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitions = (ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitionsField.get(transitionManagerClass);
 ```
 
@@ -2898,7 +2804,7 @@ When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet```
 
 **NetworkImageView.java**
 ``` java
-void init(AttributeSet attrs, int defStyleAttr) {
+private void init(AttributeSet attrs, int defStyleAttr) {
         final TypedArray array = getContext()
                 .obtainStyledAttributes(attrs, R.styleable.NetworkImageView, defStyleAttr, 0);
         mDefaultImageResId = array
@@ -2915,7 +2821,75 @@ The ```loadImage``` method is responsible for loading and displaying the image.
 
 **NetworkImageView.java**
 ``` java
-void loadImage(final boolean isInLayoutPass) {
+package com.tpb.projects.common;
+
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.support.annotation.IdRes;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v7.widget.AppCompatImageView;
+import android.text.TextUtils;
+import android.util.AttributeSet;
+import android.view.ViewGroup;
+
+import com.androidnetworking.error.ANError;
+import com.androidnetworking.internal.ANImageLoader;
+import com.tpb.projects.R;
+
+/**
+ * Created by theo on 01/04/17.
+ */
+
+public class NetworkImageView extends AppCompatImageView {
+
+    private String mUrl;
+
+    @IdRes private int mDefaultImageResId;
+    @IdRes private int mErrorImageResId;
+
+    private ANImageLoader.ImageContainer mImageContainer;
+
+    public NetworkImageView(Context context) {
+        super(context);
+    }
+
+    public NetworkImageView(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        if(attrs != null) init(attrs, 0);
+    }
+
+    public NetworkImageView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        if(attrs != null) init(attrs, defStyleAttr);
+    }
+
+    private void init(AttributeSet attrs, int defStyleAttr) {
+        final TypedArray array = getContext()
+                .obtainStyledAttributes(attrs, R.styleable.NetworkImageView, defStyleAttr, 0);
+        mDefaultImageResId = array
+                .getResourceId(R.styleable.NetworkImageView_default_image_resource,
+                        R.drawable.ic_avatar_default
+                );
+        mErrorImageResId = array
+                .getResourceId(R.styleable.NetworkImageView_error_image_resource, 0);
+        array.recycle();
+    }
+
+    public void setImageUrl(@NonNull String url) {
+        mUrl = url;
+        loadImage(false);
+    }
+
+    public void setDefaultImageResId(@IdRes int defaultImage) {
+        mDefaultImageResId = defaultImage;
+    }
+
+    public void setErrorImageResId(@IdRes int errorImage) {
+        mErrorImageResId = errorImage;
+    }
+
+    private void loadImage(final boolean isInLayoutPass) {
         final int width = getWidth();
         final int height = getHeight();
 
@@ -2979,6 +2953,29 @@ void loadImage(final boolean isInLayoutPass) {
         );
 
     }
+
+    private void setDefaultImage() {
+        if(getDrawable() != null) return; //Drawable has been set manually
+        if(mDefaultImageResId != 0) {
+            setImageResource(mDefaultImageResId);
+        } else {
+            setImageBitmap(null);
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        loadImage(true);
+    }
+
+    @Override
+    protected void drawableStateChanged() {
+        super.drawableStateChanged();
+        invalidate();
+    }
+}
+
 ```
 
 The first check performed in ```loadImage``` is whether the image can actually be drawn.
@@ -3706,7 +3703,7 @@ the new position to continue from in the character array.
 
 **Markdown.java**
 ``` java
-static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames) {
+public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames) {
         final StringBuilder builder = new StringBuilder();
         char p = ' ';
         char pp = ' ';
@@ -3760,7 +3757,7 @@ static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean
 
 **Markdown.java**
 ``` java
-boolean isWhiteSpace(char c) {
+private static boolean isWhiteSpace(char c) {
         //Space tab, newline, line tabulation, carriage return, form feed
         return c == ' ' || c == '\t' || c == '\n' || c == '\u000B' || c == '\r' || c == '\u000C';
     }
@@ -3768,7 +3765,7 @@ boolean isWhiteSpace(char c) {
 
 **Markdown.java**
 ``` java
-boolean isLineEnding(char[] cs, int i) {
+private static boolean isLineEnding(char[] cs, int i) {
         return i == cs.length - 1 || cs[i] == '\n' || cs[i] == '\r';
     }
 ```
@@ -3801,7 +3798,7 @@ GitHub usernames are strings of text up to 39 characters in length, containing o
 
 **Markdown.java**
 ``` java
-int parseUsername(StringBuilder builder, char[] cs, int pos) {
+private static int parseUsername(StringBuilder builder, char[] cs, int pos) {
         final StringBuilder nameBuilder = new StringBuilder();
         char p = ' ';
         for(int i = pos + 1; i < cs.length; i++) {
@@ -4465,7 +4462,7 @@ The line after ```View``` binding in ```UserActivity``` is the call ```postponeE
 
 **UserInfoFragment.java**
 ``` java
-View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         final View view = inflater.inflate(R.layout.fragment_user_info, container, false);
         unbinder = ButterKnife.bind(this, view);
         mRefresher.setRefreshing(true);
@@ -4524,7 +4521,7 @@ This is done in the ```UI``` utility method ```setDrawableForIntent```
 
 **UI.java**
 ``` java
-static void setDrawableForIntent(@NonNull ImageView iv, @NonNull Intent i) {
+public static void setDrawableForIntent(@NonNull ImageView iv, @NonNull Intent i) {
         if(iv.getDrawable() instanceof BitmapDrawable) {
             i.putExtra(iv.getResources().getString(R.string.intent_drawable),
                     ((BitmapDrawable) iv.getDrawable()).getBitmap()
@@ -5066,7 +5063,7 @@ The ```onDraw``` method needs to deal with two states, either the ```Contributio
 
 **ContributionsView.java**
 ``` java
-void onDraw(Canvas canvas) {
+protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         canvas.getClipBounds(mRect);
 
@@ -5186,7 +5183,7 @@ This method computes numerous statistics about the user:
 
 **UserInfoFragment.java**
 ``` java
-void contributionsLoaded(List<ContributionsLoader.ContributionsDay> contributions) {
+public void contributionsLoaded(List<ContributionsLoader.ContributionsDay> contributions) {
         if(!areViewsValid()) return;
         int totalContributions = 0;
         int daysActive = 0;
@@ -5264,7 +5261,7 @@ layout.
 
 **Formatter.java**
 ``` java
-void displayUser(ViewGroup userInfoParent, User user) {
+public static void displayUser(ViewGroup userInfoParent, User user) {
         userInfoParent.setVisibility(View.VISIBLE);
 
         final NetworkImageView avatar = ButterKnife.findById(userInfoParent, R.id.user_avatar);
@@ -5353,7 +5350,7 @@ The ```getInfoTextView``` method takes the ```Context``` required to instantiate
 
 **Formatter.java**
 ``` java
-static TextView getInfoTextView(Context context, @DrawableRes int drawableRes) {
+private static TextView getInfoTextView(Context context, @DrawableRes int drawableRes) {
         final TextView tv = new TextView(context);
         tv.setCompoundDrawablePadding(UI.pxFromDp(4));
         tv.setCompoundDrawablesRelativeWithIntrinsicBounds(drawableRes, 0, 0, 0);
@@ -5391,7 +5388,7 @@ The ```updated``` method is used for binding the following information, and ```l
 
 **UserInfoFragment.java**
 ``` java
-void updated(Boolean isFollowing) {
+public void updated(Boolean isFollowing) {
         if(mFollowButton == null) {
             mFollowButton = new Button(getContext());
             mFollowButton.setBackground(null);
