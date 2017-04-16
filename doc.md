@@ -1567,7 +1567,7 @@ In on the overriden ```onPageStarted``` method of the ```OAuthWebViewClient``` t
 #import "app/src/main/java/com/tpb/projects/login/LoginActivity.java $public void onPageStarted(WebView view, String url, Bitmap favicon)$"
 
 
-#import "gitapi/src/main/java/com/tpb/github/data/auth/OAuthHandler.java $void fetchAccessToken$"
+#import "gitapi/src/main/java/com/tpb/github/data/auth/OAuthHandler.java $public void getAccessToken$"
 
 The ```fetchAccessToken``` method performs a get request to the token URL created with the apps client id and secret, adding the code as a path parameter.
 
@@ -1622,14 +1622,14 @@ Most uses of ```ItemLoader``` load an instance of ```DataModel```.
 An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority)```
 
 
-#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName$"
+#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $public Loader loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName$"
 
 
 this method is used to load a single ```Issue``` model given a full repository name (user login and repository name) and the issue number.
 
 Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
 
-#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $loadProject(@Nullable final ItemLoader<Project> loader, int id)$"
+#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $public Loader loadProject(@Nullable final ItemLoader<Project> loader, int id)$"
 
 In this case the ```ANRequest``` instance is built and only requested as a ```JSONObject``` when there is an ```ItemLoader``` to deal with the model.
 This allows the response to be preloaded before an Activity is started, and only parsed to a ```DataModel``` once a user interface is present to use it.
@@ -1778,18 +1778,18 @@ If the ```Intent``` is not from the homescreen, the ```Activity``` was launched 
 Each network request made uses the calling object, e.g. an implementation of ```ItemLoader``` as a tag.
 The ```BaseActivity``` retains a ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
 
-#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java $void onAttachFragment$"
+#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java $public void onAttachFragment$"
 
 ```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
 
-#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java $cancelNetworkRequests$"
+#import "app/src/main/java/com/tpb/projects/common/BaseActivity.java $private void cancelNetworkRequests$"
 
 ##### Memory Leak
 
 A bug introduced in Android 5.0, launched in November 2014, which results in a reference to the ```Activity``` being kept in the ```TransitionManager```.
 The memory leak can be solved by using reflection to remove the ```Activity``` from the ```TransitionManager``` map.
 
-```
+``` java
 final ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitions = (ThreadLocal<WeakReference<ArrayMap<ViewGroup, ArrayList<Transition>>>> runningTransitionsField.get(transitionManagerClass);
 ```
 
@@ -1833,11 +1833,11 @@ The ```NetworkImageView``` has three instance variables; the URL to be loaded as
 
 When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet``` for resource identifiers set in XML.
 
-#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $void init$"
+#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $private void init$"
 
 The ```loadImage``` method is responsible for loading and displaying the image.
 
-#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $void loadImage$"
+#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $private void void loadImage$"
 
 The first check performed in ```loadImage``` is whether the image can actually be drawn.
 
@@ -2122,11 +2122,11 @@ The formatted markdown is to be appended to a ```StringBuilder``` as the array o
 Each format method is to take the character array, current position, and the ```StringBuilder``` and attempt to append the formatted markdown to the ```StringBuilder``` before returning
 the new position to continue from in the character array.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames)$"
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $boolean isWhiteSpace(char c)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static boolean isWhiteSpace(char c)$"
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $boolean isLineEnding(char[] cs, int i)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static boolean isLineEnding(char[] cs, int i)$"
 
 ```isWhiteSpace``` and ```isLineEnding``` are both utility methods. ```isWhiteSpace``` checks if the character is a space, a tab, a newline, a line tabulation character, a carriage return, or a form feed, while ```isLineEnding``` checks whether the character is a new line or carriage return or the position is the last in the character array.
 
@@ -2154,7 +2154,7 @@ At the end of each iteration the previous and previous previous characters are u
 
 GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $int parseUsername(StringBuilder builder, char[] cs, int pos)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseUsername(StringBuilder builder, char[] cs, int pos)$"
 
 ```parseUsername``` iterates through the character array from the position after the "@".
 If the character is alphanumeric or the character is "-" and the previous character is not, and the name limit has not been exceeded, the character is appended to the `nameBuilder` and
@@ -2242,7 +2242,7 @@ The first problem is solved by postponing the entry transition.
 The line after ```View``` binding in ```UserActivity``` is the call ```postponeEnterTransition()``` which, as its name suggests, postpones the entry transition until the 
 ```startPostponedEnterTransition``` is called.
 
-#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $View onCreateView$"
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $public View onCreateView$"
 
 Once the ```View``` has been created in ```UserInfoFragment``` we have the ```NetworkImageView``` required to perform the transition.
 However, the full layout has not been calculated, so the animation cannot yet be performed.
@@ -2260,7 +2260,7 @@ Finally, ```startPostponedEnterTransition``` can be called on the ```UserInfoFra
 The second problem, which was assumed to have been solved when setting the drawable above, is to provide the ```ImageView``` in the new ```Activity``` with the avatar to be drawn.
 This is done in the ```UI``` utility method ```setDrawableForIntent```
 
-#import "app/src/main/java/com/tpb/projects/util/UI.java $static void setDrawable$"
+#import "app/src/main/java/com/tpb/projects/util/UI.java $public static void setDrawable$"
 
 The method checks that the ```ImageView```'s ```Drawable``` is an instance of ```BitmapDrawable```, which it will be if loaded from a ```Bitmap``` as ```NetworkImageView``` does.
 The ```instanceof``` comparator also performs a null check as the language specification defines the result of the operator to be "true if the value of the RelationalExpression is not null and the reference could be cast (§15.16) to the ReferenceType without raising a ClassCastException".
@@ -2354,7 +2354,7 @@ It also checks if its listener has been set, and notifies it of the newly loaded
 
 The ```onDraw``` method needs to deal with two states, either the ```ContributionsView``` has a non empty list of ```ContributionsDays``` or it does not.
 
-#import "contributionsview/src/main/java/com/tpb/contributionsview/ContributionsView.java $void onDraw$"
+#import "contributionsview/src/main/java/com/tpb/contributionsview/ContributionsView.java $protected void onDraw$"
 
 The ```onDraw``` method begins by measuring the size which it has to draw in.
 Next, the number of columns to show horizontally can be calculated, as either the number of contributions split across 7 day weeks, or 52 weeks.
@@ -2395,7 +2395,7 @@ This method computes numerous statistics about the user:
 - Their greatest number of contributions per day
 - Their longest uninterrupted 'streak' of active days
 
-#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $void contributionsLoaded$"
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $public void contributionsLoaded$"
 
 5 counters are used for the computation.
 Each iteration of the loop checks if any contributions have been made.
@@ -2420,14 +2420,14 @@ The level of information which a user provides is not constant. While some provi
 The ```displayUser``` method in ```Formatter``` is used in both the ```LoginActivity``` and ```UserInfoLayout``` to bind data to the ```Views``` in an inflated ```shared_user_info```
 layout.
 
-#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $void displayUser$"
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $public static void displayUser$"
 
 The method first finds the ```NetworkImageView``` to display the user's avatar, and the ```TextView``` to display their username.
 Once the username and avatar URL have been bound, a ```LayoutParams``` instance is created to ensure that each ```TextView``` uses the same margins.
 
 The ```getInfoTextView``` method takes the ```Context``` required to instantiate a ```View``` and a drawable resource id to display at the start of the ```TextView```.
 
-#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $static TextView getInfoTextView$"
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $private static TextView getInfoTextView$"
 
 ```displayUser``` checks each value string value to be displayed, and if it is non null, the string is added to its own row with a corresponding icon.
 Numeric values greater than 0 are also displayed, however they require extra formatting.
@@ -2457,7 +2457,7 @@ if(!GitHubSession.getSession(getContext()).getUserLogin().equals(user.getLogin()
 
 The ```updated``` method is used for binding the following information, and ```loadComplete``` pases its return value through to ```updated```.
 
-#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $void updated(Boolean$"
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $public void updated(Boolean$"
 
 ```updated``` first checks if the ```Button``` has ben created, creating it if not.
 It then sets the appropriate resource string for the button and adds an ```onClickListener```.

@@ -3794,10 +3794,66 @@ If there is a sequence of three backticks, every character from the backticks on
 Finally, if none of the above conditions apply, the character is appended to the builder.
 
 At the end of each iteration the previous and previous previous characters are updated.
+
 #### Username menetions
 
 GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.
 
+**Markdown.java**
+``` java
+int parseUsername(StringBuilder builder, char[] cs, int pos) {
+        final StringBuilder nameBuilder = new StringBuilder();
+        char p = ' ';
+        for(int i = pos + 1; i < cs.length; i++) {
+            if(((cs[i] >= 'A' && cs[i] <= 'Z') ||
+                    (cs[i] >= 'a' && cs[i] <= 'z') ||
+                    (cs[i] >= '0' && cs[i] <= '9') ||
+                    (cs[i] == '-' && p != '-')) &&
+                    i - pos <= 39 &&
+                    i != cs.length - 1) {
+                nameBuilder.append(cs[i]);
+                p = cs[i];
+                //nameBuilder.length() > 0 stop us linking a single @
+            } else if((isWhiteSpace(cs[i]) || i == cs.length - 1) && i - pos > 1) {
+                if(i == cs.length - 1) {
+                    nameBuilder.append(cs[i]); //Otherwise we would miss the last char of the name
+                }
+                builder.append("[@");
+                builder.append(nameBuilder.toString());
+                builder.append("](https://github.com/");
+                builder.append(nameBuilder.toString());
+                builder.append(')');
+                if(i != cs.length - 1) {
+                    builder.append(cs[i]); // We still need to append the space or newline
+                }
+                return i;
+            } else {
+                break;
+            }
+
+        }
+        builder.append("@");
+        return pos;
+    }
+```
+
+```parseUsername``` iterates through the character array from the position after the "@".
+If the character is alphanumeric or the character is "-" and the previous character is not, and the name limit has not been exceeded, the character is appended to the `nameBuilder` and
+the previous character is set.
+If the character is not a valid part of the name there are two possibilities. Either the name should be matched, or the name is not valid.
+
+If the character is whitespace, or we are at the end of the character array the name is valid if it is also of non-zero length.
+If the name is valid the name link is appended to the `StringBuilder` used for the formatted markdown.
+Aside from appending the link, there are two other cases which must be dealt with.
+If the break point for the name is the end of the character array, then the last character in the array must be added.
+Second, if the break point is not the end of the character array, then the whitespace character must be added.
+Once the name has been added, the counter position is returned.
+
+If the name is not valid, the loop breaks, "@" character is appended, and the original position is returned.
+
+#### Issue links
+
+<div style="page-break-after: always;"></div>
 
 ## User Activity
 
