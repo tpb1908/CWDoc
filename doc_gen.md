@@ -3709,13 +3709,11 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
         char pp = ' ';
         final char[] chars = ("\n" + s).toCharArray();
         for(int i = 0; i < chars.length; i++) {
-            Log.i("Test", "Repos is " +fullRepoPath + ", isWhiteSpace " + isWhiteSpace(p));
             if(linkUsernames && chars[i] == '@' && isWhiteSpace(p)) {
                 //Max username length is 39 characters
                 //Usernames can be alphanumeric with single hyphens
                 i = parseUsername(builder, chars, i);
             } else if(chars[i] == '#' && isWhiteSpace(p) && fullRepoPath != null) {
-                Log.i("Test", "Parsing issue");
                 i = parseIssue(builder, chars, i, fullRepoPath);
             } else if(pp == '[' && (p == 'x' || p == 'X') && chars[i] == ']') {
                 builder.setLength(builder.length() - 2);
@@ -3726,7 +3724,7 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
             } else if(pp == '[' && p == ' ' && chars[i] == ']') {//Open box
                 builder.setLength(builder.length() - 2);
                 builder.append("\u2610");
-            } else if(chars[i] == '(') {
+            } else if(chars[i] == '(' && fullRepoPath != null) {
                 builder.append("(");
                 i = parseImageLink(builder, chars, i, fullRepoPath);
             } else if(chars[i] == ':') {
@@ -3861,7 +3859,7 @@ private static int parseIssue(StringBuilder builder, char[] cs, int pos, String 
         for(int i = pos + 1; i < cs.length; i++) {
             if(cs[i] >= '0' && cs[i] <= '9' && i != cs.length - 1) {
                 numBuilder.append(cs[i]);
-            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i))) {
+            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i)) && i > pos + 1) {
                 if(i == cs.length - 1) {
                     if(cs[i] >= '0' && cs[i] <= '9') {
                         numBuilder.append(cs[i]);
@@ -3895,7 +3893,264 @@ If we are at the end of the character array the final character must be checked 
 The link is built, and if the counter is not at the end of the array the original whitespace is appended.
 If the characater was not a valid issue link, the hash, "#", is appended and the original index is returned.
 
+#### Relative links
+
+When Markdown is rendered in a GitHub repository, links can be relative to the repository.
+In order to load content from these links they need to be changed to a full link including the repository path.
+
+**Markdown.java**
+``` java
+private static String concatenateRawContentUrl(String url, String fullRepoName) {
+        if(url.startsWith("http://") ||url.startsWith("https://")) return url;
+        int offset = 0;
+        if(url.startsWith("./")) offset = 2;
+        else if(url.startsWith("/")) offset = 1;
+        return "https://raw.githubusercontent.com/" + fullRepoName + "/master/" + url
+                    .substring(offset);
+    }
+```
+
+A relative URL can be only a file name or it can start with either "/" or "./" specifying a path in the repository.
+
+If the URL begins with "http://" or "https://" it is assumed to be valid and returned.
+Otherwise, the offset is calculated and the url is added as the file path in a link to githubusercontent.
+
+The ```concatenateRawContentUrl``` function is used when parsing image links, as well as when checking links in a repository README.
+
+#### Image links
+
+Image links are checked both to ensure that they are not relative, and to add spacing around each image so that it does not interfere with the text line spacing.
+
+**Markdown.java**
+``` java
+private static int parseImageLink(StringBuilder builder, char[] cs, int pos, String fullRepoPath) {
+        for(int i = pos + 1; i < cs.length; i++) {
+            if(cs[i] == ')') {
+                final String link = new String(Arrays.copyOfRange(cs, pos + 1, i));
+                final String extension = link.substring(link.lastIndexOf('.') + 1);
+                if("png".equalsIgnoreCase(extension) ||
+                        "jpg".equalsIgnoreCase(extension) ||
+                        "gif".equalsIgnoreCase(extension) ||
+                        "bmp".equalsIgnoreCase(extension) ||
+                        "webp".equalsIgnoreCase(extension)) {
+                    if(TextUtils.isValidURL(link)) {
+                        builder.append(link);
+                    } else {
+                        builder.append(concatenateRawContentUrl(link, fullRepoPath));
+                    }
+                    builder.append(") <br><br>");
+                } else {
+                    builder.append(link);
+                    builder.append(")");
+                }
+                return i;
+            } else if(isWhiteSpace(cs[i])) {
+                break;
+            }
+        }
+
+        return pos;
+    }
+```
+
+Recalling that a markdown image link is formatted as ```![Description](link)```, ```parseImageLink``` must check the text between the opening bracket, "(", and the closing bracket ")".
+
+If whitespace is found, the function can break early.
+When the closing bracket is found, the extension can be checked for any of the image extensions supported by Android.
+If the URL is already valid, it is added to the builder. Otherwise the concatenated URL is added.
+Finally, the closing bracket and breaks are added.
+
+If the URL does not end with an image extension, it is just added to the builder.
+
+#### Emoji
+
+Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile:" should be rendered as 😄.
+
+In order to parse each alias to a unicode string, and later allow searching, a table of emojis is required.
+I used the emoji json file used in GitHub's gemoji, a Ruby gem for "character information about native emoji".
+After stripping the unicode version, ios version, and fitzpatrick information from the file, and minifying it I reduced it from 298kb to 139kb.
+
+Each Emoji contains its description, aliases, tags, and unicode string.
+
+**Emoji.java**
+``` java
+package com.tpb.mdtext.emoji;
+
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Created by theo on 16/04/17.
+ */
+
+public class Emoji {
+
+    private final String description;
+    private final List<String> aliases;
+    private final List<String> tags;
+    private final String unicode;
+
+    Emoji(String unicode, String description, List<String> aliases, List<String> tags) {
+        this.unicode = unicode;
+        this.description = description;
+        this.aliases = Collections.unmodifiableList(aliases);
+        this.tags = Collections.unmodifiableList(tags);
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public List<String> getAliases() {
+        return aliases;
+    }
+
+    public List<String> getTags() {
+        return tags;
+    }
+
+    public String getUnicode() {
+        return unicode;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof Emoji && unicode.equals(((Emoji) o).unicode);
+    }
+
+    @Override
+    public int hashCode() {
+        return unicode.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "Emoji{" +
+                "description='" + description + '\'' +
+                ", aliases=" + aliases +
+                ", tags=" + tags +
+                ", unicode='" + unicode + '\'' +
+                '}';
+    }
+}
+
+```
+
+The emoji are loaded from the resource directory and added to a master list of emojis as well as maps for aliases and tags.
+
+**EmojiLoader.java**
+``` java
+package com.tpb.mdtext.emoji;
+
+import android.content.res.AssetManager;
+import android.support.annotation.NonNull;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Created by theo on 16/04/17.
+ */
+
+public class EmojiLoader {
+
+    private static final Map<String, Emoji> ALIAS_MAP = new HashMap<>();
+    private static final Map<String, Set<Emoji>> TAG_MAP = new HashMap<>();
+    private static final List<Emoji> EMOJIS  = new ArrayList<>();
+
+    public static void loadEmojis(AssetManager assets) {
+        if(EMOJIS.size() > 0) return;
+        try {
+            final JSONArray JSON = new JSONArray(inputStreamToString(assets.open("json/emojis.json")));
+            for(int i = 0; i < JSON.length(); i++) {
+                final Emoji emoji = buildEmojiFromJSON(JSON.getJSONObject(i));
+                if(emoji != null) {
+                    EMOJIS.add(emoji);
+                    for(String tag : emoji.getTags()) {
+                        if(TAG_MAP.get(tag) == null) TAG_MAP.put(tag, new HashSet<Emoji>());
+                        TAG_MAP.get(tag).add(emoji);
+                    }
+                    for(String alias : emoji.getAliases()) {
+                        ALIAS_MAP.put(alias, emoji);
+                    }
+                }
+            }
+        } catch(Exception ignored) {}
+    }
+
+    private static String inputStreamToString(InputStream is) throws IOException {
+        final BufferedReader reader = new BufferedReader(  new InputStreamReader(is));
+        String line;
+        final StringBuilder builder = new StringBuilder();
+        while((line =  reader.readLine()) != null){
+            builder.append(line);
+        }
+        is.close();
+        return builder.toString();
+    }
+
+    private static Emoji buildEmojiFromJSON(JSONObject json) throws JSONException {
+        if (!json.has("emoji")) {
+            return null;
+        }
+        String emoji  = json.getString("emoji");
+        String description = null;
+        if (json.has("description")) {
+            description = json.getString("description");
+        }
+
+        List<String> aliases = JSONArrayToStringList(json.getJSONArray("aliases"));
+        List<String> tags = JSONArrayToStringList(json.getJSONArray("tags"));
+        return new Emoji(emoji, description, aliases, tags);
+    }
+
+    private static List<String> JSONArrayToStringList(JSONArray array) throws JSONException {
+        final List<String> strings = new ArrayList<>(array.length());
+        for (int i = 0; i < array.length(); i++) {
+            strings.add(array.getString(i));
+        }
+        return strings;
+    }
+
+    public static List<Emoji> getAllEmoji() {
+        return EMOJIS;
+    }
+
+    public static Set<Emoji> getEmojiForTag(@NonNull String tag) {
+        return TAG_MAP.get(tag);
+    }
+
+    public static Emoji getEmojiForAlias(@NonNull String alias) {
+        if(alias.startsWith(":")) alias = alias.substring(1, alias.length());
+        if(alias.endsWith(":")) alias = alias.substring(0, alias.length() - 1);
+        return ALIAS_MAP.get(alias);
+    }
+
+}
+
+```
+
+The json file is opened as an ```InputStream``` which is then converted to a ```String``` which can be read as a ```JSONArray``` for conversion to ```Emoji``` objects.
+For each ```Emoji``` succesfully created the object is added to EMOJIS, added to ALIAS_MAP, and added to a ```HashSet``` of ```Emojis``` in TAG_MAP.
+
+The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags or aliases.
+
+```getEmojiForAlias``` also checks whether the alias is in the ":alias:" format and strips the colons before searching.
+
 <div style="page-break-after: always;"></div>
+
 
 ## User Activity
 
