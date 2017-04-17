@@ -5211,6 +5211,237 @@ and the event is intercepted if the user is touching a code, pre, or table eleme
 
 <div style="page-break-after: always;"></div>
 
+### Displaying short Markdown sections
+
+In order to display GitHub Markdown formatted text in the Android ```TextView```, custom spans are required.
+
+#### CleanURLSpan
+
+This span type was reference earlier.
+It is used to display links to web addresses and email addresses.
+
+**CleanURLSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.content.Intent;
+import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.Parcel;
+import android.support.annotation.Nullable;
+import android.text.TextPaint;
+import android.text.style.URLSpan;
+import android.view.View;
+
+import com.tpb.mdtext.MDPattern;
+import com.tpb.mdtext.handlers.LinkClickHandler;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public class CleanURLSpan extends URLSpan {
+    private LinkClickHandler mHandler;
+
+    public CleanURLSpan(String url) {
+        super(ensureValidURL(url));
+    }
+
+    public CleanURLSpan(String url, LinkClickHandler handler) {
+        super(ensureValidURL(url));
+        mHandler = handler;
+    }
+
+    @Override
+    public void onClick(View widget) {
+        if(mHandler == null) {
+            final Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setData(Uri.parse(getURL()));
+            widget.getContext().startActivity(i);
+        } else {
+            mHandler.onClick(getURL());
+        }
+    }
+
+    private static String ensureValidURL(@Nullable String url) {
+        if(url == null) return null;
+
+        if(MDPattern.AUTOLINK_EMAIL_ADDRESS.matcher(url).matches()) {
+            return "mailto:" + url;
+        } else if(!url.startsWith("https://") && !url.startsWith("http://")) {
+            return "http://" + url;
+        }
+        return url;
+    }
+
+    @Override
+    public void updateDrawState(TextPaint ds) {
+        super.updateDrawState(ds);
+        // Links are bold without underline
+        ds.setUnderlineText(false);
+        ds.setTypeface(Typeface.DEFAULT_BOLD);
+    }
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+    }
+
+    CleanURLSpan(Parcel in) {
+        super(in);
+    }
+
+    public static final Creator<CleanURLSpan> CREATOR = new Creator<CleanURLSpan>() {
+        @Override
+        public CleanURLSpan createFromParcel(Parcel source) {
+            return new CleanURLSpan(source);
+        }
+
+        @Override
+        public CleanURLSpan[] newArray(int size) {
+            return new CleanURLSpan[size];
+        }
+    };
+}
+
+```
+
+The ```CleanURLSpan``` uses the ```LinkClickHandler``` interface, which provides an onClick method for a URL
+
+ **LinkClickHandler.java**
+``` java
+package com.tpb.mdtext.handlers;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public interface LinkClickHandler {
+
+    void onClick(String url);
+
+}
+
+```
+
+This interface is used to allow capturing all link clicks which occur in a ```TextView```.
+
+The ```ensureValidURL``` method checks if the link is an email address, formatting it accordingly. If the link is a web address, the correct protocl is prefixed.
+
+The ```CleanURLSpan``` overrides ```updateDrawState``` to remove the underline usually displayed on links, and to use a bold typeface.
+
+#### HorizontalRuleSpan
+
+The ```HorizontalRuleSpan``` solves the problem of drawing a line across the ```TextView```.
+
+As trivial as this problem sounds, it cannot be achieved with any string of text.
+While a line could be drawn more easily with a box drawing character, specifically U+2500 which draws lines with no gap ──── or the thicker U+2501 ━━━━, these characters would not span
+the full width of the ```TextView``` without guesswork, approximations, and some luck.
+
+Once a layout pass has been completed, the number of characters per line of a ```TextView``` can be calculated by repeatedly measuring a string with the ```TextView```'s ```Paint```.
+
+``` java
+private static boolean isTextTooLong(TextView tv, String text) {
+    final float textWidth = tv.getPaint().measureText(text);
+    return (textWidth >= tv.getMeasuredWidth ());
+}
+
+private static boolean findCharactersPerLine(TextView tv) {
+    String s = "";
+    while(!isTextTooLong(tv, s)) {
+        s += " ";
+    }
+    return s.length()
+}
+
+```
+This method has numerous problems:
+
+First, it relies on the ```TextView``` using a monospace font.
+
+Second, it requires a layout pass to have been completed.
+This means that in order to display the horizontal rule, the ```TextView``` would have to:
+1. Check for horizontal spans when its text is set
+2. Add a listener for its layout call 
+3. Within this listener, calculate the maximum number of characters which can be displayed per line
+4. Replace each horizontal rule placeholder with a new string of the correct length
+5. Redraw the entire ```TextView```, and ensure that there isn't an infinite loop of redrawing the ```TextView```
+
+Clearly this is not a reasonable way to display horizontal rules in a ```TextView```.
+
+Instead, a ```ReplacementSpan``` can be used to draw a line across the ```Canvas```.
+
+**HorizontalRuleSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.support.annotation.NonNull;
+import android.text.style.ReplacementSpan;
+
+/**
+ * Created by theo on 02/03/17.
+ */
+
+public class HorizontalRuleSpan extends ReplacementSpan {
+
+    private RectF mRectF;
+
+    public HorizontalRuleSpan() {
+        mRectF = new RectF();
+    }
+
+    @Override
+    public int getSize(@NonNull Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
+        return 0;
+    }
+
+    @Override
+    public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, @NonNull Paint paint) {
+        final int mid = (top + bottom) / 2;
+        final int quarter = (bottom - top) / 4;
+        paint.setColor(Color.GRAY);
+        mRectF.left = x;
+        mRectF.top = mid - quarter;
+        mRectF.right = x + canvas.getWidth();
+        mRectF.bottom = mid + quarter;
+        canvas.drawRect(mRectF, paint);
+        final int eighth = quarter / 2;
+        paint.setColor(Color.LTGRAY);
+        mRectF.left += eighth;
+        mRectF.right -= eighth;
+        mRectF.top += eighth;
+        mRectF.bottom -= eighth;
+        canvas.drawRect(mRectF, paint);
+    }
+}
+
+```
+
+The draw method in ```HorizontalRuleSpan``` draws a bordered rectangle by drawing two rectangles.
+
+First, it calculates the mid-point of the space available to it (a single line).
+Second, it calculates one quarter of the height of the space available to it.
+Third, it assigns the given x position, and the calculated mid-point and quarter height to a ```RectF``` object in order to draw a rectangle across the canvas between the upper and lower
+quartiles of the line. This makes the total area covered half of the avialable line.
+
+The second rectangle to be drawn fills half of the vertical space within the first rectangle.
+One eighth of the height is calculated as half of the quarter, and the bounds of the rectangle are changed to give the new rectangle a border of this size.
+The ```Paint``` colour is then changed to light grey and the new rectangle is drawn.
+
+![HorizontalRuleSpan](http://imgur.com/JAzWw7o.png)
+
+The only caveat to this method is that if the span it must be ensured that there is an empty line for the ```HorizontalRuleSpan``` to fill.
+
+<div style="page-break-after: always;"></div>
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.

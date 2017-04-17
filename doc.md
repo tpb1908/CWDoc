@@ -2657,6 +2657,23 @@ The ```Paint``` colour is then changed to light grey and the new rectangle is dr
 
 The only caveat to this method is that if the span it must be ensured that there is an empty line for the ```HorizontalRuleSpan``` to fill.
 
+#### QuoteSpan
+
+Android already includes a span for quotes, however it only draws a line to the start of the text and is not configurable, instead using blue (0, 255, 0).
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/QuoteSpan.java"
+
+```QuoteSpan``` extends ```CharacterStyle```, allowing it to set modify the ```TextPaint```, as well as implementing ```LeadingMarginSpan``` in order to draw the quote line.
+
+The ```QuoteSpan``` follows the material guidelines for secondary text, which specify using an opacity of 54% for secondary text using a dark text on light backgrounds, and using 70%
+opacity for secondary text using a white text on light backgrounds.
+
+Each Android colour is stored as an integer with alpha, red, green, and blue occupying each byte.
+The alpha value is stripped from the colour by and-ing it with 00FFFFFF, and it is then compared to the middle colour value to approximate whether it is a light or dark colour.
+
+In ```drawLeadingMarginSpan``` the original ```Style``` and colour are saved, and a rectangle is drawn across the whole vertical space of the line, and across 4 pixels horizontally. 
+The original style and colour are then saved.
+
 #page
 
 ## User Activity
