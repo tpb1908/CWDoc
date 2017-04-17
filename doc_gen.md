@@ -4934,7 +4934,7 @@ While most Markdown strings will be relatively short and simple, many README fil
 
 The GitHub mobile website displays READMEs inline with code made horizontally scrollable.
 
-| **** | **** |
+|  |  |
 | --- | --- | 
 | ![GitHub site README](http://imgur.com/cYWejcn.png) | ![Site README Code block](http://imgur.com/kqo9lS1.png) |
 

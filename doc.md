@@ -2578,6 +2578,87 @@ and the event is intercepted if the user is touching a code, pre, or table eleme
 
 #page
 
+### Displaying short Markdown sections
+
+In order to display GitHub Markdown formatted text in the Android ```TextView```, custom spans are required.
+
+#### CleanURLSpan
+
+This span type was reference earlier.
+It is used to display links to web addresses and email addresses.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/CleanURLSpan.java"
+
+The ```CleanURLSpan``` uses the ```LinkClickHandler``` interface, which provides an onClick method for a URL
+
+ #import "markdowntextview/src/main/java/com/tpb/mdtext/handlers/LinkClickHandler.java"
+
+This interface is used to allow capturing all link clicks which occur in a ```TextView```.
+
+The ```ensureValidURL``` method checks if the link is an email address, formatting it accordingly. If the link is a web address, the correct protocl is prefixed.
+
+The ```CleanURLSpan``` overrides ```updateDrawState``` to remove the underline usually displayed on links, and to use a bold typeface.
+
+#### HorizontalRuleSpan
+
+The ```HorizontalRuleSpan``` solves the problem of drawing a line across the ```TextView```.
+
+As trivial as this problem sounds, it cannot be achieved with any string of text.
+While a line could be drawn more easily with a box drawing character, specifically U+2500 which draws lines with no gap ──── or the thicker U+2501 ━━━━, these characters would not span
+the full width of the ```TextView``` without guesswork, approximations, and some luck.
+
+Once a layout pass has been completed, the number of characters per line of a ```TextView``` can be calculated by repeatedly measuring a string with the ```TextView```'s ```Paint```.
+
+``` java
+private static boolean isTextTooLong(TextView tv, String text) {
+    final float textWidth = tv.getPaint().measureText(text);
+    return (textWidth >= tv.getMeasuredWidth ());
+}
+
+private static boolean findCharactersPerLine(TextView tv) {
+    String s = "";
+    while(!isTextTooLong(tv, s)) {
+        s += " ";
+    }
+    return s.length()
+}
+
+```
+This method has numerous problems:
+
+First, it relies on the ```TextView``` using a monospace font.
+
+Second, it requires a layout pass to have been completed.
+This means that in order to display the horizontal rule, the ```TextView``` would have to:
+1. Check for horizontal spans when its text is set
+2. Add a listener for its layout call 
+3. Within this listener, calculate the maximum number of characters which can be displayed per line
+4. Replace each horizontal rule placeholder with a new string of the correct length
+5. Redraw the entire ```TextView```, and ensure that there isn't an infinite loop of redrawing the ```TextView```
+
+Clearly this is not a reasonable way to display horizontal rules in a ```TextView```.
+
+Instead, a ```ReplacementSpan``` can be used to draw a line across the ```Canvas```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/HorizontalRuleSpan.java"
+
+The draw method in ```HorizontalRuleSpan``` draws a bordered rectangle by drawing two rectangles.
+
+First, it calculates the mid-point of the space available to it (a single line).
+Second, it calculates one quarter of the height of the space available to it.
+Third, it assigns the given x position, and the calculated mid-point and quarter height to a ```RectF``` object in order to draw a rectangle across the canvas between the upper and lower
+quartiles of the line. This makes the total area covered half of the avialable line.
+
+The second rectangle to be drawn fills half of the vertical space within the first rectangle.
+One eighth of the height is calculated as half of the quarter, and the bounds of the rectangle are changed to give the new rectangle a border of this size.
+The ```Paint``` colour is then changed to light grey and the new rectangle is drawn.
+
+![HorizontalRuleSpan](http://imgur.com/JAzWw7o.png)
+
+The only caveat to this method is that if the span it must be ensured that there is an empty line for the ```HorizontalRuleSpan``` to fill.
+
+#page
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.
