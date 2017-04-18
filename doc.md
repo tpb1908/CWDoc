@@ -2086,6 +2086,89 @@ The crash information contains the full stack trace as well as information about
 
 ![Device info](http://imgur.com/tPfFzWS.png)
 
+#page
+
+## Link handling
+
+In order to receieve ```Intents``` when a user attempts to open a link to GitHub, the application must register an intent filter in its manifest.
+
+The intent filter system allows specifying a host and a scheme to capture. It also allows specifying a path pattern to match the path against.
+
+Unfortunately the pattern matching system is very limited.
+
+An asterisk, "*", matches a sequence of 0 or more occurences of the character immediately preceding it.
+A period, ".", followed by an asterisk, "*", matches any sequence of 0 or more characters.
+
+This is of no use when matching GitHub URLs.
+
+Instead, the application must match all GitHub URLs and reject those which it cannot handle by allowing the user to choose another application.
+
+The manifest entry for the ```Interceptor``` ```Activity``` is therefore
+
+``` XML
+<activity
+    android:name=".flow.Interceptor"
+    android:theme="@android:style/Theme.NoDisplay">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+
+        <data
+            android:host="github.com"
+            android:scheme="http"/>
+        <data
+            android:host="github.com"
+            android:scheme="https"/>
+
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+    </intent-filter>
+</activity>
+```
+
+The NoDisplay theme is specified, as the ```Activity``` should not display any content. The ```Interceptor``` ```Activity``` should also ensure that it calls ```finish``` before it exits
+the ```onCreate``` method.
+
+The intent filter specifies both schema for github.com, and adds the DEFAULT category, allowing the application to be chosen as the default for a particular URL, and the BROWSABLE 
+category which allosws the application to be started by a web-browser.
+
+#import "app/src/main/java/com/tpb/projects/flow/Interceptor.java"
+
+When onCreate is called, the first check is that the ```Intent``` action is ACTION_VIEW, the ```Intent``` has data, and the data host is github.com, if it is not ```fail``` is called.
+
+If the URL is from GitHub, the ```List``` of path segments are extracted.
+
+If the segments size is 0, the URL is github.com, and the ```Interceptor``` fails because it has not information to parse.
+
+If the segments size is 1, the only possibility is a user account, so an ```Intent``` for the ```UserActivity``` is created and the first segment is added as an extra under the "username"
+key. The ```Intent``` is then started and ```Interceptor``` finishes.
+
+If there is more than one segment, there are many more possibilities.
+Each of these possibilities contains a path to a repository. The URL is of the form "github.com/user/repository/...".
+
+A new ```Intent``` is created, and the repository path is added to the ```Intent``` extras under the "repo" key.
+
+A switch statement over the size of the segments ```List``` is then used to determine the ```Intent``` class.
+
+2- The class is set to the repository ```Activity```
+3- The URL could be to a repository's projects, issues, milestones, or commits.
+The third item in the ```List``` is checked, the class is set, and a page number is added to the ```Intent``` extras under the "page" key, allowing the ```Activity``` to scroll to a 
+particular page on launch.
+4- The URL could be a particular project, issue, milestone, or commit
+    - Projects
+        A projects URL should contain the integer value of the project's if as the fourth item in the ```List```.
+        It may also contain a URL parameter for the id of the card reference in the project, this is an integer value after the string "#card-".
+        Both of these values are added to the ```Intent``` as extras and the class is set to the Project ```Activity```.
+    - Issues 
+        A path with a third segment of "issues" and a length of 4 refers to a particular issue.
+        The id of the issue is extracted from the fourth segment and added to the ```Intent```, the class is set to the issue ```Activity```.
+    - Milestone
+        The milestone id is extracted in the same way as an issue id, and the ```Activity``` class is set accordingly.
+    - Commit
+        The commit path does not contain a numeric id, but instead contains a SHA hash which is added as an extra to the ```Intent``` after the commit ```Activity``` is set
+Other-
+Any values greater than 5 items refers to a file or directory in the repository files
+#page
+
 ## Markdown
 
 As GitHub uses Markdown throughout its content, a method for displaying Markdown must be implemented before the creation of the rest of the user interface.

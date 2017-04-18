@@ -3582,6 +3582,283 @@ The crash information contains the full stack trace as well as information about
 
 ![Device info](http://imgur.com/tPfFzWS.png)
 
+<div style="page-break-after: always;"></div>
+
+## Link handling
+
+In order to receieve ```Intents``` when a user attempts to open a link to GitHub, the application must register an intent filter in its manifest.
+
+The intent filter system allows specifying a host and a scheme to capture. It also allows specifying a path pattern to match the path against.
+
+Unfortunately the pattern matching system is very limited.
+
+An asterisk, "*", matches a sequence of 0 or more occurences of the character immediately preceding it.
+A period, ".", followed by an asterisk, "*", matches any sequence of 0 or more characters.
+
+This is of no use when matching GitHub URLs.
+
+Instead, the application must match all GitHub URLs and reject those which it cannot handle by allowing the user to choose another application.
+
+The manifest entry for the ```Interceptor``` ```Activity``` is therefore
+
+``` XML
+<activity
+    android:name=".flow.Interceptor"
+    android:theme="@android:style/Theme.NoDisplay">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+
+        <data
+            android:host="github.com"
+            android:scheme="http"/>
+        <data
+            android:host="github.com"
+            android:scheme="https"/>
+
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+    </intent-filter>
+</activity>
+```
+
+The NoDisplay theme is specified, as the ```Activity``` should not display any content. The ```Interceptor``` ```Activity``` should also ensure that it calls ```finish``` before it exits
+the ```onCreate``` method.
+
+The intent filter specifies both schema for github.com, and adds the DEFAULT category, allowing the application to be chosen as the default for a particular URL, and the BROWSABLE 
+category which allosws the application to be started by a web-browser.
+
+**Interceptor.java**
+``` java
+package com.tpb.projects.flow;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.os.Bundle;
+import android.os.Parcelable;
+
+import com.tpb.projects.R;
+import com.tpb.projects.commits.CommitActivity;
+import com.tpb.projects.issues.IssueActivity;
+import com.tpb.projects.milestones.MilestonesActivity;
+import com.tpb.projects.project.ProjectActivity;
+import com.tpb.projects.repo.RepoActivity;
+import com.tpb.projects.repo.content.ContentActivity;
+import com.tpb.projects.repo.content.FileActivity;
+import com.tpb.projects.user.UserActivity;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Created by theo on 01/01/17.
+ */
+
+public class Interceptor extends Activity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if(getIntent().getAction().equals(Intent.ACTION_VIEW) &&
+                getIntent().getData() != null &&
+                "github.com".equals(getIntent().getData().getHost())) {
+            final List<String> segments = getIntent().getData().getPathSegments();
+            if(segments.size() == 0) {
+               fail();
+            } else if(segments.size() == 1) {
+                final Intent u = new Intent(Interceptor.this, UserActivity.class);
+                u.putExtra(getString(R.string.intent_username), segments.get(0));
+                startActivity(u);
+                overridePendingTransition(R.anim.slide_up, R.anim.none);
+                finish();
+            } else {
+                final Intent i = new Intent();
+                i.putExtra(getString(R.string.intent_repo), segments.get(0) + "/" + segments.get(1));
+                switch(segments.size()) {
+                    case 2: //Repo
+                        i.setClass(Interceptor.this, RepoActivity.class);
+                        break;
+                    case 3:
+                        if("projects".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, RepoActivity.class);
+                            i.putExtra(getString(R.string.intent_pager_page),
+                                    RepoActivity.PAGE_PROJECTS
+                            );
+                        } else if("issues".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, RepoActivity.class);
+                            i.putExtra(getString(R.string.intent_pager_page),
+                                    RepoActivity.PAGE_ISSUES
+                            );
+                        } else if("milestones".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, MilestonesActivity.class);
+                        } else if("commits".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, RepoActivity.class);
+                            i.putExtra(getString(R.string.intent_pager_page),
+                                    RepoActivity.PAGE_COMMITS
+                            );
+                        }
+                        break;
+                    case 4:
+                        if("projects".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, ProjectActivity.class);
+                            i.putExtra(getString(R.string.intent_project_number),
+                                    safelyExtractInt(segments.get(3))
+                            );
+                            final String path = getIntent().getDataString();
+                            final StringBuilder id = new StringBuilder();
+                            for(int j = path
+                                    .indexOf('#', path.indexOf(segments.get(3))) + 6; j < path
+                                    .length(); j++) {
+                                if(path.charAt(j) >= '0' && path.charAt(j) <= '9') {
+                                    id.append(path.charAt(j));
+                                }
+                            }
+                            final int cardId = safelyExtractInt(id.toString());
+                            if(cardId != -1) i.putExtra(getString(R.string.intent_card_id), cardId);
+                        } else if("issues".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, IssueActivity.class);
+                            i.putExtra(getString(R.string.intent_issue_number),
+                                    safelyExtractInt(segments.get(3))
+                            );
+                        } else if("milestone".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, MilestonesActivity.class);
+                            i.putExtra(getString(R.string.intent_milestone_number),
+                                    safelyExtractInt(segments.get(3))
+                            );
+                        } else if("commit".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, CommitActivity.class);
+                            i.putExtra(getString(R.string.intent_commit_sha), segments.get(3));
+                        }
+                        break;
+                    default:
+                        if("tree".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, ContentActivity.class);
+                            final StringBuilder path = new StringBuilder();
+                            for(int j = 3; j < segments.size(); j++) {
+                                path.append(segments.get(j));
+                                path.append('/');
+                            }
+                            i.putExtra(getString(R.string.intent_path), path.toString());
+                        } else if("blob".equals(segments.get(2))) {
+                            i.setClass(Interceptor.this, FileActivity.class);
+                            final StringBuilder path = new StringBuilder();
+                            for(int j = 2; j < segments.size(); j++) {
+                                path.append('/');
+                                path.append(segments.get(j));
+                            }
+                            i.putExtra(getString(R.string.intent_blob_path), path.toString());
+                        }
+                }
+                if(i.getComponent() != null && i.getComponent().getClassName() != null) {
+                    startActivity(i);
+                    overridePendingTransition(R.anim.slide_up, R.anim.none);
+                    finish();
+                } else {
+                    fail();
+                }
+            }
+        } else {
+            fail();
+        }
+    }
+
+    private static int safelyExtractInt(String possibleInt) {
+        try {
+            return Integer.parseInt(possibleInt.replace("\\s+", ""));
+        } catch(NumberFormatException nfe) {
+            return -1;
+        }
+    }
+
+
+    private void fail() {
+        try {
+            startActivity(generateFailIntentWithoutApp());
+        } catch(Exception e) {
+            e.printStackTrace();
+        } finally {
+            finish();
+        }
+    }
+
+
+    private Intent generateFailIntentWithoutApp() {
+        try {
+            final Intent intent = new Intent(getIntent().getAction());
+            intent.setData(getIntent().getData());
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            intent.addCategory(Intent.CATEGORY_DEFAULT);
+
+            final List<ResolveInfo> resolvedInfo = getPackageManager()
+                    .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+
+            if(!resolvedInfo.isEmpty()) {
+                final List<Intent> targetedShareIntents = new ArrayList<>();
+                for(ResolveInfo resolveInfo : resolvedInfo) {
+                    final String packageName = resolveInfo.activityInfo.packageName;
+                    if(!packageName.equals(getPackageName())) {
+                        final Intent targetedShareIntent = new Intent(getIntent().getAction());
+                        targetedShareIntent.setData(getIntent().getData());
+                        targetedShareIntent.setPackage(packageName);
+                        targetedShareIntents.add(targetedShareIntent);
+                    }
+                }
+                final Intent chooserIntent = Intent.createChooser(targetedShareIntents.remove(0),
+                        getString(R.string.text_interceptor_open_with)
+                );
+                if(targetedShareIntents.size() > 0) {
+                    chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, targetedShareIntents
+                            .toArray(new Parcelable[targetedShareIntents.size()]));
+                }
+                return chooserIntent;
+            }
+        } catch(Exception ignored) {
+        }
+        return null;
+    }
+
+}
+
+
+```
+
+When onCreate is called, the first check is that the ```Intent``` action is ACTION_VIEW, the ```Intent``` has data, and the data host is github.com, if it is not ```fail``` is called.
+
+If the URL is from GitHub, the ```List``` of path segments are extracted.
+
+If the segments size is 0, the URL is github.com, and the ```Interceptor``` fails because it has not information to parse.
+
+If the segments size is 1, the only possibility is a user account, so an ```Intent``` for the ```UserActivity``` is created and the first segment is added as an extra under the "username"
+key. The ```Intent``` is then started and ```Interceptor``` finishes.
+
+If there is more than one segment, there are many more possibilities.
+Each of these possibilities contains a path to a repository. The URL is of the form "github.com/user/repository/...".
+
+A new ```Intent``` is created, and the repository path is added to the ```Intent``` extras under the "repo" key.
+
+A switch statement over the size of the segments ```List``` is then used to determine the ```Intent``` class.
+
+2- The class is set to the repository ```Activity```
+3- The URL could be to a repository's projects, issues, milestones, or commits.
+The third item in the ```List``` is checked, the class is set, and a page number is added to the ```Intent``` extras under the "page" key, allowing the ```Activity``` to scroll to a 
+particular page on launch.
+4- The URL could be a particular project, issue, milestone, or commit
+    - Projects
+        A projects URL should contain the integer value of the project's if as the fourth item in the ```List```.
+        It may also contain a URL parameter for the id of the card reference in the project, this is an integer value after the string "#card-".
+        Both of these values are added to the ```Intent``` as extras and the class is set to the Project ```Activity```.
+    - Issues 
+        A path with a third segment of "issues" and a length of 4 refers to a particular issue.
+        The id of the issue is extracted from the fourth segment and added to the ```Intent```, the class is set to the issue ```Activity```.
+    - Milestone
+        The milestone id is extracted in the same way as an issue id, and the ```Activity``` class is set accordingly.
+    - Commit
+        The commit path does not contain a numeric id, but instead contains a SHA hash which is added as an extra to the ```Intent``` after the commit ```Activity``` is set
+Other-
+Any values greater than 5 items refers to a file or directory in the repository files
+<div style="page-break-after: always;"></div>
+
 ## Markdown
 
 As GitHub uses Markdown throughout its content, a method for displaying Markdown must be implemented before the creation of the rest of the user interface.
