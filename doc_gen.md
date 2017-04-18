@@ -837,7 +837,7 @@ The client must implement the following features:
     </li>
     <li> Users 
         <ol type="a"> 
-            <li>Display available information about a user
+            <li> Display available information about a user
                 <ol type="i"> 
                     <li> Name </li>
                     <li> Avatar </li>
