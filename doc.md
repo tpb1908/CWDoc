@@ -2270,7 +2270,6 @@ The second two checks are both for ballot boxes without checks, either written a
 
 This fulfills objective 9.ii.g.
 
-
 The next check is for image links, which need to be parsed both in order to deal with links relative to the repository and to add spacing around them as they will be displayed as images.
 
 The next check is for emojis, which are contained between two colons.

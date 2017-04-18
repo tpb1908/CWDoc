@@ -2199,7 +2199,6 @@ If the user presses the authorize button, the page will be redirected through UR
 In on the overridden ```onPageStarted``` method of the ```OAuthWebViewClient``` this results in the ```code``` parameter being passed to the ```OAuthHandler``` through ```fetchAccessToken```.
 
 **LoginActivity.java**
-**public void onPageStarted**
 ``` java
 public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if(url.contains("?code=")) {
@@ -2212,7 +2211,6 @@ public void onPageStarted(WebView view, String url, Bitmap favicon) {
 
 
 **OAuthHandler.java**
-**public void getAccessToken**
 ``` java
 public void getAccessToken(final String code) {
         AndroidNetworking.get(mTokenUrl + "&code=" + code)
@@ -2316,7 +2314,6 @@ An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoF
 
 
 **Loader.java**
-**public Loader loadIssue**
 ``` java
 public Loader loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority) {
         get(GIT_BASE + SEGMENT_REPOS + "/" + repoFullName + SEGMENT_ISSUES + "/" + issueNumber)
@@ -2345,7 +2342,6 @@ this method is used to load a single ```Issue``` model given a full repository n
 Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
 
 **Loader.java**
-**public Loader loadProject**
 ``` java
 public Loader loadProject(@Nullable final ItemLoader<Project> loader, int id) {
         final ANRequest req = get(GIT_BASE + SEGMENT_PROJECTS + "/" + id)
@@ -2622,7 +2618,6 @@ Each network request made uses the calling object, e.g. an implementation of ```
 The ```BaseActivity``` retains a ```WeakReferences``` to each of the ```Fragments``` attached to it, and uses these to cancel network requests as they ```Activity``` is destroyed.
 
 **BaseActivity.java**
-**public void onAttachFragment**
 ``` java
 public void onAttachFragment (Fragment fragment) {
         mWeakFragments.add(new WeakReference<>(fragment));
@@ -2632,7 +2627,6 @@ public void onAttachFragment (Fragment fragment) {
 ```onAttachFragment``` adds a ```WeakReference``` to the ```Fragment``` to ```mWeakFragments```, and ```cancelNetworkRequests``` uses these to cancel network requests started by each ```Fragment```.
 
 **BaseActivity.java**
-**private void cancelNetworkRequests**
 ``` java
 private void cancelNetworkRequests() {
         AndroidNetworking.cancel(this);
@@ -2851,7 +2845,6 @@ The ```NetworkImageView``` has three instance variables; the URL to be loaded as
 When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet``` for resource identifiers set in XML.
 
 **NetworkImageView.java**
-**private void init**
 ``` java
 private void init(AttributeSet attrs, int defStyleAttr) {
         final TypedArray array = getContext()
@@ -2869,7 +2862,6 @@ private void init(AttributeSet attrs, int defStyleAttr) {
 The ```loadImage``` method is responsible for loading and displaying the image.
 
 **NetworkImageView.java**
-**private void loadImage**
 ``` java
 private void loadImage(final boolean isInLayoutPass) {
         final int width = getWidth();
@@ -3941,7 +3933,6 @@ Each format method is to take the character array, current position, and the ```
 the new position to continue from in the character array.
 
 **Markdown.java**
-**public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames)**
 ``` java
 public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames) {
         final StringBuilder builder = new StringBuilder();
@@ -3996,7 +3987,6 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
 ```
 
 **Markdown.java**
-**private static boolean isWhiteSpace**
 ``` java
 private static boolean isWhiteSpace(char c) {
         //Space tab, newline, line tabulation, carriage return, form feed
@@ -4005,7 +3995,6 @@ private static boolean isWhiteSpace(char c) {
 ```
 
 **Markdown.java**
-**private static boolean isLineEnding**
 ``` java
 private static boolean isLineEnding(char[] cs, int i) {
         return i == cs.length - 1 || cs[i] == '\n' || cs[i] == '\r';
@@ -4026,7 +4015,6 @@ The second two checks are both for ballot boxes without checks, either written a
 
 This fulfills objective 9.ii.g.
 
-
 The next check is for image links, which need to be parsed both in order to deal with links relative to the repository and to add spacing around them as they will be displayed as images.
 
 The next check is for emojis, which are contained between two colons.
@@ -4042,7 +4030,6 @@ At the end of each iteration the previous and previous previous characters are u
 GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.
 
 **Markdown.java**
-**private static int parseUsername**
 ``` java
 private static int parseUsername(StringBuilder builder, char[] cs, int pos) {
         final StringBuilder nameBuilder = new StringBuilder();
@@ -4101,7 +4088,6 @@ This method completes objective 9.ii.d.
 GitHub issue links are hashes, "#", followed by integer strings.
 
 **Markdown.java**
-**private static int parseIssue**
 ``` java
 private static int parseIssue(StringBuilder builder, char[] cs, int pos, String fullRepoPath) {
         final StringBuilder numBuilder = new StringBuilder();
@@ -4150,7 +4136,6 @@ When Markdown is rendered in a GitHub repository, links can be relative to the r
 In order to load content from these links they need to be changed to a full link including the repository path.
 
 **Markdown.java**
-**private static String concatenateRawContentUrl**
 ``` java
 private static String concatenateRawContentUrl(String url, String fullRepoName) {
         if(url.startsWith("http://") ||url.startsWith("https://")) return url;
@@ -4174,7 +4159,6 @@ The ```concatenateRawContentUrl``` function is used when parsing image links, as
 Image links are checked both to ensure that they are not relative, and to add spacing around each image so that it does not interfere with the text line spacing.
 
 **Markdown.java**
-**private static int parseImageLink**
 ``` java
 private static int parseImageLink(StringBuilder builder, char[] cs, int pos, String fullRepoPath) {
         for(int i = pos + 1; i < cs.length; i++) {
@@ -4409,7 +4393,6 @@ The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags 
 ##### Displaying Emoji
 
 **Markdown.java**
-**private static int parseEmoji**
 ``` java
 private static int parseEmoji(StringBuilder builder, char[] cs, int pos) {
         final StringBuilder emojiBuilder = new StringBuilder();
@@ -4800,7 +4783,6 @@ public class MDPattern {
 Having defined the regex for matching URLs and emails, the ```addLinks``` method can be explained.
 
 **TextUtils.java**
-**public static boolean addLinks**
 ``` java
 public static boolean addLinks(@NonNull Spannable spannable) {
         boolean hasMatches = false;
@@ -4832,7 +4814,6 @@ In order not to attempt to display HTML tags in titles, and to replace HTML tags
 Rather than calling the replace method multiple times, each incurring a full traversal of the string, multiple matches can be compiled into a single pattern.
 
 **TextUtils.java**
-**static Pattern generatePattern**
 ``` java
 static Pattern generatePattern(@NonNull Set<String> keys) {
         final StringBuilder b = new StringBuilder();
@@ -4854,7 +4835,6 @@ Each match key is escaped with the "[\\<\\(\\[\\{\\\\\\^\\-\\=\\$\\!\\|\\]\\}\\)
 Once a valid pattern has been generated, a single ```Matcher``` can be used to replace a set of key value pairs from a ```Map```.
 
 **TextUtils.java**
-**static String replace(@Nullable String s, Map<String, String> replacements, Pattern pattern)**
 ``` java
 static String replace(@Nullable String s, Map<String, String> replacements, Pattern pattern) {
         if(s == null) return null;
@@ -4888,7 +4868,6 @@ The numeric approximation to the function is given below
 Each RGB value is then used in the relative luminance formula to determine whether to use a light or dark text colour.
 
 **TextUtils.java**
-**public static int getTextColorForBackground**
 ``` java
 public static int getTextColorForBackground(int bg) {
         double r = Color.red(bg) / 255d;
@@ -5098,7 +5077,6 @@ These methods are annotated with the @JavascriptInterface annotations, which mak
 In order to call JavaScript functions from the Java code the ```evaulateJavascript``` function is called, which evaulates a string of JavaScript.
 
 **MarkdownWebView.java**
-**private void init**
 ``` java
 private void init() {
         setWebViewClient(new WebViewClient() {
@@ -6276,7 +6254,6 @@ The line after ```View``` binding in ```UserActivity``` is the call ```postponeE
 ```startPostponedEnterTransition``` is called.
 
 **UserInfoFragment.java**
-**public View onCreateView**
 ``` java
 public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         final View view = inflater.inflate(R.layout.fragment_user_info, container, false);
@@ -6336,7 +6313,6 @@ The second problem, which was assumed to have been solved when setting the drawa
 This is done in the ```UI``` utility method ```setDrawableForIntent```
 
 **UI.java**
-**public static void setDrawable**
 ``` java
 public static void setDrawableForIntent(@NonNull ImageView iv, @NonNull Intent i) {
         if(iv.getDrawable() instanceof BitmapDrawable) {
@@ -6879,7 +6855,6 @@ It also checks if its listener has been set, and notifies it of the newly loaded
 The ```onDraw``` method needs to deal with two states, either the ```ContributionsView``` has a non empty list of ```ContributionsDays``` or it does not.
 
 **ContributionsView.java**
-**protected void onDraw**
 ``` java
 protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -7000,7 +6975,6 @@ This method computes numerous statistics about the user:
 - Their longest uninterrupted 'streak' of active days
 
 **UserInfoFragment.java**
-**public void contributionsLoaded**
 ``` java
 public void contributionsLoaded(List<ContributionsLoader.ContributionsDay> contributions) {
         if(!areViewsValid()) return;
@@ -7079,7 +7053,6 @@ The ```displayUser``` method in ```Formatter``` is used in both the ```LoginActi
 layout.
 
 **Formatter.java**
-**public static void displayUser**
 ``` java
 public static void displayUser(ViewGroup userInfoParent, User user) {
         userInfoParent.setVisibility(View.VISIBLE);
@@ -7169,7 +7142,6 @@ Once the username and avatar URL have been bound, a ```LayoutParams``` instance 
 The ```getInfoTextView``` method takes the ```Context``` required to instantiate a ```View``` and a drawable resource id to display at the start of the ```TextView```.
 
 **Formatter.java**
-**private static TextView getInfoTextView**
 ``` java
 private static TextView getInfoTextView(Context context, @DrawableRes int drawableRes) {
         final TextView tv = new TextView(context);
@@ -7208,7 +7180,6 @@ if(!GitHubSession.getSession(getContext()).getUserLogin().equals(user.getLogin()
 The ```updated``` method is used for binding the following information, and ```loadComplete``` passes its return value through to ```updated```.
 
 **UserInfoFragment.java**
-**public void updated**
 ``` java
 public void updated(Boolean isFollowing) {
         if(mFollowButton == null) {
