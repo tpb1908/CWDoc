@@ -1392,7 +1392,49 @@ A single repository is shown as a list item with the repository name, descriptio
 
 The third lists the user's starred repositories, using the same list item layout as the user's own repositories without the pin button.
 
-The fourth lists the user's Gists 
+The fourth lists the user's Gists, with each item showing the Gist title and description.
+
+The fifth lists the users that the authenticated user is following.
+
+The sixth lists the users that are following the authenticated user.
+
+Each user listed in the forth of fifth ```Fragments``` is displayed with their avatar and login.
+
+![User viewholder](http://imgur.com/dGpUaJJ.png)
+
+#page
+
+#### Repository information Activity
+
+The repository information ```Activity``` is also split into multiple ```Fragments```
+
+The first ```Fragment``` should display information about the repository, as well as the users related to it.
+
+![Repo info fragment](http://imgur.com/Efb2VjU.png)
+
+Once populated with data this layout will show the user that created the repository, the size of the repository, the number of issues, the number of forks, the number of stars, and
+the license.
+
+If there are users collaborating on or contributing to the repository they will be shown in a ```HorizontalScrollView```.
+
+The second ```Fragment``` should display the repository's README file.
+
+The third ```Fragment``` should display the commits made to the repository, and allow selecting the branch for which to view commits.
+
+![Repo commit fragment](http://imgur.com/Mp26ebe.png)
+
+
+The fourth ```Fragment``` should display the issues on a repository, and allow filtering as well as searching the issues.
+
+![Repo issues fragment](http://imgur.com/E5tVyok.png)
+
+Each list item shows the issue state, the user that created the issue, issue information and an overflow button for performing actions on the issue.
+
+The fifth and final ```Fragment``` displays each of the projects associated with the repository.
+
+![Repo projects fragment](http://imgur.com/xbmrCIz.png)
+
+Each list item displays the project name, its description, the last time it was updated, its state, and an overflow button for performing actions on the project.
 
 #page
 
