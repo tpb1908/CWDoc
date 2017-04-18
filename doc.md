@@ -3044,4 +3044,3 @@ When displaying a user's repositories, the ```RepositoriesAdapter``` must also s
 
 #import "app/src/main/java/com/tpb/projects/common/RepositoriesAdapter.java"
 
-
