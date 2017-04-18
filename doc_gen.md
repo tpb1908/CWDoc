@@ -2017,7 +2017,7 @@ mWebView.setLayoutParams(FILL);
 The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture the code once the user has logged in, as well as ensuring that the user only navigates through the pages required to log in.
 
 The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
-The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler''' which then requests the authorization token.
+The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler``` which then requests the authorization token.
 
 This completes objective 1.a
 
@@ -2821,75 +2821,7 @@ The ```loadImage``` method is responsible for loading and displaying the image.
 
 **NetworkImageView.java**
 ``` java
-package com.tpb.projects.common;
-
-import android.content.Context;
-import android.content.res.TypedArray;
-import android.support.annotation.IdRes;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v7.widget.AppCompatImageView;
-import android.text.TextUtils;
-import android.util.AttributeSet;
-import android.view.ViewGroup;
-
-import com.androidnetworking.error.ANError;
-import com.androidnetworking.internal.ANImageLoader;
-import com.tpb.projects.R;
-
-/**
- * Created by theo on 01/04/17.
- */
-
-public class NetworkImageView extends AppCompatImageView {
-
-    private String mUrl;
-
-    @IdRes private int mDefaultImageResId;
-    @IdRes private int mErrorImageResId;
-
-    private ANImageLoader.ImageContainer mImageContainer;
-
-    public NetworkImageView(Context context) {
-        super(context);
-    }
-
-    public NetworkImageView(Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-        if(attrs != null) init(attrs, 0);
-    }
-
-    public NetworkImageView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
-        if(attrs != null) init(attrs, defStyleAttr);
-    }
-
-    private void init(AttributeSet attrs, int defStyleAttr) {
-        final TypedArray array = getContext()
-                .obtainStyledAttributes(attrs, R.styleable.NetworkImageView, defStyleAttr, 0);
-        mDefaultImageResId = array
-                .getResourceId(R.styleable.NetworkImageView_default_image_resource,
-                        R.drawable.ic_avatar_default
-                );
-        mErrorImageResId = array
-                .getResourceId(R.styleable.NetworkImageView_error_image_resource, 0);
-        array.recycle();
-    }
-
-    public void setImageUrl(@NonNull String url) {
-        mUrl = url;
-        loadImage(false);
-    }
-
-    public void setDefaultImageResId(@IdRes int defaultImage) {
-        mDefaultImageResId = defaultImage;
-    }
-
-    public void setErrorImageResId(@IdRes int errorImage) {
-        mErrorImageResId = errorImage;
-    }
-
-    private void loadImage(final boolean isInLayoutPass) {
+private void loadImage(final boolean isInLayoutPass) {
         final int width = getWidth();
         final int height = getHeight();
 
@@ -2953,29 +2885,6 @@ public class NetworkImageView extends AppCompatImageView {
         );
 
     }
-
-    private void setDefaultImage() {
-        if(getDrawable() != null) return; //Drawable has been set manually
-        if(mDefaultImageResId != 0) {
-            setImageResource(mDefaultImageResId);
-        } else {
-            setImageBitmap(null);
-        }
-    }
-
-    @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
-        loadImage(true);
-    }
-
-    @Override
-    protected void drawableStateChanged() {
-        super.drawableStateChanged();
-        invalidate();
-    }
-}
-
 ```
 
 The first check performed in ```loadImage``` is whether the image can actually be drawn.
@@ -5439,6 +5348,82 @@ The ```Paint``` colour is then changed to light grey and the new rectangle is dr
 ![HorizontalRuleSpan](http://imgur.com/JAzWw7o.png)
 
 The only caveat to this method is that if the span it must be ensured that there is an empty line for the ```HorizontalRuleSpan``` to fill.
+
+#### QuoteSpan
+
+Android already includes a span for quotes, however it only draws a line to the start of the text and is not configurable, instead using blue (0, 255, 0).
+
+**QuoteSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.text.Layout;
+import android.text.TextPaint;
+import android.text.style.CharacterStyle;
+import android.text.style.LeadingMarginSpan;
+
+/**
+ * Created by theo on 20/03/17.
+ */
+
+public class QuoteSpan extends CharacterStyle implements LeadingMarginSpan {
+    private static final int STRIPE_WIDTH = 4;
+    private static final int GAP_WIDTH = 8;
+    private final int mColor;
+
+    public QuoteSpan() {
+        super();
+        mColor = Color.WHITE;
+    }
+
+    public QuoteSpan(int color) {
+        super();
+        mColor = color;
+    }
+
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void updateDrawState(TextPaint tp) {
+        tp.setAlpha((tp.getColor() & 0x00FFFFFF) > 0x800000 ? 179 : 138);
+    }
+
+    @Override
+    public int getLeadingMargin(boolean first) {
+        return STRIPE_WIDTH + GAP_WIDTH;
+    }
+
+    @Override
+    public void drawLeadingMargin(Canvas c, Paint p, int x, int dir,
+                                  int top, int baseline, int bottom,
+                                  CharSequence text, int start, int end,
+                                  boolean first, Layout layout) {
+        final Paint.Style style = p.getStyle();
+        final int color = p.getColor();
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(mColor);
+        c.drawRect(x, top, x + dir * STRIPE_WIDTH, bottom, p);
+        p.setStyle(style);
+        p.setColor(color);
+    }
+}
+```
+
+```QuoteSpan``` extends ```CharacterStyle```, allowing it to set modify the ```TextPaint```, as well as implementing ```LeadingMarginSpan``` in order to draw the quote line.
+
+The ```QuoteSpan``` follows the material guidelines for secondary text, which specify using an opacity of 54% for secondary text using a dark text on light backgrounds, and using 70%
+opacity for secondary text using a white text on light backgrounds.
+
+Each Android colour is stored as an integer with alpha, red, green, and blue occupying each byte.
+The alpha value is stripped from the colour by and-ing it with 00FFFFFF, and it is then compared to the middle colour value to approximate whether it is a light or dark colour.
+
+In ```drawLeadingMarginSpan``` the original ```Style``` and colour are saved, and a rectangle is drawn across the whole vertical space of the line, and across 4 pixels horizontally. 
+The original style and colour are then saved.
 
 <div style="page-break-after: always;"></div>
 

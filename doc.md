@@ -1527,7 +1527,7 @@ mWebView.setLayoutParams(FILL);
 The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture the code once the user has logged in, as well as ensuring that the user only navigates through the pages required to log in.
 
 The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
-The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler''' which then requests the authorization token.
+The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler``` which then requests the authorization token.
 
 This completes objective 1.a
 
@@ -1837,7 +1837,7 @@ When the ```NetworkImageView``` is instantiated it checks the ```AttributeSet```
 
 The ```loadImage``` method is responsible for loading and displaying the image.
 
-#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $private void void loadImage$"
+#import "app/src/main/java/com/tpb/projects/common/NetworkImageView.java $private void loadImage$"
 
 The first check performed in ```loadImage``` is whether the image can actually be drawn.
 
