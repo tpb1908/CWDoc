@@ -1901,6 +1901,9 @@ In this case, a ```post``` call is made, which will add a runnable to the UI thr
 
 When the ```NetworkImageView``` is able to set the image, it checks whether the ```Bitmap``` is non null, and sets either the ```Bitmap``` or the default resource accordingly.
 
+The ```NetworkImageView``` is used to display user avatars, in objectives 2.i.b, 2.v, 2.vi, 3.iv.c, 3.v.b.3, 3.v.b.4, 4.i.e, 4.i.i, 4.ii.a, 5.i.c, 5.iii.a.1, and 6.iv.b.6.
+
+
 #page
 
 ### ViewSafeFragment
@@ -1996,7 +1999,7 @@ The ```expand``` and ```collapse``` methods are used to animate ```Views```.
 ```expand``` animates a ```View``` from no height to its measured height, and ```collapse``` shrinks a ```View``` from its measured height to no height before hiding it. 
 
 ```flashViewBackground``` is a method used to fade the background colour of a ```View``` from its original colour to a highlight colour, and back again.
-This method can be used to highlight an important ```View```, such as when jumping to a search result.
+This method can be used to highlight an important ```View```, such as when jumping to a search result, such as in objective 6.ix.c.
 
 The next four methods are used for unit conversion, converting pixels to density independent pixels, as well as converting density independent pixels or scale independent pixels to pixels.
 
@@ -2182,6 +2185,9 @@ The next three checks deal with formatting GitHub's checkbox lists to use ballot
 The first check is for an upper or lowercase "x" contained between two square braces. The last two two characters are removed from the builder and the unicode "ballot box with check" is added.
 The second two checks are both for ballot boxes without checks, either written as "[]" or "[ ]".
 
+This fulfills objective 9.ii.g.
+
+
 The next check is for image links, which need to be parsed both in order to deal with links relative to the repository and to add spacing around them as they will be displayed as images.
 
 The next check is for emojis, which are contained between two colons.
@@ -2212,6 +2218,8 @@ Once the name has been added, the counter position is returned.
 
 If the name is not valid, the loop breaks, "@" character is appended, and the original position is returned.
 
+This method completes objective 9.ii.d.
+
 #### Issue links
 
 GitHub issue links are hashes, "#", followed by integer strings.
@@ -2223,6 +2231,8 @@ If the character is instead whitespace or a line ending the issue link may be va
 If we are at the end of the character array the final character must be checked for validity, and added to numBuilder, otherwise the loop breaks.
 The link is built, and if the counter is not at the end of the array the original whitespace is appended.
 If the character was not a valid issue link, the hash, "#", is appended and the original index is returned.
+
+This method completes objective 9.ii.e.
 
 #### Relative links
 
@@ -2252,6 +2262,8 @@ If the URL is already valid, it is added to the builder. Otherwise the concatena
 Finally, the closing bracket and breaks are added.
 
 If the URL does not end with an image extension, it is just added to the builder.
+
+This method completes objective 9.ii.c.1.
 
 #### Emoji
 
@@ -2286,6 +2298,8 @@ The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags 
 
 If another colon is reached, the ```Emoji``` is loaded from ```EmojiLoader``` and if it is non null, the emoji unicode string is added to the parsed text.
 Otherwise the colon is appended and the original position is returned.
+
+This method completes objective 9.ii.f.
 
 ### Text Utilities and Android Regex patterns
 
@@ -2337,6 +2351,8 @@ The method uses a matcher from the SPACED_MATCH_PATTERN and sets a ```CleanURLSp
 
 The ```Spanned.SPAN_EXCLUSIVE_EXCLUSIVE``` flag means that if a character or another span is inserted at either end of the ```CleanURLSpan``` it will not be viewed as part of the ```CleanURLSpan```.
 
+This method completes objective 9.iii.
+
 #### Multiple pattern matching and string escaping
 
 In order not to attempt to display HTML tags in titles, and to replace HTML tags in order to stop Android capturing them, multiple string replace calls must be used.
@@ -2375,6 +2391,8 @@ The numeric approximation to the function is given below
 Each RGB value is then used in the relative luminance formula to determine whether to use a light or dark text colour.
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static int getTextColorForBackground$"
+
+This method completes objective 9.ii.h.
 
 #### Other utility methods
 
