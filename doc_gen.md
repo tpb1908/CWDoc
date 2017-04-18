@@ -295,7 +295,7 @@ Blockquotes are displayed in the same way as a HTML blockquote tag
 
 #### Strikethroughs
 
-Placing two tildes on either side of a sequence will draw a stirkethrough through it
+Placing two tildes on either side of a sequence will draw a strikethrough through it
 
 ```
 ~~text~~
@@ -329,7 +329,7 @@ is displayed as the emoji character 🐫
 
 #### Code 
 
-Code can be inserted between triple backquotes 
+Code can be inserted between triple backticks
 
 ```
 
@@ -666,7 +666,7 @@ A ```Fragment``` has its own lifecycle separate from its parent ```Activity```
 
 ### RecyclerViews
 
-The ```ListView``` class was added to Android in API level `.
+The ```ListView``` class was added to Android in API level 1.
 As its name suggests a ```ListView``` is used to show a set of ```Views``` in a scrollable list.
 
 The ```RecyclerView``` was added in API level 22 (February 2015) with the intention of replacing the ```ListView```.
@@ -797,7 +797,7 @@ Each method takes a ```TAG``` string which is used to identify the source of the
 
 ## Identification of the problem
 
-In July 2012, GitHub released an offical app for Android.
+In July 2012, GitHub released an official app for Android.
 
 # TODO Split frames from GIF
 
@@ -891,7 +891,7 @@ The client must implement the following features:
             <li>Commits
                 <ol type="i">
                     <li>List the commits made to a repository</li>
-                    <li>Implement selecting the branch fo which to show commits</li>
+                    <li>Implement selecting the branch for which to show commits</li>
                     <li>Display the user that made the commit, and the commit message</li>
                 </ol>
             </li>
@@ -966,7 +966,7 @@ The client must implement the following features:
                     <li>Date that the issue was opened</li>
                     <li> User(s) assigned to the issue </li>
                     <li> Labels added to the issue </li>
-                    <li> Display the list of events which have occured on the issue
+                    <li> Display the list of events which have occurred on the issue
                         <ol type="1">
                             <li> Closed - When the issue was closed, and the commit if it was closed from a commit message </li>
                             <li> Reopened- When the issue was re-opened, and by whom </li>
@@ -975,7 +975,7 @@ The client must implement the following features:
                             <li> Referenced- When the issue was referenced from a commit message, and the commit </li>
                             <li> Mentioned- When a user was mentioned in the body, and the user that was mentioned </li>
                             <li> Assigned- When a user was assigned to the issue, the user that was assigned, and by whom </li>
-                            <li> Unassigned- When a user was unassinged from the issue, the user that was unassigned, and by whom </li>
+                            <li> Unassigned- When a user was unassigned from the issue, the user that was unassigned, and by whom </li>
                             <li> Labeled- When a label was added to the issue, and by whom </li>
                             <li> Unlabeled- When a label was removed from the issue, and by whom </li>
                             <li> Milestoned- When the issue was added to a milestone, and by whom </li>
@@ -1025,7 +1025,7 @@ The client must implement the following features:
             <li>Display information about the commit
                 <ol type="i">
                     <li>The commit message</li>
-                    <li>The time that the commmit was created</li>
+                    <li>The time that the commit was created</li>
                     <li>The user that created the commit</li>
                     <li>The number of additions and deletions made in the commit</li>
                 </ol>
@@ -1091,7 +1091,7 @@ The client must implement the following features:
                             <li>The issue body</li>
                             <li>The issue state</li>
                             <li>The issue number</li>
-                            <li>The number of comements on the issue</li>
+                            <li>The number of comments on the issue</li>
                             <li>The user that opened the issue </li>
                             <li>The user that closed the issue (If applicable)</li>
                             <li>The user(s) that are assigned to the issue</li>
@@ -1150,7 +1150,7 @@ The client must implement the following features:
                     <li>Projects
                         <ol type="a">
                             <li>Open individual projects from their numbers</li>
-                            <li>With a project, jump to a selected card from the id specified in a url</li>
+                            <li>With a project, jump to a selected card from the id specified in a URL</li>
                         </ol>
                     </li>
                 </ol>
@@ -1185,7 +1185,7 @@ The client must implement the following features:
                         <ol type="1">
                             Display short code blocks as monospaced text blocks within the text body
                         </ol>
-                    <li>Parse strikethrougs and create the correct spans </li>
+                    <li>Parse strikethroughs and create the correct spans </li>
                     <li>Images
                         <ol type="1">
                             <li>Parse image links</li>
@@ -1484,7 +1484,7 @@ The scope parameter is used to specify what level of access is required to the u
 
 If the user signs in and accepts the authorization request, GitHub redirects back to your site with a temporary parameter.
 
-The ```code``` parameter has a limited timeframe to be exchanged for an authorization token.
+The ```code``` parameter has a limited time frame to be exchanged for an authorization token.
 
 This is done by posting to ```https://github.com/login/oauth/access_token```.
 
@@ -1779,7 +1779,7 @@ The ```APIHandler``` class is mostly static constants:
 - AUTHORIZATION_TOKEN_FORMAT - A format string used when inserting the authorization key into a header
 
 Next we have the headers themselves. 
-Asheaders are key value pairs, they are represented as string to string maps.
+As headers are key value pairs, they are represented as string to string maps.
 
 We then have the ```SEGMENT_``` constants. These are segments of the API paths which are used across numerous different API requests.
 
@@ -2059,7 +2059,7 @@ mWebView.setLayoutParams(FILL);
 The ```OAuthWebViewClient``` extends ```WebViewClient``` and is used to capture the code once the user has logged in, as well as ensuring that the user only navigates through the pages required to log in.
 
 The method ```onPageStarted(WebView view, String url, Bitmap favicon)``` is called whenever a page load begins.
-The client checks if the url contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler``` which then requests the authorization token.
+The client checks if the URL contains `?code=', and if so,  passes the segment after that point to the ```OAuthHandler``` which then requests the authorization token.
 
 This completes objective 1.a
 
@@ -2169,7 +2169,7 @@ public class OAuthHandler extends APIHandler {
 
 The ```OAuthHandler``` is used to load the authenticated user for the first time.
 
-```getAccessToken(final String code)``` performs a get request to the formatted token url, and parses the response as a string.
+```getAccessToken(final String code)``` performs a get request to the formatted token URL, and parses the response as a string.
 The access token is extracted from the string between "access_token=" and "&scope".
 Once the access token has been extracted:
 - The token is stored with ```GitHubSession```
@@ -2194,9 +2194,9 @@ Once the user has logged in, the GitHub authentication page will show the access
 | --- | --- | 
 |![Page 1](http://imgur.com/zmbcpfA.png) | ![Page 2](http://imgur.com/wiieru1.png)
 
-If the user presses the authorize button, the page will be redirected through url containing the path parameter "code".
+If the user presses the authorize button, the page will be redirected through URL containing the path parameter "code".
 
-In on the overriden ```onPageStarted``` method of the ```OAuthWebViewClient``` this results in the ```code``` parameter being passed to the ```OAuthHandler``` through ```fetchAccessToken```.
+In on the overridden ```onPageStarted``` method of the ```OAuthWebViewClient``` this results in the ```code``` parameter being passed to the ```OAuthHandler``` through ```fetchAccessToken```.
 
 **LoginActivity.java**
 ``` java
@@ -2368,7 +2368,7 @@ public Loader loadProject(@Nullable final ItemLoader<Project> loader, int id) {
 ```
 
 In this case the ```ANRequest``` instance is built and only requested as a ```JSONObject``` when there is an ```ItemLoader``` to deal with the model.
-This allows the response to be preloaded before an Activity is started, and only parsed to a ```DataModel``` once a user interface is present to use it.
+This allows the response to be pre-loaded before an Activity is started, and only parsed to a ```DataModel``` once a user interface is present to use it.
 
 
 The ```Loader``` class also contains the ```ListLoader``` interface
@@ -2651,7 +2651,7 @@ The ```runningTransitionsField``` refers to a ```ThreadLocal``` ```WeakReference
 
 ```ThreadLocal``` is a reference to a field, such that each ```Thread``` which access a thread-local variable via the ```TheadLocals``` get and set methods have their own copy of the variable.
 
-A ```WeakReference``` is a reference which is not strong enough to prevent grabage collection.
+A ```WeakReference``` is a reference which is not strong enough to prevent garbage collection.
 
 Finally we have the map which may contain the reference to our ```Activity```'s ```DecorView```.
 
@@ -2932,10 +2932,10 @@ private void loadImage(final boolean isInLayoutPass) {
 The first check performed in ```loadImage``` is whether the image can actually be drawn.
 
 The ```View``` width and height are collected, before the ```LayoutParams``` are checked to determine whether the ```NetworkImageView``` is of a fixed size, or should expand to the size of its image.
-If the ```NetworkImageView``` has 0 width and height, and doesn't wrap in either direction, then ```loadImage``` returns as it cannnot display the image.
+If the ```NetworkImageView``` has 0 width and height, and doesn't wrap in either direction, then ```loadImage``` returns as it cannot display the image.
 
 The second check is whether the URL is empty.
-If a null or empty url is passed, any current request is cancelled, and the default image is set.
+If a null or empty URL is passed, any current request is cancelled, and the default image is set.
 
 The third check is whether the URL which is currently being loaded, or has been loaded is the same as the URL passed to the ```NetworkImageView```.
 If the URL is already being loaded, ```loadImage``` returns, otherwise it cancels the current request in preparation for loading a new image.
@@ -3394,7 +3394,7 @@ The next four methods are used for unit conversion, converting pixels to density
 As its name suggest, ```setStatusBarColor``` is used to set the status bar color for a ```Window```, which is required if the ```Activity``` uses a theme with transparency.
 
 Finally, ```getSafeNavigationBarTransitionPair```is a utility for shared element transitions.
-When a ```View``` in a ```RecyclerView``` is used in a shared element transition between two ```Activities```, the ```View``` is drawn throught the ```ViewOverlay``` layer, which draws above the software navigation bar.
+When a ```View``` in a ```RecyclerView``` is used in a shared element transition between two ```Activities```, the ```View``` is drawn through the ```ViewOverlay``` layer, which draws above the software navigation bar.
 If a ```View``` is partially below the navigation bar it will jump in elevation to display above the navigation bar, and jump back under it on the return transition.
 In order to prevent this jumpy transition, the navigation bar can be added to the transition, resulting in it being drawn in the ```ViewOverlay``` above the transitioning ```View```.
 
@@ -3514,7 +3514,7 @@ public class Logger {
 The ```Logger``` class also contains the ```LoggingInterceptor``` class which is a network interceptor used to log all network request made throughout the app.
 
 The ```LoggingInterceptor``` is added in the ```ProjectsApplication``` class.
-It produces two log messages for each call, the first defailts the request being sent, for example a request to the notifications API:
+It produces two log messages for each call, the first details the request being sent, for example a request to the notifications API:
 ```
 Sending request https://api.github.com/notifications on Connection{api.github.com:443, proxy=DIRECT@ hostAddress=api.github.com/192.30.253.116:443 cipherSuite=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 protocol=http/1.1}
                                        Accept: application/vnd.github.v3+json
@@ -3563,11 +3563,11 @@ In order to help debug crashes which happen when not connected to a computer, I 
 
 If a crash occurs, the information about the crash is exported and can then be to debug the issue later.
 
-Each issue shows the version codes for which it occured, as well as more detailed information about the circumstances of the crash.
+Each issue shows the version codes for which it occurred, as well as more detailed information about the circumstances of the crash.
 
 ![Issue info](http://imgur.com/7yqPZjf.png)
 
-The crash information contains the full stack trace as well as information about the device on which the crash occured.
+The crash information contains the full stack trace as well as information about the device on which the crash occurred.
 
 ![Device info](http://imgur.com/tPfFzWS.png)
 
@@ -3610,13 +3610,13 @@ As its name suggest, ```ParagraphStyle``` affects paragraph level text formattin
 
 The interface has no methods, and is instead used only as a marker to indicate that the span or span interface affects text at a wider level.
 
-Direct span implemenations of ```ParagraphStyle``` include ```BulletSpan```, ```QuoteSpan```, and ```DrawableMarginSpan```, while numerous interfaces such as ```AlignmentSpan``` and ```LeadingMarginSpan``` also extend from it.
+Direct span implementations of ```ParagraphStyle``` include ```BulletSpan```, ```QuoteSpan```, and ```DrawableMarginSpan```, while numerous interfaces such as ```AlignmentSpan``` and ```LeadingMarginSpan``` also extend from it.
 
 #### UpdateAppearance
 
 The ```UpdateAppearance``` interface is for spans which affect character-level text "in a way that modifies their appearance when one is added or removed".
 
-Implementations include ```AbsoluteSizeSpan``` which is used to scae text using either density independent pixels, or an absolute pixel size.
+Implementations include ```AbsoluteSizeSpan``` which is used to scale text using either density independent pixels, or an absolute pixel size.
 
 #### UpdateLayout
 
@@ -3842,7 +3842,7 @@ private static int parseIssue(StringBuilder builder, char[] cs, int pos, String 
 If the character is instead whitespace or a line ending the issue link may be valid.
 If we are at the end of the character array the final character must be checked for validity, and added to numBuilder, otherwise the loop breaks.
 The link is built, and if the counter is not at the end of the array the original whitespace is appended.
-If the characater was not a valid issue link, the hash, "#", is appended and the original index is returned.
+If the character was not a valid issue link, the hash, "#", is appended and the original index is returned.
 
 #### Relative links
 
@@ -3864,7 +3864,7 @@ private static String concatenateRawContentUrl(String url, String fullRepoName) 
 A relative URL can be only a file name or it can start with either "/" or "./" specifying a path in the repository.
 
 If the URL begins with "http://" or "https://" it is assumed to be valid and returned.
-Otherwise, the offset is calculated and the url is added as the file path in a link to githubusercontent.
+Otherwise, the offset is calculated and the URL is added as the file path in a link to githubusercontent.
 
 The ```concatenateRawContentUrl``` function is used when parsing image links, as well as when checking links in a repository README.
 
@@ -4096,7 +4096,7 @@ public class EmojiLoader {
 ```
 
 The json file is opened as an ```InputStream``` which is then converted to a ```String``` which can be read as a ```JSONArray``` for conversion to ```Emoji``` objects.
-For each ```Emoji``` succesfully created the object is added to EMOJIS, added to ALIAS_MAP, and added to a ```HashSet``` of ```Emojis``` in TAG_MAP.
+For each ```Emoji``` successfully created the object is added to EMOJIS, added to ALIAS_MAP, and added to a ```HashSet``` of ```Emojis``` in TAG_MAP.
 
 The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags or aliases.
 
@@ -4138,7 +4138,7 @@ Otherwise the colon is appended and the original position is returned.
 
 #### Linkify
 
-```Linkify``` is Andriod's utility for adding clickable links to text. It can match URLs, email addresses, phone numbers, and map addresses.
+```Linkify``` is Android's utility for adding clickable links to text. It can match URLs, email addresses, phone numbers, and map addresses.
 There is no need to match phone numbers and map addresses in GitHub Markdown, however URLs and email addresses should be linked.
 
 The Android regex for URLs is quite large.
@@ -5083,7 +5083,7 @@ When a code block overflows horizontally, as happens often on vertical mobile sc
 This causes a problem when the ```WebView``` is displayed in a ```ViewPager``` because the horizontal touch movements are intercepted by the ```ViewPager``` and result in the entire ```Fragment``` being scrolled
 horizontally.
 
-These events can be can be overriden by calling ```requestDisallowInterceptTouchEvent``` on the ```WebView```'s parent, however we must only call this method for touch events which are on the code blocks, 
+These events can be can be overridden by calling ```requestDisallowInterceptTouchEvent``` on the ```WebView```'s parent, however we must only call this method for touch events which are on the code blocks, 
 otherwise all events will be intercepted by the ```WebView``` and the user will not be able to exit the ```Fragment```.
 
 This is achieved by adding touch listeners in Javascript and then notifying the ```WebView``` through Javascript interface methods
@@ -5381,7 +5381,7 @@ The draw method in ```HorizontalRuleSpan``` draws a bordered rectangle by drawin
 First, it calculates the mid-point of the space available to it (a single line).
 Second, it calculates one quarter of the height of the space available to it.
 Third, it assigns the given x position, and the calculated mid-point and quarter height to a ```RectF``` object in order to draw a rectangle across the canvas between the upper and lower
-quartiles of the line. This makes the total area covered half of the avialable line.
+quartiles of the line. This makes the total area covered half of the available line.
 
 The second rectangle to be drawn fills half of the vertical space within the first rectangle.
 One eighth of the height is calculated as half of the quarter, and the bounds of the rectangle are changed to give the new rectangle a border of this size.
@@ -6765,7 +6765,7 @@ Next, the number of columns to show horizontally can be calculated, as either th
 Each rectangle has an area of the view width over the horizontal number of contributions, however it must also account for the margin between each rectangle.
 For each rectangular segment of the canvas, 90% of the width will be filled with the block, and the remaining 10% left as a margin.
 
-Next the month text height is set as either the text size, or 0 depenedent on whether month text should be drawn.
+Next the month text height is set as either the text size, or 0 dependent on whether month text should be drawn.
 
 The first draw call is to draw the background behind the image. This call draws the background colour behind everything but the space for the month text.
 
@@ -7001,7 +7001,7 @@ if(!GitHubSession.getSession(getContext()).getUserLogin().equals(user.getLogin()
 }
 ```
 
-The ```updated``` method is used for binding the following information, and ```loadComplete``` pases its return value through to ```updated```.
+The ```updated``` method is used for binding the following information, and ```loadComplete``` passes its return value through to ```updated```.
 
 **UserInfoFragment.java**
 ``` java
@@ -7063,7 +7063,7 @@ Instead they can each use the same layout file:
     android:layout_height="match_parent"
     app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-    <android.support.v7.widget.RecyclerView
+    <com.tpb.animatingrecyclerview.AnimatingRecyclerView
         android:id="@+id/fragment_recycler"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -7181,7 +7181,7 @@ The ```RepositoriesAdapter``` tracks its page number when loading ```Repositorie
 
 The second function of the ```UserReposFragment``` is to launch the ```RepoActivity``` for displaying a repository when an item in the ```RecyclerView``` is clicked.
 
-```openRepo``` creates the ```Intent``` to launch the ```RepoActivity```, begins preloading the data which wil be used in ```RepoActvitiy```, and then launches ```RepoActivity```.
+```openRepo``` creates the ```Intent``` to launch the ```RepoActivity```, begins preloading the data which will be used in ```RepoActvitiy```, and then launches ```RepoActivity```.
 
 ### RepositoriesAdapter
 
