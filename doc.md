@@ -1606,7 +1606,7 @@ If the user presses the authorize button, the page will be redirected through UR
 
 In on the overridden ```onPageStarted``` method of the ```OAuthWebViewClient``` this results in the ```code``` parameter being passed to the ```OAuthHandler``` through ```fetchAccessToken```.
 
-#import "app/src/main/java/com/tpb/projects/login/LoginActivity.java $public void onPageStarted(WebView view, String url, Bitmap favicon)$"
+#import "app/src/main/java/com/tpb/projects/login/LoginActivity.java $public void onPageStarted$"
 
 
 #import "gitapi/src/main/java/com/tpb/github/data/auth/OAuthHandler.java $public void getAccessToken$"
@@ -1664,14 +1664,14 @@ Most uses of ```ItemLoader``` load an instance of ```DataModel```.
 An example is ```loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName, int issueNumber, boolean highPriority)```
 
 
-#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $public Loader loadIssue(@NonNull final ItemLoader<Issue> loader, String repoFullName$"
+#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $public Loader loadIssue$"
 
 
 this method is used to load a single ```Issue``` model given a full repository name (user login and repository name) and the issue number.
 
 Some single methods also have prefetching when a null ```ItemLoader``` is passed to them:
 
-#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $public Loader loadProject(@Nullable final ItemLoader<Project> loader, int id)$"
+#import "gitapi/src/main/java/com/tpb/github/data/Loader.java $public Loader loadProject$"
 
 In this case the ```ANRequest``` instance is built and only requested as a ```JSONObject``` when there is an ```ItemLoader``` to deal with the model.
 This allows the response to be pre-loaded before an Activity is started, and only parsed to a ```DataModel``` once a user interface is present to use it.
@@ -2166,9 +2166,9 @@ the new position to continue from in the character array.
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, boolean linkUsernames)$"
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static boolean isWhiteSpace(char c)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static boolean isWhiteSpace$"
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static boolean isLineEnding(char[] cs, int i)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static boolean isLineEnding$"
 
 ```isWhiteSpace``` and ```isLineEnding``` are both utility methods. ```isWhiteSpace``` checks if the character is a space, a tab, a newline, a line tabulation character, a carriage return, or a form feed, while ```isLineEnding``` checks whether the character is a new line or carriage return or the position is the last in the character array.
 
@@ -2196,7 +2196,7 @@ At the end of each iteration the previous and previous previous characters are u
 
 GitHub usernames are strings of text up to 39 characters in length, containing only alphanumeric characters and hypens.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseUsername(StringBuilder builder, char[] cs, int pos)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseUsername$"
 
 ```parseUsername``` iterates through the character array from the position after the "@".
 If the character is alphanumeric or the character is "-" and the previous character is not, and the name limit has not been exceeded, the character is appended to the `nameBuilder` and
@@ -2216,7 +2216,7 @@ If the name is not valid, the loop breaks, "@" character is appended, and the or
 
 GitHub issue links are hashes, "#", followed by integer strings.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseIssue(StringBuilder builder, char[] cs, int pos, String fullRepoPath)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseIssue$"
 
 ```parseIssue``` checks if each character is a numeric value, adding it to numBuilder if so.
 If the character is instead whitespace or a line ending the issue link may be valid.
@@ -2229,7 +2229,7 @@ If the character was not a valid issue link, the hash, "#", is appended and the 
 When Markdown is rendered in a GitHub repository, links can be relative to the repository.
 In order to load content from these links they need to be changed to a full link including the repository path.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static String concatenateRawContentUrl(String url, String fullRepoName)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static String concatenateRawContentUrl$"
 
 A relative URL can be only a file name or it can start with either "/" or "./" specifying a path in the repository.
 
@@ -2280,7 +2280,7 @@ The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags 
 
 ##### Displaying Emoji
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseEmoji(StringBuilder builder, char[] cs, int pos)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/Markdown.java $private static int parseEmoji$"
 
 ```parseEmoji``` iterates through the character array after a colon, adding each alphanumeric or underscore character to a ```StringBuilder```.
 
@@ -2331,7 +2331,7 @@ These patterns are included in the ```MDPattern``` class as they are private in 
 
 Having defined the regex for matching URLs and emails, the ```addLinks``` method can be explained.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static boolean addLinks(@NonNull Spannable spannable))$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static boolean addLinks$"
 
 The method uses a matcher from the SPACED_MATCH_PATTERN and sets a ```CleanURLSpan```, a subclass of ```URLSpan``` to be explained later, across the indices of the match.
 
@@ -2343,7 +2343,7 @@ In order not to attempt to display HTML tags in titles, and to replace HTML tags
 
 Rather than calling the replace method multiple times, each incurring a full traversal of the string, multiple matches can be compiled into a single pattern.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $static Pattern generatePattern(@NonNull Set<String> keys)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $static Pattern generatePattern$"
 
 ```generateKeys``` takes a ```Set``` of strings and builds an or separated pattern from the strings.
 
@@ -2374,7 +2374,7 @@ The numeric approximation to the function is given below
 
 Each RGB value is then used in the relative luminance formula to determine whether to use a light or dark text colour.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static int getTextColorForBackground(int bg)$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static int getTextColorForBackground$"
 
 #### Other utility methods
 
@@ -2421,7 +2421,7 @@ These methods are annotated with the @JavascriptInterface annotations, which mak
 
 In order to call JavaScript functions from the Java code the ```evaulateJavascript``` function is called, which evaulates a string of JavaScript.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/webview/MarkdownWebView.java $private void init()$"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/webview/MarkdownWebView.java $private void init$"
 
 The ```init``` method sets a custom ```WebView``` client which evalutates the Javascript string used to load the rendered Markdown into the WebView once the page has finished loading.
 It also adds a Javascript interface called "TouchIntercept" to the ```WebView```.
@@ -3001,7 +3001,7 @@ if(!GitHubSession.getSession(getContext()).getUserLogin().equals(user.getLogin()
 
 The ```updated``` method is used for binding the following information, and ```loadComplete``` passes its return value through to ```updated```.
 
-#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $public void updated(Boolean$"
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserInfoFragment.java $public void updated$"
 
 ```updated``` first checks if the ```Button``` has ben created, creating it if not.
 It then sets the appropriate resource string for the button and adds an ```onClickListener```.
