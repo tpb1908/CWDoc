@@ -2848,6 +2848,77 @@ The original style and colour are then saved.
 
 #page
 
+#### ListNumberSpan
+
+```ListNumberSpan``` implements ```LeadingMarginSpan``` and is used to draw the keys in an ordered list.
+
+HTML ordered lists can specify four types of keys.
+- Numbers, indexed from 1
+- Letters, indexed from a
+- Capital letters, indexed from A
+- Roman numerals, indexed from i
+- Capital Roman numerals, indexed from I
+
+The ```ListNumberSpan``` needs to specify the margin for for list indentation, as well as drawing the list item number.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/ListNumberSpan.java"
+
+The ```ListNumberSpan``` constructor takes a ```TextPaint```, which is used to calculate the width of the list item text, the number to display, and the ```ListType``` enum.
+
+The string mNumber is calculated with ```getFormattedNumber``` and concatenated with ". ".
+The width of mNumber is then calculated.
+
+In ```getLeadingMargin``` the text width calculated in the constructor is returned.
+
+```drawLeadingMargin``` has to check if the start position is the start position of the span, in order to ensure that only the span at the deepest indentation level draws its text.
+First, it is checked that the text is an instance of ```Spanned```, as the position cannot be found otherwise.
+If the text is an instance, the span start position returned from the cast ```Spanned``` is checked against the start position passed to ```drawLeadingMargin```.
+If these values are the same, the number text is drawn with the parameters passed to ```drawLeadingMargin```.
+
+##### Calculating list number formats
+
+The ```fromString``` method in ```ListType``` is used to convert the type parameter in an ordered list tag to a ```ListType``` enum.
+If the string is empty, NUMBER is returned as the default type.
+If the string is an integer, the integer value is parsed to become the starting index for the list, and NUMBER is returned.
+Otherwise, the method switches on the first character in the string:
+- If it is 'a', LETTER is returned
+- If it is 'A' LETTER_CAP is returned
+- If it is 'i' ROMAN is returned
+- If it is 'I' ROMAN_CAP is returned
+- If it is none of the above, NUMBER is returned
+
+Once the ```ListType``` has been calculated, it needs to be formatted into a string.
+This is done in ```getFormattedNumber``` which takes an integer and a ```ListType```.
+
+If the type is LETTER, ```getLetter``` is returned.
+``` java
+private static String getLetter(int num) {
+    final StringBuilder builder = new StringBuilder();
+    while(num-- > 0) { //1 = a, not 0 = a
+        final int rmdr = num % 26;
+        builder.append((char) (rmdr + 'a'));
+        num = (num - rmdr) / 26;
+    }
+    return builder.reverse().toString();
+}
+```
+This method converts an integer value to a base 26 string.
+It does this by computing the remainder of dividing the number by 26, and offsetting this by the numeric value of the character \'a' (97).
+The remainder is then subtracted from the number, and it is divided by 26.
+This process repeats until the reversed form of the string has been generated.
+The ```StringBuilder``` is then reversed and its value is returned.
+
+If the type is LETTER_CAP, ```getLetter``` is called, and its return value shifted to uppercase.
+
+If the type is ROMAN, ```getRoman``` is called.
+
+```getRoman``` uses a ```TreeMap``` to store the unique roman numeral values of different integers.
+The ```TreeMap``` maintains the order of the mapped pairs.
+
+The greatest key less than or equal to the given key is found with ```floorKey```.
+If this value is the same as the number, there is a direct match and the string is returned.
+Otherwise, the string at the lowest key is concatenated with a recursive call for the value of the number minus the lowest key value.
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.

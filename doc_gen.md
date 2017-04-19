@@ -3584,8 +3584,8 @@ The intent filter system allows specifying a host and a scheme to capture. It al
 
 Unfortunately the pattern matching system is very limited.
 
-An asterisk, "*", matches a sequence of 0 or more occurences of the character immediately preceding it.
-A period, ".", followed by an asterisk, "*", matches any sequence of 0 or more characters.
+An asterisk, "\*", matches a sequence of 0 or more occurences of the character immediately preceding it.
+A period, ".", followed by an asterisk, "\*", matches any sequence of 0 or more characters.
 
 This is of no use when matching GitHub URLs.
 
@@ -3815,6 +3815,8 @@ public class Interceptor extends Activity {
 
 ```
 
+### Possible paths
+
 When onCreate is called, the first check is that the ```Intent``` action is ACTION_VIEW, the ```Intent``` has data, and the data host is github.com, if it is not ```fail``` is called.
 
 If the URL is from GitHub, the ```List``` of path segments are extracted.
@@ -3846,9 +3848,35 @@ particular page on launch.
     - Milestone
         The milestone id is extracted in the same way as an issue id, and the ```Activity``` class is set accordingly.
     - Commit
-        The commit path does not contain a numeric id, but instead contains a SHA hash which is added as an extra to the ```Intent``` after the commit ```Activity``` is set
+        The commit path does not contain a numeric id, but instead contains a SHA hash which is added as an extra to the ```Intent``` after the commit ```Activity``` is set.
 Other-
-Any values greater than 5 items refers to a file or directory in the repository files
+Any values greater than 5 items refers to a file or directory in the repository files.
+
+If the third path segment is "tree", the URL refers to a directory within a project. In this case the tree path is built and added to the ```Intent``` as an extra.
+If the third path segment is "blob", the URl refers to an individual file within the project. The blob path is built and added to the ```Intent``` as an extra.
+
+
+Outside of the switch, the method checks that the component class has been set on the ```Intent```.
+If it has, the ```Intent``` is launched and ```Interceptor``` finishes.
+Otherwise the ```fail``` method is called.
+
+### Showing a chooser
+
+In the event that the ```Interceptor``` fails to determine an ```Activity``` to handle a particular URL, it should suggest other applications which might be able to handle the URL, objective 7.ii.
+
+In order to open a link in another app a chooser dialog should be shown.
+This is done by building an implicit ```Intent```, not declaring the class to handle the ```Intent``` but allowing the user to choose from the available applications.
+
+This is handled in ```generateFailIntentWithoutApp```.
+The method creates a new ```Intent```, with the same action as the ```Intent``` that launched ```Interceptor```.
+It then continues to add the data that was launched with ```Interceptor``` to the new ```Intent```, and add the BROWSABLE and DEFAULT categories.
+
+Next a ```List``` of ```ResolveInfo``` objects is collected, each of which contains information about an application which could handle the new ```Intent```.
+
+If the ```List``` is not empty, a new ```List``` of ```Intents``` is created, and a new ```Intent``` is created for each of the applications, using their package names, if the package name is not the name of this app.
+
+Finally, the chooser ```Intent``` is created using the first ```Intent``` in the targetedShareIntents ```List```, and the rest of the ```Intents``` are added to the chooser.
+
 <div style="page-break-after: always;"></div>
 
 ## Markdown
@@ -4203,7 +4231,7 @@ This method completes objective 9.ii.c.1.
 
 #### Emoji
 
-Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile:" should be rendered as 😄.
+Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile\:" should be rendered as 😄.
 
 ##### Loading Emoji
 
@@ -5127,7 +5155,7 @@ The two files which can be loaded into the ```WebView``` are md_preview and md_p
 </html>
 ```
 
-Each specifies the styleshett to use, and loads both the Javascript used to display the Markdown and the HighlightJS library used by GitHub to highlight code.
+Each specifies the stylesheet to use, and loads both the Javascript used to display the Markdown and the HighlightJS library used by GitHub to highlight code.
 
 The body contains a single div element which is used to display the Markdown once it has been loaded.
 
@@ -5644,6 +5672,205 @@ In ```drawLeadingMarginSpan``` the original ```Style``` and colour are saved, an
 The original style and colour are then saved.
 
 <div style="page-break-after: always;"></div>
+
+#### ListNumberSpan
+
+```ListNumberSpan``` implements ```LeadingMarginSpan``` and is used to draw the keys in an ordered list.
+
+HTML ordered lists can specify four types of keys.
+- Numbers, indexed from 1
+- Letters, indexed from a
+- Capital letters, indexed from A
+- Roman numerals, indexed from i
+- Capital Roman numerals, indexed from I
+
+The ```ListNumberSpan``` needs to specify the margin for for list indentation, as well as drawing the list item number.
+
+**ListNumberSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.support.annotation.NonNull;
+import android.text.Layout;
+import android.text.Spanned;
+import android.text.TextPaint;
+import android.text.style.LeadingMarginSpan;
+
+import com.tpb.mdtext.TextUtils;
+
+import java.util.TreeMap;
+
+/**
+ * Created by theo on 02/03/17.
+ */
+
+public class ListNumberSpan implements LeadingMarginSpan {
+    private final String mNumber;
+    private final int mTextWidth;
+
+    public ListNumberSpan(TextPaint textPaint, int number, ListType type) {
+        mNumber = ListType.getFormattedNumber(number + type.start, type).concat(". ");
+        mTextWidth = (int) textPaint.measureText(mNumber);
+    }
+
+    @Override
+    public int getLeadingMargin(boolean first) {
+        return mTextWidth;
+    }
+
+    @Override
+    public void drawLeadingMargin(Canvas c, Paint p, int x, int dir, int top, int baseline,
+                                  int bottom, CharSequence text, int start, int end,
+                                  boolean first, Layout l) {
+        //Check if we are at the correct depth to draw text rather than just spacing
+        if(text instanceof Spanned) {
+            if(((Spanned) text).getSpanStart(this) == start) {
+                c.drawText(mNumber, x, baseline, p);
+            }
+        }
+    }
+
+    public enum ListType {
+
+        NUMBER,
+        LETTER,
+        LETTER_CAP,
+        ROMAN,
+        ROMAN_CAP;
+
+        int start = 0;
+
+        public static ListType fromString(@NonNull String val) {
+            if(val.isEmpty()) return NUMBER;
+            if(TextUtils.isInteger(val)) {
+                final ListType num = NUMBER;
+                num.start = Integer.parseInt(val) - 1;
+                return num;
+            } else {
+                switch(val.charAt(0)) {
+                    case 'a': return LETTER;
+                    case 'A': return LETTER_CAP;
+                    case 'i': return ROMAN;
+                    case 'I': return ROMAN_CAP;
+                    default: return NUMBER;
+                }
+            }
+        }
+
+        public static String getFormattedNumber(int num, ListType type) {
+            switch(type) {
+                case LETTER:
+                    return getLetter(num);
+                case LETTER_CAP:
+                    return getLetter(num).toUpperCase();
+                case ROMAN:
+                    return getRoman(num);
+                case ROMAN_CAP:
+                    return getRoman(num).toUpperCase();
+                default:
+                    return Integer.toString(num);
+            }
+        }
+
+        private static String getLetter(int num) {
+            final StringBuilder builder = new StringBuilder();
+            while(num-- > 0) { //1 = a, not 0 = a
+                final int rmdr = num % 26;
+                builder.append((char) (rmdr + 'a'));
+                num = (num - rmdr) / 26;
+            }
+            return builder.reverse().toString();
+        }
+
+        private static TreeMap<Integer, String> map = new TreeMap<>();
+
+        static {
+            map.put(1000, "m");
+            map.put(900, "cm");
+            map.put(500, "d");
+            map.put(400, "cd");
+            map.put(100, "c");
+            map.put(90, "xc");
+            map.put(50, "l");
+            map.put(40, "xl");
+            map.put(10, "x");
+            map.put(9, "xi");
+            map.put(5, "v");
+            map.put(4, "iv");
+            map.put(1, "i");
+        }
+
+        private static String getRoman(int num) {
+            final int l = map.floorKey(num);
+            if(l == num) {
+                return map.get(num);
+            }
+            return map.get(l) + getRoman(num - l);
+        }
+
+    }
+
+}
+
+```
+
+The ```ListNumberSpan``` constructor takes a ```TextPaint```, which is used to calculate the width of the list item text, the number to display, and the ```ListType``` enum.
+
+The string mNumber is calculated with ```getFormattedNumber``` and concatenated with ". ".
+The width of mNumber is then calculated.
+
+In ```getLeadingMargin``` the text width calculated in the constructor is returned.
+
+```drawLeadingMargin``` has to check if the start position is the start position of the span, in order to ensure that only the span at the deepest indentation level draws its text.
+First, it is checked that the text is an instance of ```Spanned```, as the position cannot be found otherwise.
+If the text is an instance, the span start position returned from the cast ```Spanned``` is checked against the start position passed to ```drawLeadingMargin```.
+If these values are the same, the number text is drawn with the parameters passed to ```drawLeadingMargin```.
+
+##### Calculating list number formats
+
+The ```fromString``` method in ```ListType``` is used to convert the type parameter in an ordered list tag to a ```ListType``` enum.
+If the string is empty, NUMBER is returned as the default type.
+If the string is an integer, the integer value is parsed to become the starting index for the list, and NUMBER is returned.
+Otherwise, the method switches on the first character in the string:
+- If it is 'a', LETTER is returned
+- If it is 'A' LETTER_CAP is returned
+- If it is 'i' ROMAN is returned
+- If it is 'I' ROMAN_CAP is returned
+- If it is none of the above, NUMBER is returned
+
+Once the ```ListType``` has been calculated, it needs to be formatted into a string.
+This is done in ```getFormattedNumber``` which takes an integer and a ```ListType```.
+
+If the type is LETTER, ```getLetter``` is returned.
+``` java
+private static String getLetter(int num) {
+    final StringBuilder builder = new StringBuilder();
+    while(num-- > 0) { //1 = a, not 0 = a
+        final int rmdr = num % 26;
+        builder.append((char) (rmdr + 'a'));
+        num = (num - rmdr) / 26;
+    }
+    return builder.reverse().toString();
+}
+```
+This method converts an integer value to a base 26 string.
+It does this by computing the remainder of dividing the number by 26, and offsetting this by the numeric value of the character \'a' (97).
+The remainder is then subtracted from the number, and it is divided by 26.
+This process repeats until the reversed form of the string has been generated.
+The ```StringBuilder``` is then reversed and its value is returned.
+
+If the type is LETTER_CAP, ```getLetter``` is called, and its return value shifted to uppercase.
+
+If the type is ROMAN, ```getRoman``` is called.
+
+```getRoman``` uses a ```TreeMap``` to store the unique roman numeral values of different integers.
+The ```TreeMap``` maintains the order of the mapped pairs.
+
+The greatest key less than or equal to the given key is found with ```floorKey```.
+If this value is the same as the number, there is a direct match and the string is returned.
+Otherwise, the string at the lowest key is concatenated with a recursive call for the value of the number minus the lowest key value.
 
 ## User Activity
 
@@ -7696,4 +7923,3 @@ public class RepositoriesAdapter extends RecyclerView.Adapter<RepositoriesAdapte
 }
 
 ```
-
