@@ -2096,8 +2096,8 @@ The intent filter system allows specifying a host and a scheme to capture. It al
 
 Unfortunately the pattern matching system is very limited.
 
-An asterisk, "*", matches a sequence of 0 or more occurences of the character immediately preceding it.
-A period, ".", followed by an asterisk, "*", matches any sequence of 0 or more characters.
+An asterisk, "\*", matches a sequence of 0 or more occurences of the character immediately preceding it.
+A period, ".", followed by an asterisk, "\*", matches any sequence of 0 or more characters.
 
 This is of no use when matching GitHub URLs.
 
@@ -2133,6 +2133,8 @@ category which allosws the application to be started by a web-browser.
 
 #import "app/src/main/java/com/tpb/projects/flow/Interceptor.java"
 
+### Possible paths
+
 When onCreate is called, the first check is that the ```Intent``` action is ACTION_VIEW, the ```Intent``` has data, and the data host is github.com, if it is not ```fail``` is called.
 
 If the URL is from GitHub, the ```List``` of path segments are extracted.
@@ -2164,9 +2166,35 @@ particular page on launch.
     - Milestone
         The milestone id is extracted in the same way as an issue id, and the ```Activity``` class is set accordingly.
     - Commit
-        The commit path does not contain a numeric id, but instead contains a SHA hash which is added as an extra to the ```Intent``` after the commit ```Activity``` is set
+        The commit path does not contain a numeric id, but instead contains a SHA hash which is added as an extra to the ```Intent``` after the commit ```Activity``` is set.
 Other-
-Any values greater than 5 items refers to a file or directory in the repository files
+Any values greater than 5 items refers to a file or directory in the repository files.
+
+If the third path segment is "tree", the URL refers to a directory within a project. In this case the tree path is built and added to the ```Intent``` as an extra.
+If the third path segment is "blob", the URl refers to an individual file within the project. The blob path is built and added to the ```Intent``` as an extra.
+
+
+Outside of the switch, the method checks that the component class has been set on the ```Intent```.
+If it has, the ```Intent``` is launched and ```Interceptor``` finishes.
+Otherwise the ```fail``` method is called.
+
+### Showing a chooser
+
+In the event that the ```Interceptor``` fails to determine an ```Activity``` to handle a particular URL, it should suggest other applications which might be able to handle the URL, objective 7.ii.
+
+In order to open a link in another app a chooser dialog should be shown.
+This is done by building an implicit ```Intent```, not declaring the class to handle the ```Intent``` but allowing the user to choose from the available applications.
+
+This is handled in ```generateFailIntentWithoutApp```.
+The method creates a new ```Intent```, with the same action as the ```Intent``` that launched ```Interceptor```.
+It then continues to add the data that was launched with ```Interceptor``` to the new ```Intent```, and add the BROWSABLE and DEFAULT categories.
+
+Next a ```List``` of ```ResolveInfo``` objects is collected, each of which contains information about an application which could handle the new ```Intent```.
+
+If the ```List``` is not empty, a new ```List``` of ```Intents``` is created, and a new ```Intent``` is created for each of the applications, using their package names, if the package name is not the name of this app.
+
+Finally, the chooser ```Intent``` is created using the first ```Intent``` in the targetedShareIntents ```List```, and the rest of the ```Intents``` are added to the chooser.
+
 #page
 
 ## Markdown
@@ -2349,7 +2377,7 @@ This method completes objective 9.ii.c.1.
 
 #### Emoji
 
-Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile:" should be rendered as 😄.
+Emoji are added to GitHub Markdown by specifying their alias between two colons. For example ":smile\:" should be rendered as 😄.
 
 ##### Loading Emoji
 
@@ -2549,7 +2577,7 @@ The two files which can be loaded into the ```WebView``` are md_preview and md_p
 </html>
 ```
 
-Each specifies the styleshett to use, and loads both the Javascript used to display the Markdown and the HighlightJS library used by GitHub to highlight code.
+Each specifies the stylesheet to use, and loads both the Javascript used to display the Markdown and the HighlightJS library used by GitHub to highlight code.
 
 The body contains a single div element which is used to display the Markdown once it has been loaded.
 
@@ -3145,4 +3173,3 @@ The ```RepositoriesAdapter``` is used in two places, displaying the repositories
 When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.b.vi).
 
 #import "app/src/main/java/com/tpb/projects/common/RepositoriesAdapter.java"
-
