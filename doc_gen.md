@@ -5872,6 +5872,50 @@ The greatest key less than or equal to the given key is found with ```floorKey``
 If this value is the same as the number, there is a direct match and the string is returned.
 Otherwise, the string at the lowest key is concatenated with a recursive call for the value of the number minus the lowest key value.
 
+
+``` java
+ private static TreeMap<Integer, String> map = new TreeMap<>();
+
+static {
+    map.put(1000, "m");
+    map.put(900, "cm");
+    map.put(500, "d");
+    map.put(400, "cd");
+    map.put(100, "c");
+    map.put(90, "xc");
+    map.put(50, "l");
+    map.put(40, "xl");
+    map.put(10, "x");
+    map.put(9, "xi");
+    map.put(5, "v");
+    map.put(4, "iv");
+    map.put(1, "i");
+}
+
+private static String getRoman(int num) {
+    final int l = map.floorKey(num);
+    if(l == num) {
+        return map.get(num);
+    }
+    return map.get(l) + getRoman(num - l);
+}
+```
+
+Example:
+
+Converting 46 to roman numerals.
+
+The first call calls map.floorKey(46), which returns 40.
+As 40 != 46, the function returns map.get(40) + getRoman(46 - 40).
+The recursive call getRoman(6) calls map.floorKey(6), which returns 5.
+As 5 != 6, the function returns map.get(5) + getRoman(6 - 5).
+The recursive call getRoman(1) calls map.floorKey(1) which returns 1.
+As 1 == 1, the function returns map.get(1).
+
+As there are no further recursive calls, the function returns map.get(40) + map.get(5) + map.get(1).
+This evaluates to "xl" + "v" + "i", which is correct.
+
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.
