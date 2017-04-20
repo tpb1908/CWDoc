@@ -5915,6 +5915,83 @@ As 1 == 1, the function returns map.get(1).
 As there are no further recursive calls, the function returns map.get(40) + map.get(5) + map.get(1).
 This evaluates to "xl" + "v" + "i", which is correct.
 
+#### RoundedBackgroundEndSpan
+
+GitHub labels are shown with coloured backgrounds which have rounded corners.
+
+![GitHub labels](http://imgur.com/JTcPrjA.png)
+
+The background colour can be achieved using a ```BackgroundColorSpan```, which sets the background colour of the ```TextPaint```.
+However, this draws a rectangular block of colour behind the segment of text, and doesn't allow drawing any other shape.
+
+The problem can be solved by drawing the spans separately, adding a ```ReplacementSpan``` at each end of the ```BackgroundColorSpan``` which draws the rounded corners.
+
+
+**RoundedBackgroundEndSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.support.annotation.NonNull;
+import android.text.style.ReplacementSpan;
+
+/**
+ * Created by theo on 28/03/17.
+ */
+
+public class RoundedBackgroundEndSpan extends ReplacementSpan {
+
+    private int mCharacterWidth;
+    private final int mBgColor;
+    private final boolean mIsEndSpan;
+
+    public RoundedBackgroundEndSpan(int bgColor, boolean isEndSpan) {
+        mBgColor = bgColor;
+        mIsEndSpan = isEndSpan;
+    }
+
+    @Override
+    public int getSize(@NonNull Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
+        mCharacterWidth = (int) paint.measureText("t");
+        return mCharacterWidth;
+    }
+
+    @Override
+    public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, @NonNull Paint paint) {
+        RectF rect =  new RectF(x, top, x + mCharacterWidth, bottom);
+        paint.setColor(mBgColor);
+        canvas.drawRoundRect(rect, paint.getTextSize() / 6, paint.getTextSize() / 6, paint);
+        if(mIsEndSpan) {
+            rect = new RectF(x, top, (x + x + mCharacterWidth) / 2, bottom);
+        } else {
+            rect = new RectF((x + x + mCharacterWidth) / 2, top, x + mCharacterWidth, bottom);
+        }
+        canvas.drawRect(rect, paint);
+    }
+}
+
+```
+
+The ```RoundedBackgroundEndSpan``` will either be drawn at the start or the end of a ```BackgroundColorSpan```. The direction in which it draws is controlled by mIsEndSpan, which is passed to the constructor along with the background colour to use.
+
+The ```RoundedBackgroundEndSpan``` uses one character of space, which is measured in ```getSize```.
+
+The drawing takes place with two calls.
+The CSS on the GitHub website uses a corner size of one sixth the text size, which can be duplicated when painting the rounded rectangle.
+The rounded rectangle is drawn across the measured character width.
+At this point, the rounded section of the end span has been drawn, but it is rounded on both sides which would leave a gap between the rounded rectangle and the text.
+
+The next draw call is dependent on whether the span is at the start or end of the ```BackgroundColorSpan```.
+If the span is at the start of the ```BackgroundColorSpan```, it needs to fill in the space after itself and before the ```BackgroundColorSpan``` whereas if it is after the 
+```BackgroundColorSpan``` it needs to fill in the space after the ```BackgroundColorSpan``` and before itself.
+
+If the span is at the end of the ```BackgroundColorSpan``` the rectangle is created from the given x position (which is the end of the ```BackgroundColorSpan```), to the x position 
+halfway between the start and end of the span.
+If the span is at the start of the ```BackgroundColorSpan``` the rectangle is created from the halfway position to the end of the span.
+
+The rectangle is then drawn.
 
 ## User Activity
 
