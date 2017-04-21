@@ -6119,6 +6119,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.style.ReplacementSpan;
 
+import com.tpb.mdtext.TextUtils;
 import com.tpb.mdtext.handlers.CodeClickHandler;
 
 import org.sufficientlysecure.htmltextview.R;
@@ -6148,7 +6149,7 @@ public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.W
         final int ls = code.indexOf('[');
         final int le = code.indexOf(']');
         if(ls != -1 && le != -1 && le - ls > 0 && le < code.indexOf("\n")) {
-            mLanguage = code.substring(ls + 1, le);
+            mLanguage = TextUtils.capitaliseFirst(code.substring(ls + 1, le));
             mCode = code.substring(le + 1);
         } else {
             mCode = code;
@@ -6172,7 +6173,6 @@ public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.W
         final int textStart = top + textHeight / 4;
 
         if(mLanguage != null && !mLanguage.isEmpty()) {
-            mLanguage = mLanguage.substring(0, 1).toUpperCase() + mLanguage.substring(1);
             canvas.drawText(String.format(mLanguageFormatString, mLanguage), x + offset, textStart,
                     paint
             );
@@ -6181,14 +6181,13 @@ public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.W
         }
 
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(4);
+        paint.setStrokeWidth(mBaseOffset / 4);
         canvas.drawRoundRect(new RectF(x, top + top - bottom, x + canvas.getWidth(), bottom), 7, 7,
                 paint
         );
 
         if(mCodeBM != null) {
-            if(mBMFilter == null)
-                mBMFilter = new PorterDuffColorFilter(paint.getColor(), PorterDuff.Mode.SRC_IN);
+            if(mBMFilter == null) mBMFilter = new PorterDuffColorFilter(paint.getColor(), PorterDuff.Mode.SRC_IN);
             paint.setColorFilter(mBMFilter);
             canvas.drawBitmap(mCodeBM, x, textStart - textHeight, paint);
         }
@@ -6218,6 +6217,47 @@ public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.W
 }
 
 ```
+
+The ```CodeSpan``` is more complicated than the other spans because it also draws a ```BitMap``` image and deals with being clicked.
+
+mHandler is a ```WeakReference``` to a ```CodeClickHandler```, which is called when the span is clicked.
+The code string and language are stored when the span is created, and the format strings are used to format the displayed text dependent on whether or not the language has been set.
+
+```setCode``` is used to check if a language has been embedded in the code string.
+While it has not been explained yet, when the code is parsed it will begin with two square brackets followed by a newline, with the language between the two brackets.
+If the brackets exist, and are before the first index of a newline, the language is extracted. 
+
+```getSize``` measures the size of a single character, and then returns 0, as the span is not drawing any text in the normal manner.
+
+###### Drawing
+
+```draw``` is used to draw a button shape, the "button" text, and the ```BitMap```.
+First, the text size is reduced, as the text is to be drawn between the bounds of the "button".
+Next, the text height is computed from the ```Paint``` font metrics.
+
+The offset is used when drawing text to ensure that it is correctly aligned in the horizontal.
+If the ```BitMap``` is non-null, its width is added to the offset.
+
+The vertical start position of the text is computed as the top position, plus a quarter of the text height.
+
+If the language is non-null and non-empty, the formatted string containing the language is drawn.
+Otherwise, the no-language string is drawn.
+
+In order to draw the "button" shape, the ```Paint``` style is changed to stroke, and its width set to one quarter of the base offset, which is one character width.
+A round rectangle is then drawn across two lines of vertical space, and the entire width of the canvas.
+
+Finally, if the ```BitMap``` has been initialised, a colour filter is set to ensure that it is the same colour as the text, and it is drawn at the start of the span, at a vertical position
+the same as the start of the text.
+
+###### Initialisation
+
+As the ```CodeSpan``` has no access to a ```Context``` instance, it cannot load items from resources.
+This is done with a static initialiser which is called in the custom ```TextView``` written for displaying markdown.
+This allows the ```BitMap``` to be loaded and the correct strings to be loaded for a particular language.
+
+![CodeSpan](http://imgur.com/vC8m9BG.png)
+
+
 
 ## User Activity
 
