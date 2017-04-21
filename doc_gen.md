@@ -331,13 +331,9 @@ is displayed as the emoji character 🐫
 
 Code can be inserted between triple backticks
 
-```
-
- ``` Language
+\``` Language
 
  Some code
-
- ```
 
 ```
 
@@ -6085,15 +6081,12 @@ The first problem to be dealt with is larger blocks of code.
 
 As was written in the markdown section of the background information, code blocks are written
 
-```
-
- ``` Language
+\``` Language
 
  Some code
 
- ```
+\```
 
-```
 
 where the "Language" string is optional.
 
