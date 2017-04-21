@@ -3075,6 +3075,19 @@ This allows the ```BitMap``` to be loaded and the correct strings to be loaded f
 
 ![CodeSpan](http://imgur.com/vC8m9BG.png)
 
+##### TableSpan
+
+The ```TableSpan``` is structured in a very similar manner to ```CodeSpan``` as it also draws a "button" style span across two lines, and draws a bitmap if it has been initialised.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/TableSpan.java"
+
+The key differences are that ```TableSpan``` only ever draws a constant string, and that it takes a ```TableClickHandler``` which only takes one parameter, the table HTML, rather than
+code and a language.
+
+![Table span](http://imgur.com/NDA1ydi.png)
+
+##### Handling clicks
+
 
 
 ## User Activity
