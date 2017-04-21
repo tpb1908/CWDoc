@@ -2995,6 +2995,54 @@ If the span is at the start of the ```BackgroundColorSpan``` the rectangle is cr
 
 The rectangle is then drawn.
 
+#### InlineCodeSpan
+
+The ```InlineCodeSpan``` is used to draw short sections of code within the ```TextView```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/InlineCodeSpan.java"
+
+```InlineCodeSpan``` extends ```ReplacementSpan``` and is used to draw short segments of code.
+The ```InlineCodeSpan``` sets the typeface to monospace in ```updateDrawState``` as well as setting the font size to a value provided in the constructor.
+
+In ```getSize```, the padding size is computed as the width of a character before the width is returned as the measured width of the text plus two times the padding.
+
+Finally, in ```draw``` the ```InlineCodeSpan``` first draws the text, offset by the padding computed earlier, and then draws the code background.
+The background is an opaque grey rectangle which fills the full width of the ```TextView```.
+
+![InlineCodeSpan](http://imgur.com/vP5nytU.png)
+
+#### Dealing with more complex text
+
+As explained earlier, some content, notably large code segments and tables, which is usually displayed on the desktop is not well suited for small vertical displays.
+As such, it would no t be sensible to display this ocntent directly in the ```TextView```.
+
+Instead, placeholders in the ```TextView``` can be used to link to a more suitable method for displaying the content.
+
+##### CodeSpan
+
+The first problem to be dealt with is larger blocks of code.
+
+As was written in the markdown section of the background information, code blocks are written
+
+```
+
+ ``` Language
+
+ Some code
+
+ ```
+
+```
+
+where the "Language" string is optional.
+
+A ```CodeSpan``` needs to be a large enough item in the ```TextView``` that it can be easily clicked.
+It must also be obvious to the user that the span should be clicked.
+
+As such, the span is styled like a button.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/CodeSpan.java"
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.

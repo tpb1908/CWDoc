@@ -5993,6 +5993,232 @@ If the span is at the start of the ```BackgroundColorSpan``` the rectangle is cr
 
 The rectangle is then drawn.
 
+#### InlineCodeSpan
+
+The ```InlineCodeSpan``` is used to draw short sections of code within the ```TextView```.
+
+**InlineCodeSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.support.annotation.IntRange;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.text.TextPaint;
+import android.text.style.ReplacementSpan;
+
+/**
+ * Created by theo on 22/03/17.
+ */
+
+public class InlineCodeSpan extends ReplacementSpan {
+    private final float mTextSize;
+
+    private float mPadding;
+
+
+    public InlineCodeSpan(float textSize) {
+        mTextSize = textSize;
+    }
+
+    @Override
+    public void updateDrawState(TextPaint tp) {
+        tp.setTextSize(mTextSize);
+        tp.setTypeface(Typeface.MONOSPACE);
+    }
+
+    @Override
+    public int getSize(@NonNull Paint paint,
+                       CharSequence text,
+                       @IntRange(from = 0) int start,
+                       @IntRange(from = 0) int end,
+                       @Nullable Paint.FontMetricsInt fm) {
+        mPadding = paint.measureText("c");
+        return  (int) (paint.measureText(text, start, end) + mPadding * 2);
+    }
+
+    @Override
+    public void draw(@NonNull Canvas canvas,
+                     CharSequence text,
+                     @IntRange(from = 0) int start,
+                     @IntRange(from = 0) int end,
+                     float x,
+                     int top,
+                     int y,
+                     int bottom,
+                     @NonNull Paint paint) {
+        canvas.drawText(text, start, end, x + mPadding, y, paint);
+        paint.setColor(Color.GRAY);
+        paint.setAlpha(50);
+        final int leading = paint.getFontMetricsInt().leading;
+        canvas.drawRect((int) x, top - leading, (int) x + canvas.getWidth(), bottom + leading, paint);
+    }
+
+
+}
+```
+
+```InlineCodeSpan``` extends ```ReplacementSpan``` and is used to draw short segments of code.
+The ```InlineCodeSpan``` sets the typeface to monospace in ```updateDrawState``` as well as setting the font size to a value provided in the constructor.
+
+In ```getSize```, the padding size is computed as the width of a character before the width is returned as the measured width of the text plus two times the padding.
+
+Finally, in ```draw``` the ```InlineCodeSpan``` first draws the text, offset by the padding computed earlier, and then draws the code background.
+The background is an opaque grey rectangle which fills the full width of the ```TextView```.
+
+![InlineCodeSpan](http://imgur.com/vP5nytU.png)
+
+#### Dealing with more complex text
+
+As explained earlier, some content, notably large code segments and tables, which is usually displayed on the desktop is not well suited for small vertical displays.
+As such, it would no t be sensible to display this ocntent directly in the ```TextView```.
+
+Instead, placeholders in the ```TextView``` can be used to link to a more suitable method for displaying the content.
+
+##### CodeSpan
+
+The first problem to be dealt with is larger blocks of code.
+
+As was written in the markdown section of the background information, code blocks are written
+
+```
+
+ ``` Language
+
+ Some code
+
+ ```
+
+```
+
+where the "Language" string is optional.
+
+A ```CodeSpan``` needs to be a large enough item in the ```TextView``` that it can be easily clicked.
+It must also be obvious to the user that the span should be clicked.
+
+As such, the span is styled like a button.
+
+**CodeSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
+import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
+import android.support.annotation.IntRange;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.text.style.ReplacementSpan;
+
+import com.tpb.mdtext.handlers.CodeClickHandler;
+
+import org.sufficientlysecure.htmltextview.R;
+
+import java.lang.ref.WeakReference;
+
+/**
+ * Created by theo on 06/03/17.
+ */
+
+public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.WrappedClickableSpan {
+    private WeakReference<CodeClickHandler> mHandler;
+    private String mCode;
+    private String mLanguage;
+    private static String mLanguageFormatString = "%1$s code";
+    private static String mNoLanguageString = "Code";
+    private static Bitmap mCodeBM;
+    private PorterDuffColorFilter mBMFilter;
+    private int mBaseOffset = 5;
+
+    public CodeSpan(String code, CodeClickHandler handler) {
+        setCode(code);
+        mHandler = new WeakReference<>(handler);
+    }
+
+    public void setCode(String code) {
+        final int ls = code.indexOf('[');
+        final int le = code.indexOf(']');
+        if(ls != -1 && le != -1 && le - ls > 0 && le < code.indexOf("\n")) {
+            mLanguage = code.substring(ls + 1, le);
+            mCode = code.substring(le + 1);
+        } else {
+            mCode = code;
+        }
+    }
+
+    @Override
+    public int getSize(@NonNull Paint paint, CharSequence text, @IntRange(from = 0) int start, @IntRange(from = 0) int end, @Nullable Paint.FontMetricsInt fm) {
+        mBaseOffset = (int) paint.measureText("c");
+        return 0;
+    }
+
+    @Override
+    public void draw(@NonNull Canvas canvas, CharSequence text, @IntRange(from = 0) int start, @IntRange(from = 0) int end, float x, int top, int y, int bottom, @NonNull Paint paint) {
+        paint.setTextSize(paint.getTextSize() - 1);
+        final int textHeight = paint.getFontMetricsInt().descent - paint.getFontMetricsInt().ascent;
+
+        int offset = mBaseOffset;
+        if(mCodeBM != null) offset += mCodeBM.getWidth();
+
+        final int textStart = top + textHeight / 4;
+
+        if(mLanguage != null && !mLanguage.isEmpty()) {
+            mLanguage = mLanguage.substring(0, 1).toUpperCase() + mLanguage.substring(1);
+            canvas.drawText(String.format(mLanguageFormatString, mLanguage), x + offset, textStart,
+                    paint
+            );
+        } else {
+            canvas.drawText(mNoLanguageString, x + offset, textStart, paint);
+        }
+
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(4);
+        canvas.drawRoundRect(new RectF(x, top + top - bottom, x + canvas.getWidth(), bottom), 7, 7,
+                paint
+        );
+
+        if(mCodeBM != null) {
+            if(mBMFilter == null)
+                mBMFilter = new PorterDuffColorFilter(paint.getColor(), PorterDuff.Mode.SRC_IN);
+            paint.setColorFilter(mBMFilter);
+            canvas.drawBitmap(mCodeBM, x, textStart - textHeight, paint);
+        }
+    }
+
+    public void onClick() {
+        if(mHandler.get() != null) mHandler.get().codeClicked(mCode, mLanguage);
+    }
+
+    public static void initialise(Context context) {
+        final Drawable drawable = context.getResources().getDrawable(R.drawable.ic_code);
+        final Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
+                drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888
+        );
+        final Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        mCodeBM = bitmap;
+        mLanguageFormatString = context.getString(R.string.code_span_language_format);
+        mNoLanguageString = context.getString(R.string.code_span_no_language);
+    }
+
+    public static boolean isInitialised() {
+        return mCodeBM != null;
+    }
+
+}
+
+```
+
 ## User Activity
 
 Once a user has logged in, their account can be displayed.
