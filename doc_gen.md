@@ -6073,7 +6073,7 @@ The background is an opaque grey rectangle which fills the full width of the ```
 
 ![InlineCodeSpan](http://imgur.com/vP5nytU.png)
 
-#### Dealing with more complex text
+#### Dealing with more complex content
 
 As explained earlier, some content, notably large code segments and tables, which is usually displayed on the desktop is not well suited for small vertical displays.
 As such, it would no t be sensible to display this ocntent directly in the ```TextView```.
@@ -6362,6 +6362,54 @@ code and a language.
 
 ![Table span](http://imgur.com/NDA1ydi.png)
 
+##### ClickableImageSpan
+
+```ClickableImageSpan``` extends ```ImageSpan``` and is used to implement click listening for the ```ImageClickHandler```.
+It also ensures that the actual drawable is returned from a ```URLDrawable```, which will be explained in the "Image loading and caching" section.
+
+**ClickableImageSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.graphics.drawable.Drawable;
+import android.text.style.ImageSpan;
+
+import com.tpb.mdtext.handlers.ImageClickHandler;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+
+import java.lang.ref.WeakReference;
+
+/**
+ * Created by theo on 22/04/17.
+ */
+
+public class ClickableImageSpan extends ImageSpan implements WrappingClickableSpan.WrappedClickableSpan {
+
+    private WeakReference<ImageClickHandler> mImageClickHandler;
+
+    public ClickableImageSpan(Drawable d, ImageClickHandler handler) {
+        super(d);
+        mImageClickHandler = new WeakReference<>(handler);
+    }
+
+    @Override
+    public Drawable getDrawable() {
+        if(super.getDrawable() instanceof HttpImageGetter.URLDrawable && ((HttpImageGetter.URLDrawable) super.getDrawable()).getDrawable() != null) {
+            return ((HttpImageGetter.URLDrawable) super.getDrawable()).getDrawable();
+        }
+        return super.getDrawable();
+    }
+
+    @Override
+    public void onClick() {
+        if(mImageClickHandler.get() != null) {
+            mImageClickHandler.get().imageClicked(getDrawable());
+        }
+    }
+}
+
+```
+
 ##### Handling clicks
 
 ```ReplacementSpans``` have not click listeners. 
@@ -6414,7 +6462,7 @@ public class WrappingClickableSpan extends ClickableSpan {
 
 ```
 
-As was shown above, both ```CodeSpan``` and ```TableSpan``` implement ```WrappedClickableSpan``` which allows touch events on a parent ```ClickableSpan``` to be forwarded to the 
+As was shown above, ```CodeSpan```, ```TableSpan``` and ```ImageSpan``` implement ```WrappedClickableSpan``` which allows touch events on a parent ```ClickableSpan``` to be forwarded to the 
 ```ReplacementSpan```.
 
 ###### Stopping the onClickHandler
@@ -6960,11 +7008,9 @@ public class HttpImageGetter implements ImageGetter {
     private static final HashMap<String, Pair<Drawable, Long>> cache = new HashMap<>();
 
     private final TextView mContainer;
-    private WeakReference<DrawableCatcher> mCacheHandler;
 
-    public HttpImageGetter(TextView container, @Nullable DrawableCatcher cacheHandler) {
+    public HttpImageGetter(TextView container) {
         this.mContainer = container;
-        this.mCacheHandler = new WeakReference<>(cacheHandler);
     }
 
 
@@ -7036,14 +7082,6 @@ public class HttpImageGetter implements ImageGetter {
             // Change the reference of the current urlDrawable to the result from the HTTP call
             urlDrawable.mDrawable = result;
 
-            //We add the drawable to the image view so that it can get it on click
-            if(imageGetter.mCacheHandler.get() !=  null) {
-                imageGetter.mCacheHandler.get().drawableLoaded(
-                        urlDrawable.mDrawable.getConstantState().newDrawable(),
-                        mSource
-                );
-            }
-
             // redraw the image by invalidating the container
             imageGetter.mContainer.invalidate();
             // re-set text to fix images overlapping text
@@ -7095,14 +7133,8 @@ public class HttpImageGetter implements ImageGetter {
         }
     }
 
-    public interface DrawableCatcher {
-
-        void drawableLoaded(Drawable d, String source);
-
-    }
-
     @SuppressWarnings("deprecation")
-    private class URLDrawable extends BitmapDrawable {
+    public class URLDrawable extends BitmapDrawable {
         Drawable mDrawable;
 
         @Override
@@ -7112,13 +7144,16 @@ public class HttpImageGetter implements ImageGetter {
             }
         }
 
+        public Drawable getDrawable() {
+            return mDrawable;
+        }
+
     }
 } 
 
 ```
 
-The ```HttpImageGetter``` is constructed with a reference to the ```TextView``` for which it is loading  images, and a ```DrawableCatcher``` which allows the ```TextView``` to intercept
-the images for showing when an image is clicked.
+The ```HttpImageGetter``` is constructed with a reference to the ```TextView``` for which it is loading  images.
 
 The ```URLDrawable``` is used in order to only draw the ```Drawable``` to the canvas once it has been loaded.
 
@@ -7292,6 +7327,10 @@ class ResImageGetter implements Html.ImageGetter {
 ```
 
 The ```ResImageGetter``` attempts to load a drawable from a resource name, checking the current package as well as the built in drawables.
+
+##### MarkdownTextView
+
+```MarkdownTextView``` is used to 
 
 <div style="page-break-after: always;"></div>
 

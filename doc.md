@@ -3007,7 +3007,7 @@ The background is an opaque grey rectangle which fills the full width of the ```
 
 ![InlineCodeSpan](http://imgur.com/vP5nytU.png)
 
-#### Dealing with more complex text
+#### Dealing with more complex content
 
 As explained earlier, some content, notably large code segments and tables, which is usually displayed on the desktop is not well suited for small vertical displays.
 As such, it would no t be sensible to display this ocntent directly in the ```TextView```.
@@ -3086,6 +3086,13 @@ code and a language.
 
 ![Table span](http://imgur.com/NDA1ydi.png)
 
+##### ClickableImageSpan
+
+```ClickableImageSpan``` extends ```ImageSpan``` and is used to implement click listening for the ```ImageClickHandler```.
+It also ensures that the actual drawable is returned from a ```URLDrawable```, which will be explained in the "Image loading and caching" section.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/ImageSpan.java"
+
 ##### Handling clicks
 
 ```ReplacementSpans``` have not click listeners. 
@@ -3105,7 +3112,7 @@ Instead, their click handling must be handled by a ```ClickableSpan``` which is 
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/WrappingClickableSpan.java"
 
-As was shown above, both ```CodeSpan``` and ```TableSpan``` implement ```WrappedClickableSpan``` which allows touch events on a parent ```ClickableSpan``` to be forwarded to the 
+As was shown above, ```CodeSpan```, ```TableSpan``` and ```ImageSpan``` implement ```WrappedClickableSpan``` which allows touch events on a parent ```ClickableSpan``` to be forwarded to the 
 ```ReplacementSpan```.
 
 ###### Stopping the onClickHandler
@@ -3197,8 +3204,7 @@ each time the editor is toggled from raw to formatted markdown.
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/imagegetter/HttpImageGetter.java"
 
-The ```HttpImageGetter``` is constructed with a reference to the ```TextView``` for which it is loading  images, and a ```DrawableCatcher``` which allows the ```TextView``` to intercept
-the images for showing when an image is clicked.
+The ```HttpImageGetter``` is constructed with a reference to the ```TextView``` for which it is loading  images.
 
 The ```URLDrawable``` is used in order to only draw the ```Drawable``` to the canvas once it has been loaded.
 
@@ -3254,6 +3260,10 @@ The ```AssetsImageGetter``` creates an ```InputStream``` from an assets path and
 #import "markdowntextview/src/main/java/com/tpb/mdtext/imagegetter/ResImageGetter.java"
 
 The ```ResImageGetter``` attempts to load a drawable from a resource name, checking the current package as well as the built in drawables.
+
+##### MarkdownTextView
+
+```MarkdownTextView``` is used to 
 
 #page
 
