@@ -3088,6 +3088,58 @@ code and a language.
 
 ##### Handling clicks
 
+```ReplacementSpans``` have not click listeners. 
+Clicks on individual spans in a  ```TextView``` are handled by ```ClickableSpans``` and the ```MovementMethod```.
+
+```ClickableSpan``` is an abstract class extending ```CharacterStyle``` and implementing ```UpdateAppearance```. It sets the ```TextPaint``` colour to the link colour, and underlines the
+clickable content. ```ClickableSpan``` has the abstract method ```onClick``` which takes the ```View``` which was clicked.
+
+The calling of ```onClick``` is handled by the ```MovementMethod```.
+A ```MovementMethod``` "provides cursor positioning, scrolling and text selection functionality in a ```TextView```.".
+The ```TextView``` delegates handling of key events and touches to the movement method for content navigation.
+
+###### Handling clicks on ReplacementSpans
+
+As ```ClickableSpan``` is an abstract class, ```ReplacementSpans``` cannot directly implement the ```onClick``` method.
+Instead, their click handling must be handled by a ```ClickableSpan``` which is set across the same subsection of text as the ```ReplacementSpan```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/WrappingClickableSpan.java"
+
+As was shown above, both ```CodeSpan``` and ```TableSpan``` implement ```WrappedClickableSpan``` which allows touch events on a parent ```ClickableSpan``` to be forwarded to the 
+```ReplacementSpan```.
+
+###### Stopping the onClickHandler
+
+The problem with having clickable elements in the ```TextView``` is that it interferes with any click listeners set on the ```TextView``` itself.
+
+This problem is solved with a custom ```MovementMethod``` and ```TextView```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/ClickableMovementMethod.java"
+
+The ```ClickableMovementMethod``` extends ```LinkMovementMethod``` and overrides ```onTouchEvent``` to deal with all clickable spans, as well as notifying the ```TextView```.
+
+If the event acction is an up or down movement, the event is captured.
+
+The x and y positions are collected from the event, and then offset by both the padding and scroll position of the ```TextView```.
+The ```TextView``` layout is then used to calculate the line of text, and the offset within the line for the click position.
+
+Using this offset, the array of ```ClickableSpans``` present at this position is found from the buffer.
+
+If the array is not empty, and the event type is up (The end of a click) the ```ClickableSpan``` onClick method is called, and the span hit is triggered on the ```TextView```. Returning
+true results in further events being passed to the ```MovementMethod```.
+
+If the array is empty, the selection is removed, the touch event is triggered, and false is returned so that no further events in this chain are passed to the ```MovementMethod```.
+
+Within the ```TextView```, ```setSpanHit``` is used to set a flag for triggering click events.
+
+Usually, to handle click events for a ```View```, one would call ```setOnClickListener``` which would then be called when the ```TextView``` is clicked.
+The problem with this is that the ```OnClickListener``` would recieve span click events.
+
+To solve this problem, the ```TextView``` itself implements ```OnClickListener```.
+
+The ```TextView``` also overrides ```setOnClickListener```. In this method it stores the ```onClickListener```.
+In ```onClick```, it checks if the span hit flag is false, and the listener is non null, and if both of these are true it forwards the click to the listener.
+It then sets the span hit flag back to false.
 
 
 ## User Activity

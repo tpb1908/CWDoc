@@ -6359,6 +6359,177 @@ code and a language.
 
 ##### Handling clicks
 
+```ReplacementSpans``` have not click listeners. 
+Clicks on individual spans in a  ```TextView``` are handled by ```ClickableSpans``` and the ```MovementMethod```.
+
+```ClickableSpan``` is an abstract class extending ```CharacterStyle``` and implementing ```UpdateAppearance```. It sets the ```TextPaint``` colour to the link colour, and underlines the
+clickable content. ```ClickableSpan``` has the abstract method ```onClick``` which takes the ```View``` which was clicked.
+
+The calling of ```onClick``` is handled by the ```MovementMethod```.
+A ```MovementMethod``` "provides cursor positioning, scrolling and text selection functionality in a ```TextView```.".
+The ```TextView``` delegates handling of key events and touches to the movement method for content navigation.
+
+###### Handling clicks on ReplacementSpans
+
+As ```ClickableSpan``` is an abstract class, ```ReplacementSpans``` cannot directly implement the ```onClick``` method.
+Instead, their click handling must be handled by a ```ClickableSpan``` which is set across the same subsection of text as the ```ReplacementSpan```.
+
+**WrappingClickableSpan.java**
+``` java
+package com.tpb.mdtext.views.spans;
+
+import android.support.annotation.NonNull;
+import android.text.style.ClickableSpan;
+import android.view.View;
+
+/**
+ * Created by theo on 11/04/17.
+ */
+
+public class WrappingClickableSpan extends ClickableSpan {
+
+    private final WrappedClickableSpan mWrappedClickableSpan;
+
+    public WrappingClickableSpan(@NonNull WrappedClickableSpan child) {
+        mWrappedClickableSpan = child;
+    }
+
+    @Override
+    public void onClick(View widget) {
+        mWrappedClickableSpan.onClick();
+    }
+
+    public interface WrappedClickableSpan {
+
+        void onClick();
+
+    }
+
+}
+
+```
+
+As was shown above, both ```CodeSpan``` and ```TableSpan``` implement ```WrappedClickableSpan``` which allows touch events on a parent ```ClickableSpan``` to be forwarded to the 
+```ReplacementSpan```.
+
+###### Stopping the onClickHandler
+
+The problem with having clickable elements in the ```TextView``` is that it interferes with any click listeners set on the ```TextView``` itself.
+
+This problem is solved with a custom ```MovementMethod``` and ```TextView```.
+
+**ClickableMovementMethod.java**
+``` java
+/*
+ * Copyright (C) 2015 Heliangwei
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.tpb.mdtext;
+
+import android.text.Layout;
+import android.text.Selection;
+import android.text.Spannable;
+import android.text.method.LinkMovementMethod;
+import android.text.method.Touch;
+import android.text.style.ClickableSpan;
+import android.view.MotionEvent;
+import android.widget.TextView;
+
+import com.tpb.mdtext.views.MarkdownEditText;
+import com.tpb.mdtext.views.MarkdownTextView;
+
+/**
+ * Copied from http://stackoverflow.com/questions/8558732
+ */
+public class ClickableMovementMethod extends LinkMovementMethod {
+
+
+    @Override
+    public boolean onTouchEvent(final TextView widget, final Spannable buffer, MotionEvent event) {
+        final int action = event.getAction();
+
+        if(action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_DOWN) {
+
+            int x = (int) event.getX();
+            int y = (int) event.getY();
+
+            x -= widget.getTotalPaddingLeft();
+            y -= widget.getTotalPaddingTop();
+
+            x += widget.getScrollX();
+            y += widget.getScrollY();
+
+            final Layout layout = widget.getLayout();
+            final int line = layout.getLineForVertical(y);
+            final int off = layout.getOffsetForHorizontal(line, x);
+
+            final ClickableSpan[] clickable = buffer.getSpans(off, off, ClickableSpan.class);
+
+            if(clickable.length != 0) {
+                if(action == MotionEvent.ACTION_UP) {
+                    clickable[0].onClick(widget);
+                    triggerSpanHit(widget);
+                }
+
+                return true;
+            } else {
+                Selection.removeSelection(buffer);
+                Touch.onTouchEvent(widget, buffer, event);
+                return false;
+            }
+        }
+
+        return Touch.onTouchEvent(widget, buffer, event);
+    }
+
+    private void triggerSpanHit(TextView widget) {
+        if(widget instanceof MarkdownTextView) {
+            ((MarkdownTextView) widget).setSpanHit();
+        } else if(widget instanceof MarkdownEditText) {
+            ((MarkdownEditText) widget).setSpanHit();
+        }
+    }
+
+}
+
+```
+
+The ```ClickableMovementMethod``` extends ```LinkMovementMethod``` and overrides ```onTouchEvent``` to deal with all clickable spans, as well as notifying the ```TextView```.
+
+If the event acction is an up or down movement, the event is captured.
+
+The x and y positions are collected from the event, and then offset by both the padding and scroll position of the ```TextView```.
+The ```TextView``` layout is then used to calculate the line of text, and the offset within the line for the click position.
+
+Using this offset, the array of ```ClickableSpans``` present at this position is found from the buffer.
+
+If the array is not empty, and the event type is up (The end of a click) the ```ClickableSpan``` onClick method is called, and the span hit is triggered on the ```TextView```. Returning
+true results in further events being passed to the ```MovementMethod```.
+
+If the array is empty, the selection is removed, the touch event is triggered, and false is returned so that no further events in this chain are passed to the ```MovementMethod```.
+
+Within the ```TextView```, ```setSpanHit``` is used to set a flag for triggering click events.
+
+Usually, to handle click events for a ```View```, one would call ```setOnClickListener``` which would then be called when the ```TextView``` is clicked.
+The problem with this is that the ```OnClickListener``` would recieve span click events.
+
+To solve this problem, the ```TextView``` itself implements ```OnClickListener```.
+
+The ```TextView``` also overrides ```setOnClickListener```. In this method it stores the ```onClickListener```.
+In ```onClick```, it checks if the span hit flag is false, and the listener is non null, and if both of these are true it forwards the click to the listener.
+It then sets the span hit flag back to false.
 
 
 ## User Activity
