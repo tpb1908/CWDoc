@@ -3241,6 +3241,20 @@ If the ```DrawableCatcher``` is non-null, the drawable and URL are passed to it.
 
 Finally, in order to draw the ```URLDrawable``` the container is invalidated and its text is set to its current text to force a layout refresh.
 
+###### Loading images from Assets and Resources
+
+While they are not currently used in this project, some may want to load images from the device itself. Either those included in the assets directory, or in resources.
+
+This can be handled with the ```AssetsImageGetter``` and ```ResImageGetter```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/imagegetter/AssetsImageGetter.java"
+
+The ```AssetsImageGetter``` creates an ```InputStream``` from an assets path and loads the drawable from it.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/imagegetter/ResImageGetter.java"
+
+The ```ResImageGetter``` attempts to load a drawable from a resource name, checking the current package as well as the built in drawables.
+
 #page
 
 ## User Activity
