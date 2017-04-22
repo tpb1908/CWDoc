@@ -3218,6 +3218,9 @@ import com.tpb.projects.common.CircularRevealActivity;
  */
 
 public class UI {
+
+    private UI() {}
+
     /**
      * Sets the expansion point for a {@link CircularRevealActivity} Intent
      * to the midpoint of a View
@@ -4943,6 +4946,8 @@ import java.util.regex.Pattern;
 
 public class TextUtils {
 
+    private TextUtils() {}
+
     private static final Pattern REGEX_ESCAPE_CHARS =
             Pattern.compile("[\\<\\(\\[\\{\\\\\\^\\-\\=\\$\\!\\|\\]\\}\\)‌​\\?\\*\\+\\.\\>]");
 
@@ -6455,6 +6460,14 @@ import com.tpb.mdtext.views.MarkdownTextView;
  */
 public class ClickableMovementMethod extends LinkMovementMethod {
 
+    private static ClickableMovementMethod instance;
+
+    private ClickableMovementMethod() {}
+
+    public static ClickableMovementMethod getInstance() {
+        if(instance == null) instance = new ClickableMovementMethod();
+        return instance;
+    }
 
     @Override
     public boolean onTouchEvent(final TextView widget, final Spannable buffer, MotionEvent event) {
@@ -6531,6 +6544,624 @@ The ```TextView``` also overrides ```setOnClickListener```. In this method it st
 In ```onClick```, it checks if the span hit flag is false, and the listener is non null, and if both of these are true it forwards the click to the listener.
 It then sets the span hit flag back to false.
 
+#### MarkdownTextView
+
+```MarkdownTextView``` is the ```TextView``` descendent used for displaying markdown.
+It handles click handling for links, images, tables, and code, as well as dealing with background parsing of content and caching of parsed content. 
+
+##### Handlers
+
+There are four handler interfaces used for click events on different items in the ```MarkdownTextView```.
+There are also three default implementations of these interfaces.
+
+**CodeClickHandler.java**
+``` java
+package com.tpb.mdtext.handlers;
+
+import android.support.annotation.Nullable;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public interface CodeClickHandler {
+
+    void codeClicked(String code, @Nullable String language);
+
+}
+
+```
+
+**ImageClickHandler.java**
+``` java
+package com.tpb.mdtext.handlers;
+
+import android.graphics.drawable.Drawable;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public interface ImageClickHandler {
+
+    void imageClicked(Drawable drawable);
+
+}
+
+```
+
+**LinkClickHandler.java**
+``` java
+package com.tpb.mdtext.handlers;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public interface LinkClickHandler {
+
+    void onClick(String url);
+
+}
+
+```
+
+**TableClickHandler.java**
+``` java
+package com.tpb.mdtext.handlers;
+
+/**
+ * Created by theo on 08/04/17.
+ */
+
+public interface TableClickHandler {
+
+    public void onClick(String html);
+
+}
+
+```
+
+The default implementations of ```CodeClickHandler```, ```ImageClickHandler``` and ```TableClickHandler``` are all dialogs used to show the content over a larger area.
+They can be replaced with any other implementation of their respective interfaces.
+
+**CodeDialog.java**
+``` java
+package com.tpb.mdtext.dialogs;
+
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.Context;
+import android.support.annotation.Nullable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+
+import com.pddstudio.highlightjs.HighlightJsView;
+import com.pddstudio.highlightjs.models.Language;
+import com.pddstudio.highlightjs.models.Theme;
+import com.tpb.mdtext.handlers.CodeClickHandler;
+
+import org.sufficientlysecure.htmltextview.R;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public class CodeDialog implements CodeClickHandler {
+
+    private Context mContext;
+
+    public CodeDialog(Context context) {
+        mContext = context;
+    }
+
+    @Override
+    public void codeClicked(String code, @Nullable String language) {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+
+        final View view = inflater.inflate(R.layout.dialog_code, null);
+
+        builder.setView(view);
+
+        final HighlightJsView wv = (HighlightJsView) view.findViewById(R.id.dialog_highlight_view);
+        wv.setTheme(Theme.ANDROID_STUDIO);
+
+        if(language != null) wv.setHighlightLanguage(getLanguage(language));
+        wv.setSource(code);
+        final Dialog dialog = builder.create();
+
+        dialog.getWindow()
+              .setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        dialog.getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+        dialog.show();
+    }
+
+    private static Language getLanguage(String lang) {
+        for(Language l : Language.values()) {
+            if(l.toString().equalsIgnoreCase(lang)) return l;
+        }
+        return Language.AUTO_DETECT;
+    }
+}
+
+```
+
+The ```CodeDialog``` creates a dialog to display a ```HighlightJsView```, which is a ```WebView``` with the highlightjs library embedded.
+It also attempts to find the correct language for highlighting the code.
+
+**ImageDialog.java**
+``` java
+package com.tpb.mdtext.dialogs;
+
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.WindowManager;
+
+import com.tpb.mdtext.handlers.ImageClickHandler;
+
+import org.sufficientlysecure.htmltextview.R;
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public class ImageDialog implements ImageClickHandler {
+
+    private final Context mContext;
+
+    public ImageDialog(Context context) {
+        mContext = context;
+    }
+
+    @Override
+    public void imageClicked(Drawable drawable) {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+
+        final View view = inflater.inflate(R.layout.dialog_image, null);
+
+        builder.setView(view);
+
+        final FillingImageView fiv = (FillingImageView) view.findViewById(R.id.dialog_imageview);
+        fiv.setImageDrawable(drawable);
+
+        final Dialog dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dialog.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN
+        );
+        dialog.getWindow().setLayout(WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT
+        );
+
+        fiv.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+
+            }
+        });
+
+        dialog.show();
+
+    }
+
+}
+
+```
+
+The ```ImageDialog``` is used to show an image across the entire screen, while maintaining its aspect ratio.
+
+It uses a ```FillingImageView``` which overrides the ```onMeasure``` method of ```ImageView``` to ensure that the image aspect ratio is maintained.
+
+**FillingImageView.java**
+``` java
+/*
+ * Copyright  2016 Theo Pearson-Bray
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ *
+ */
+
+package com.tpb.mdtext.dialogs;
+
+import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.support.annotation.Nullable;
+import android.support.v7.widget.AppCompatImageView;
+import android.util.AttributeSet;
+
+/**
+ * Created by theo on 31/01/17.
+ */
+
+public class FillingImageView extends AppCompatImageView {
+
+    public FillingImageView(Context context) {
+        super(context);
+    }
+
+    public FillingImageView(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+    }
+
+
+    public FillingImageView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        try {
+            final Drawable drawable = getDrawable();
+
+            if(drawable == null) {
+                setMeasuredDimension(0, 0);
+            } else {
+                final float imageSideRatio = (float) drawable.getIntrinsicWidth() / (float) drawable
+                        .getIntrinsicHeight(); //Image aspect ratio
+                final float viewSideRatio = (float) MeasureSpec
+                        .getSize(widthMeasureSpec) / (float) MeasureSpec
+                        .getSize(heightMeasureSpec); //Aspect ratio of parent
+                if(imageSideRatio >= viewSideRatio) {
+                    // Image is wider than the display (ratio)
+                    final int width = MeasureSpec.getSize(widthMeasureSpec);
+                    final int height = (int) (width / imageSideRatio);
+                    setMeasuredDimension(width, height);
+                } else {
+                    // Image is taller than the display (ratio)
+                    final int height = MeasureSpec.getSize(heightMeasureSpec);
+                    final int width = (int) (height * imageSideRatio);
+                    setMeasuredDimension(width, height);
+                }
+            }
+        } catch(Exception e) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+    }
+
+}
+
+```
+
+The method calculates the aspect ratio of the image, and the aspect ratio of the parent ```View```.
+
+If the image has a wider ratio than the display ratio, then the width is calculated as the available width of the ```ImageView```, and the height is calculated as the ratio of this width
+matching the ratio calculated earlier.
+
+If the image has a taller ratio than the display ratio, then the height is calculated as the available height of the ```ImageView```, and the width is calculated as the ratio of this 
+height matching the ratio calculated earlier.
+
+**TableDialog.java**
+``` java
+package com.tpb.mdtext.dialogs;
+
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.Context;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+
+import com.tpb.mdtext.handlers.TableClickHandler;
+import com.tpb.mdtext.webview.MarkdownWebView;
+
+import org.sufficientlysecure.htmltextview.R;
+
+/**
+ * Created by theo on 08/04/17.
+ */
+
+public class TableDialog implements TableClickHandler {
+
+    private Context mContext;
+
+    public TableDialog(Context context) {
+        mContext = context;
+    }
+
+    @Override
+    public void onClick(String html) {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        final LayoutInflater inflater = LayoutInflater.from(mContext);
+
+        final View view = inflater.inflate(R.layout.dialog_table, null);
+
+        builder.setView(view);
+
+        final MarkdownWebView wv = (MarkdownWebView) view.findViewById(R.id.dialog_web_view);
+        wv.enableDarkTheme();
+        wv.setMarkdown(html);
+        final Dialog dialog = builder.create();
+
+        dialog.getWindow()
+              .setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        dialog.getWindow().requestFeature(Window.FEATURE_NO_TITLE);
+        dialog.show();
+    }
+
+}
+
+```
+
+The ```TableDialog``` uses the ```MarkdownWebView``` created earlier to display the HTML of the table in a ```WebView``` using the GitHub style CSS.
+
+
+##### Image loading and caching 
+
+The ```HttpImageGetter``` implements ```Html.ImageGetter``` which is used when retreiving images for img tags.
+
+As well as loading images, the ```HttpImageGetter``` also caches them, which is especially useful when editing markdown segments containing images or in a comment feed where multiple users may use the same image, as it stops the image being reloaded
+each time the editor is toggled from raw to formatted markdown.
+
+**HttpImageGetter.java**
+``` java
+/*
+ * Copyright (C) 2014-2016 Dominik Schürmann <dominik@dominikschuermann.de>
+ * Copyright (C) 2013 Antarix Tandon
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.tpb.mdtext.imagegetter;
+
+import android.content.res.Resources;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.os.AsyncTask;
+import android.support.annotation.Nullable;
+import android.support.v4.util.Pair;
+import android.text.Html.ImageGetter;
+import android.view.View;
+import android.widget.TextView;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.net.URI;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+public class HttpImageGetter implements ImageGetter {
+
+    private static final HashMap<String, Pair<Drawable, Long>> cache = new HashMap<>();
+
+    private final TextView mContainer;
+    private WeakReference<DrawableCatcher> mCacheHandler;
+
+    public HttpImageGetter(TextView container, @Nullable DrawableCatcher cacheHandler) {
+        this.mContainer = container;
+        this.mCacheHandler = new WeakReference<>(cacheHandler);
+    }
+
+
+    public Drawable getDrawable(String source) {
+        final URLDrawable ud = new URLDrawable();
+        new ImageGetterAsyncTask(ud, this, mContainer).execute(source);
+        return ud;
+    }
+
+    private static class ImageGetterAsyncTask extends AsyncTask<String, Void, Drawable> {
+        private final WeakReference<URLDrawable> mDrawableReference;
+        private final WeakReference<HttpImageGetter> mGetterReference;
+        private final WeakReference<View> mContainerReference;
+        private final WeakReference<Resources> mResources;
+        private String mSource;
+        private float mScale;
+
+        ImageGetterAsyncTask(URLDrawable d, HttpImageGetter imageGetter, View container) {
+            this.mDrawableReference = new WeakReference<>(d);
+            this.mGetterReference = new WeakReference<>(imageGetter);
+            this.mContainerReference = new WeakReference<>(container);
+            this.mResources = new WeakReference<>(container.getResources());
+        }
+
+        @Override
+        protected Drawable doInBackground(String... params) {
+            mSource = params[0];
+            synchronized(cache) {
+                Map.Entry<String, Pair<Drawable, Long>> entry;
+                final Iterator<Map.Entry<String, Pair<Drawable, Long>>> it = cache.entrySet().iterator();
+                for(; it.hasNext(); ) {
+                    entry = it.next();
+                    if(System.currentTimeMillis() > entry.getValue().second + 60000) {
+                        it.remove();
+                    }
+                }
+
+                if(cache.containsKey(mSource)) {
+                    if(System.currentTimeMillis() > cache.get(mSource).second + 45000) {
+                        // The drawable is still being accessed, so we update it
+                        fetchDrawable(mResources.get(), mSource);
+                    }
+                    return cache.get(mSource).first.getConstantState().newDrawable();
+                } else if(mResources.get() != null) {
+                    return fetchDrawable(mResources.get(), mSource);
+                }
+            }
+
+
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Drawable result) {
+            final URLDrawable urlDrawable = mDrawableReference.get();
+            final HttpImageGetter imageGetter = mGetterReference.get();
+            // We exist outside of the lifespan of the view
+            if(result == null || urlDrawable == null || imageGetter == null) return;
+
+
+            // Scale is set here as drawable may be cached and view may have changed
+            setDrawableScale(result);
+
+            // Set the correct bound according to the result from HTTP call
+            urlDrawable.setBounds(0, 0, (int) (result.getIntrinsicWidth() * mScale),
+                    (int) (result.getIntrinsicHeight() * mScale)
+            );
+
+            // Change the reference of the current urlDrawable to the result from the HTTP call
+            urlDrawable.mDrawable = result;
+
+            //We add the drawable to the image view so that it can get it on click
+            if(imageGetter.mCacheHandler.get() !=  null) {
+                imageGetter.mCacheHandler.get().drawableLoaded(
+                        urlDrawable.mDrawable.getConstantState().newDrawable(),
+                        mSource
+                );
+            }
+
+            // redraw the image by invalidating the container
+            imageGetter.mContainer.invalidate();
+            // re-set text to fix images overlapping text
+            imageGetter.mContainer.setText(imageGetter.mContainer.getText());
+        }
+
+        @Nullable
+        private Drawable fetchDrawable(Resources res, String urlString) {
+            try {
+                final InputStream is = fetch(urlString);
+                final Drawable drawable = new BitmapDrawable(res, is);
+                synchronized(cache) {
+                    cache.put(mSource, Pair.create(drawable, System.currentTimeMillis()));
+                }
+                return drawable;
+            } catch(Exception e) {
+                return null;
+            }
+        }
+
+        private void setDrawableScale(Drawable drawable) {
+            mScale = getScale(drawable);
+            drawable.setBounds(0, 0, (int) (drawable.getIntrinsicWidth() * mScale),
+                    (int) (drawable.getIntrinsicHeight() * mScale)
+            );
+        }
+
+        private float getScale(Drawable drawable) {
+            final View container = mContainerReference.get();
+            if(container == null) {
+                return 1f;
+            }
+            float maxWidth = container.getWidth();
+            float originalDrawableWidth = drawable.getIntrinsicWidth();
+            return maxWidth / originalDrawableWidth;
+        }
+
+        @Nullable
+        private InputStream fetch(String urlString) throws IOException {
+            URL url;
+            final HttpImageGetter imageGetter = mGetterReference.get();
+            if(imageGetter == null) {
+                return null;
+            }
+            url = URI.create(urlString).toURL();
+
+
+            return (InputStream) url.getContent();
+        }
+    }
+
+    public interface DrawableCatcher {
+
+        void drawableLoaded(Drawable d, String source);
+
+    }
+
+    @SuppressWarnings("deprecation")
+    private class URLDrawable extends BitmapDrawable {
+        Drawable mDrawable;
+
+        @Override
+        public void draw(Canvas canvas) {
+            if(mDrawable != null) {
+                mDrawable.draw(canvas);
+            }
+        }
+
+    }
+} 
+
+```
+
+The ```HttpImageGetter``` is constructed with a reference to the ```TextView``` for which it is loading  images, and a ```DrawableCatcher``` which allows the ```TextView``` to intercept
+the images for showing when an image is clicked.
+
+The ```URLDrawable``` is used in order to only draw the ```Drawable``` to the canvas once it has been loaded.
+
+When ```getDrawable``` is called, ```HttpImageGetter``` creates a new ```URLDrawable```, then creates a new ```ImageGetterAsyncTask``` and then returns the ```URLDrawable```.
+
+The ```ImageGetterAsyncTask``` then begins loading the image in the background.
+The ```ImageGetterAsyncTask``` takes a ```URLDrawable```, the ```HTTPImageGetter``` and the containing ```View```, and stores ```WeakReferences``` to each of them as well as a 
+```WeakReference``` to the ```Resources``` from the container ```View```.
+
+When an ```AsyncTask``` is executed, first two methods are executed on the main thread, and the third is executed in the background.
+The first on the main thread is ```onPreExecute```, which is not needed here as there is no setup process.
+Next, ```doInBackground``` is called, which performs work on another thread. Finally, ```onPostExecute``` is called on the main thread, with the result from ```doInBackground```.
+
+In ```doInBackground``` the source is first extracted from the first parameter.
+Next the cache is checked for the source. This must be synchronised as the cache may be accessed from multiple threads at once.
+The cache is a ```Map``` and must be accessed with an ```Iterator``` to allow removal at the same time.
+
+The ```Map``` contains pairs of strings, the source URLs, and pairs of the drawable and the last time that it was updated.
+If the drawable was last updated over a minute ago, it is removed from the cache.
+
+Once the cache has been cleaned, the cache is checked for the current key, which is reloaded if it was last accessed more than 45 seconds ago.
+The ```Drawable``` is returned with ```getConstantState().newDrawable()```. This ensures that each ```Drawable``` displayed has the correct aspect ratio for the ```TextView``` in which it
+is displayed, otherwise only the last mutation would take effect.
+
+Otherwise, the ```Resources``` reference is checked, and if it is non-null, the ```Drawable``` is loaded.
+
+```fetchDrawable``` creates an ```InputStream``` by calling ```fetch```.
+```fetch``` checks if the ```HttpImageGetter``` still exists, and if so creates a ```URL``` from which to load the content.
+```fetchDrawable``` then creates a ```BitmapDrawable``` from this ```InputStream``` and the ```Resources``` object which is used to determine specifics about how the ```Drawable``` should
+be displayed.
+The ```Drawable``` is then added to the cache and returned.
+
+In ```onPostExecute``` the validity of the ```HttpImageGetter```, result and ```URLDrawable``` are checked, and if they are valid the ```Drawable``` is scaled.
+```setDrawableScale``` calls ```getScale``` which returns the scale of the ```View``` maximum width to the ```Drawable``` width.
+```setDrawableScale``` then sets the bounds of the ```Drawable``` to the scaled values of its original width and height, maintaining its aspect ratio while filling the full width of the
+containing ```View```.
+
+Once the scale of the result ```Drawable``` has been set, the scale of the ```URLDrawable``` is also set, and the ```URLDrawable``` drawable is changed for the result ```Drawable```.
+If the ```DrawableCatcher``` is non-null, the drawable and URL are passed to it.
+
+Finally, in order to draw the ```URLDrawable``` the container is invalidated and its text is set to its current text to force a layout refresh.
+
+<div style="page-break-after: always;"></div>
 
 ## User Activity
 

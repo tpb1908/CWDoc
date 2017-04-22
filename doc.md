@@ -3141,6 +3141,107 @@ The ```TextView``` also overrides ```setOnClickListener```. In this method it st
 In ```onClick```, it checks if the span hit flag is false, and the listener is non null, and if both of these are true it forwards the click to the listener.
 It then sets the span hit flag back to false.
 
+#### MarkdownTextView
+
+```MarkdownTextView``` is the ```TextView``` descendent used for displaying markdown.
+It handles click handling for links, images, tables, and code, as well as dealing with background parsing of content and caching of parsed content. 
+
+##### Handlers
+
+There are four handler interfaces used for click events on different items in the ```MarkdownTextView```.
+There are also three default implementations of these interfaces.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/handlers/CodeClickHandler.java"
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/handlers/ImageClickHandler.java"
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/handlers/LinkClickHandler.java"
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/handlers/TableClickHandler.java"
+
+The default implementations of ```CodeClickHandler```, ```ImageClickHandler``` and ```TableClickHandler``` are all dialogs used to show the content over a larger area.
+They can be replaced with any other implementation of their respective interfaces.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/CodeDialog.java"
+
+The ```CodeDialog``` creates a dialog to display a ```HighlightJsView```, which is a ```WebView``` with the highlightjs library embedded.
+It also attempts to find the correct language for highlighting the code.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/ImageDialog.java"
+
+The ```ImageDialog``` is used to show an image across the entire screen, while maintaining its aspect ratio.
+
+It uses a ```FillingImageView``` which overrides the ```onMeasure``` method of ```ImageView``` to ensure that the image aspect ratio is maintained.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/FillingImageView.java"
+
+The method calculates the aspect ratio of the image, and the aspect ratio of the parent ```View```.
+
+If the image has a wider ratio than the display ratio, then the width is calculated as the available width of the ```ImageView```, and the height is calculated as the ratio of this width
+matching the ratio calculated earlier.
+
+If the image has a taller ratio than the display ratio, then the height is calculated as the available height of the ```ImageView```, and the width is calculated as the ratio of this 
+height matching the ratio calculated earlier.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/TableDialog.java"
+
+The ```TableDialog``` uses the ```MarkdownWebView``` created earlier to display the HTML of the table in a ```WebView``` using the GitHub style CSS.
+
+
+##### Image loading and caching 
+
+The ```HttpImageGetter``` implements ```Html.ImageGetter``` which is used when retreiving images for img tags.
+
+As well as loading images, the ```HttpImageGetter``` also caches them, which is especially useful when editing markdown segments containing images or in a comment feed where multiple users may use the same image, as it stops the image being reloaded
+each time the editor is toggled from raw to formatted markdown.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/imagegetter/HttpImageGetter.java"
+
+The ```HttpImageGetter``` is constructed with a reference to the ```TextView``` for which it is loading  images, and a ```DrawableCatcher``` which allows the ```TextView``` to intercept
+the images for showing when an image is clicked.
+
+The ```URLDrawable``` is used in order to only draw the ```Drawable``` to the canvas once it has been loaded.
+
+When ```getDrawable``` is called, ```HttpImageGetter``` creates a new ```URLDrawable```, then creates a new ```ImageGetterAsyncTask``` and then returns the ```URLDrawable```.
+
+The ```ImageGetterAsyncTask``` then begins loading the image in the background.
+The ```ImageGetterAsyncTask``` takes a ```URLDrawable```, the ```HTTPImageGetter``` and the containing ```View```, and stores ```WeakReferences``` to each of them as well as a 
+```WeakReference``` to the ```Resources``` from the container ```View```.
+
+When an ```AsyncTask``` is executed, first two methods are executed on the main thread, and the third is executed in the background.
+The first on the main thread is ```onPreExecute```, which is not needed here as there is no setup process.
+Next, ```doInBackground``` is called, which performs work on another thread. Finally, ```onPostExecute``` is called on the main thread, with the result from ```doInBackground```.
+
+In ```doInBackground``` the source is first extracted from the first parameter.
+Next the cache is checked for the source. This must be synchronised as the cache may be accessed from multiple threads at once.
+The cache is a ```Map``` and must be accessed with an ```Iterator``` to allow removal at the same time.
+
+The ```Map``` contains pairs of strings, the source URLs, and pairs of the drawable and the last time that it was updated.
+If the drawable was last updated over a minute ago, it is removed from the cache.
+
+Once the cache has been cleaned, the cache is checked for the current key, which is reloaded if it was last accessed more than 45 seconds ago.
+The ```Drawable``` is returned with ```getConstantState().newDrawable()```. This ensures that each ```Drawable``` displayed has the correct aspect ratio for the ```TextView``` in which it
+is displayed, otherwise only the last mutation would take effect.
+
+Otherwise, the ```Resources``` reference is checked, and if it is non-null, the ```Drawable``` is loaded.
+
+```fetchDrawable``` creates an ```InputStream``` by calling ```fetch```.
+```fetch``` checks if the ```HttpImageGetter``` still exists, and if so creates a ```URL``` from which to load the content.
+```fetchDrawable``` then creates a ```BitmapDrawable``` from this ```InputStream``` and the ```Resources``` object which is used to determine specifics about how the ```Drawable``` should
+be displayed.
+The ```Drawable``` is then added to the cache and returned.
+
+In ```onPostExecute``` the validity of the ```HttpImageGetter```, result and ```URLDrawable``` are checked, and if they are valid the ```Drawable``` is scaled.
+```setDrawableScale``` calls ```getScale``` which returns the scale of the ```View``` maximum width to the ```Drawable``` width.
+```setDrawableScale``` then sets the bounds of the ```Drawable``` to the scaled values of its original width and height, maintaining its aspect ratio while filling the full width of the
+containing ```View```.
+
+Once the scale of the result ```Drawable``` has been set, the scale of the ```URLDrawable``` is also set, and the ```URLDrawable``` drawable is changed for the result ```Drawable```.
+If the ```DrawableCatcher``` is non-null, the drawable and URL are passed to it.
+
+Finally, in order to draw the ```URLDrawable``` the container is invalidated and its text is set to its current text to force a layout refresh.
+
+#page
 
 ## User Activity
 
