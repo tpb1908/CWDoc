@@ -7862,128 +7862,9 @@ public static String overrideTags(@Nullable String html) {
 The ```HtmlTagHandler``` is passed the handlers which are required for each of the span types.
 It is also passed the ```TextView``` itself, which is required for measuring indentations.
 
-#### Tag opening and closing
-
-Each tag is delegated to the ```HtmlTagHandler``` through the ```handleTag``` method, which has the parameters ```boolean opening, String tag, Editable output, XMLReader xmlReader```.
-If ```opening``` is true, the tag, output and xmlReader are passed to ```handleOpeningTag```. Otherwise the tag and output are passed to ```handleClosingTag```.
-
-After the tag has been handled, any table tags are stored with ```storeTableTags```.
-This checks if the current table depth is greater than 0, or the tag is "table".
-If so, the opening bracket is added to the mTableHtmlBuilder ```StringBuilder```, along with the closing forward slash if the tag is being closed.
-The tag is then appended and closed.
-
-This builds the HTML for a table so that it can be displayed later.
-
-#### Attribute extraction
-
-Unfortunately, the ```TagHandler``` has no direct access to the attributes of the tags that are passed to it.
-However, it is able to access them when the tag is being opened.
-
-This is done with ```getAttribute```
-
 **HtmlTagHandler.java**
 ``` java
-package com.tpb.mdtext;
-
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.Drawable;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.util.Pair;
-import android.text.Editable;
-import android.text.Html;
-import android.text.Layout;
-import android.text.Spannable;
-import android.text.Spanned;
-import android.text.TextPaint;
-import android.text.style.AlignmentSpan;
-import android.text.style.BackgroundColorSpan;
-import android.text.style.BulletSpan;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.LeadingMarginSpan;
-import android.text.style.StrikethroughSpan;
-import android.text.style.TypefaceSpan;
-import android.util.Log;
-import android.widget.TextView;
-
-import com.tpb.mdtext.handlers.CodeClickHandler;
-import com.tpb.mdtext.handlers.ImageClickHandler;
-import com.tpb.mdtext.handlers.LinkClickHandler;
-import com.tpb.mdtext.handlers.TableClickHandler;
-import com.tpb.mdtext.views.spans.CleanURLSpan;
-import com.tpb.mdtext.views.spans.ClickableImageSpan;
-import com.tpb.mdtext.views.spans.CodeSpan;
-import com.tpb.mdtext.views.spans.HorizontalRuleSpan;
-import com.tpb.mdtext.views.spans.InlineCodeSpan;
-import com.tpb.mdtext.views.spans.ListNumberSpan;
-import com.tpb.mdtext.views.spans.QuoteSpan;
-import com.tpb.mdtext.views.spans.RoundedBackgroundEndSpan;
-import com.tpb.mdtext.views.spans.TableSpan;
-import com.tpb.mdtext.views.spans.WrappingClickableSpan;
-
-import org.xml.sax.XMLReader;
-
-import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Stack;
-import java.util.regex.Pattern;
-
-import static com.tpb.mdtext.TextUtils.isValidURL;
-
-public class HtmlTagHandler implements Html.TagHandler {
-    private static final String TAG = HtmlTagHandler.class.getSimpleName();
-
-    private static final String UNORDERED_LIST_TAG = "ESCAPED_UL_TAG";
-    private static final String ORDERED_LIST_TAG = "ESCAPED_OL_TAG";
-    private static final String LIST_ITEM_TAG = "ESCAPED_LI_TAG";
-    private static final String BLOCKQUOTE_TAG = "ESCAPED_BLOCKQUOTE_TAG";
-    private static final String A_TAG = "ESCAPED_A_TAG";
-    private static final String FONT_TAG = "ESCAPED_FONT_TAG";
-    private static final String IMAGE_TAG = "ESCAPED_IMG_TAG";
-
-    private static final Map<String, String> ESCAPE_MAP = new HashMap<>();
-
-    static {
-        ESCAPE_MAP.put("<ul", "<" + UNORDERED_LIST_TAG);
-        ESCAPE_MAP.put("</ul>", "</" + UNORDERED_LIST_TAG + ">");
-        ESCAPE_MAP.put("<ol", "<" + ORDERED_LIST_TAG);
-        ESCAPE_MAP.put("</ol>", "</" + ORDERED_LIST_TAG + ">");
-        ESCAPE_MAP.put("<li", "<" + LIST_ITEM_TAG);
-        ESCAPE_MAP.put("</li>", "</" + LIST_ITEM_TAG + ">");
-        ESCAPE_MAP.put("<blockquote>", "<" + BLOCKQUOTE_TAG + ">");
-        ESCAPE_MAP.put("</blockquote>", "</" + BLOCKQUOTE_TAG + ">");
-        ESCAPE_MAP.put("<a", "<" + A_TAG);
-        ESCAPE_MAP.put("</a>", "</" + A_TAG + ">");
-        ESCAPE_MAP.put("<font", "<" + FONT_TAG);
-        ESCAPE_MAP.put("</font>", "</" + FONT_TAG + ">");
-        ESCAPE_MAP.put("<img", "<" + IMAGE_TAG);
-        ESCAPE_MAP.put("</img>", "</" + IMAGE_TAG + ">");
-    }
-
-    private static final Pattern ESCAPE_PATTERN = TextUtils.generatePattern(ESCAPE_MAP.keySet());
-
-    public static String overrideTags(@Nullable String html) {
-        return TextUtils.replace(html, ESCAPE_MAP, ESCAPE_PATTERN);
-    }
-
-    // Stack of nested list tags, bulleted flag and list type (For OL)
-    private final Stack<Triple<String, Boolean, ListNumberSpan.ListType>> mLists = new Stack<>();
-    // Tracks indices of nested ordered lists
-    private final Stack<Pair<Integer, ListNumberSpan.ListType>> mOlIndices = new Stack<>();
-    private StringBuilder mTableHtmlBuilder = new StringBuilder();
-    private int mTableLevel = 0;
-    private static int mSingleIndent = 10;
-    private static final int mListIndent = mSingleIndent * 2;
-    private final TextPaint mTextPaint;
-    private LinkClickHandler mLinkHandler;
-    private CodeClickHandler mCodeHandler;
-    private TableClickHandler mTableHandler;
-    private ImageClickHandler mImageClickHandler;
-    private Html.ImageGetter mImageGetter;
-
-    public HtmlTagHandler(TextView tv, Html.ImageGetter imageGetter,
+public HtmlTagHandler(TextView tv, Html.ImageGetter imageGetter,
                           @Nullable LinkClickHandler linkHandler,
                           @Nullable ImageClickHandler imageClickHandler,
                           @Nullable CodeClickHandler codeHandler,
@@ -7996,9 +7877,16 @@ public class HtmlTagHandler implements Html.TagHandler {
         mCodeHandler = codeHandler;
         mTableHandler = tableHandler;
     }
+```
 
-    @Override
-    public void handleTag(final boolean opening, final String tag, Editable output, final XMLReader xmlReader) {
+#### Tag opening and closing
+
+Each tag is delegated to the ```HtmlTagHandler``` through the ```handleTag``` method, which has the parameters ```boolean opening, String tag, Editable output, XMLReader xmlReader```.
+If ```opening``` is true, the tag, output and xmlReader are passed to ```handleOpeningTag```. Otherwise the tag and output are passed to ```handleClosingTag```.
+
+**HtmlTagHandler.java**
+``` java
+public void handleTag(final boolean opening, final String tag, Editable output, final XMLReader xmlReader) {
         if(opening) {
             handleOpeningTag(tag, output, xmlReader);
         } else {
@@ -8006,8 +7894,13 @@ public class HtmlTagHandler implements Html.TagHandler {
         }
         storeTableTags(opening, tag);
     }
+```
 
-    private void handleOpeningTag(final String tag, Editable output, final XMLReader xmlReader) {
+```handleOpeningTag``` switches the tag to begin the correct span type in the ```Editable```
+
+**HtmlTagHandler.java**
+``` java
+private void handleOpeningTag(final String tag, Editable output, final XMLReader xmlReader) {
         switch(tag.toUpperCase()) {
             case UNORDERED_LIST_TAG:
                 mLists.push(
@@ -8039,7 +7932,7 @@ public class HtmlTagHandler implements Html.TagHandler {
                     output.append("\n");
                 }
                 if(!mLists.isEmpty()) {
-                    String parentList = mLists.peek().first;
+                    final String parentList = mLists.peek().first;
                     if(parentList.equalsIgnoreCase(ORDERED_LIST_TAG)) {
                         start(output, new Ol());
                         mOlIndices.push(Pair.create(mOlIndices.pop().first + 1, mLists.peek().third));
@@ -8112,275 +8005,55 @@ public class HtmlTagHandler implements Html.TagHandler {
 
         }
     }
+```
 
-    private void handleClosingTag(final String tag, Editable output) {
-        switch(tag.toUpperCase()) {
-            case UNORDERED_LIST_TAG:
-                mLists.pop();
-                break;
-            case ORDERED_LIST_TAG:
-                mLists.pop();
-                mOlIndices.pop();
-                break;
-            case LIST_ITEM_TAG:
-                if(!mLists.isEmpty()) {
-                    if(mLists.peek().first.equalsIgnoreCase(UNORDERED_LIST_TAG)) {
-                        handleULTag(output);
-                    } else if(mLists.peek().first.equalsIgnoreCase(ORDERED_LIST_TAG)) {
-                        handleOLTag(output);
-                    }
-                } else {
-                    end(output, Ol.class, true);
-                }
-                break;
-            case "CODE":
-                handleCodeTag(output);
-                break;
-            case "HR":
-                handleHorizontalRule(output);
-                break;
-            case "CENTER":
-                end(output, Center.class, true,
-                        new AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
-                );
-                break;
-            case "S":
-            case "STRIKE":
-                end(output, StrikeThrough.class, false, new StrikethroughSpan());
-                break;
-            case "TABLE":
-                handleTableTag(output);
-                break;
-            case BLOCKQUOTE_TAG:
-                handleBlockQuoteTag(output);
-                break;
-            case A_TAG:
-                handleATag(output);
-                break;
-            case "INLINECODE":
-                handleInlineCodeTag(output);
-                break;
-            case FONT_TAG:
-                handleFontTag(output);
-                break;
-            case "TR":
-                end(output, Tr.class, false);
-                break;
-            case "TH":
-                end(output, Th.class, false);
-                break;
-            case "TD":
-                end(output, Td.class, false);
-                break;
-        }
-    }
+After the tag has been handled, any table tags are stored with ```storeTableTags```.
+This checks if the current table depth is greater than 0, or the tag is "table".
+If so, the opening bracket is added to the mTableHtmlBuilder ```StringBuilder```, along with the closing forward slash if the tag is being closed.
+The tag is then appended and closed.
 
-    private void handleBlockQuoteTag(Editable output) {
-        final Object obj = getLast(output, BlockQuote.class);
-        final int start = output.getSpanStart(obj);
-        final int end = output.length();
-        output.removeSpan(obj);
-        output.setSpan(new QuoteSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-    }
-
-    private void handleInlineCodeTag(Editable output) {
-        final Object obj = getLast(output, InlineCode.class);
-        final int start = output.getSpanStart(obj);
-        final int end = output.length();
-        output.removeSpan(obj);
-        output.setSpan(new InlineCodeSpan(mTextPaint.getTextSize()), start, end,
-                Spannable.SPAN_INCLUSIVE_EXCLUSIVE
-        );
-    }
-
-    private void handleTableTag(Editable output) {
-        mTableLevel--;
-        // When we're back at the root-level table
-        if(mTableLevel == 0) {
-            final Table obj = getLast(output, Table.class);
-            final int start = output.getSpanStart(obj);
-            output.removeSpan(obj); //Remove the old span
-            output.insert(start, "\n \n");
-            final TableSpan table = new TableSpan(mTableHtmlBuilder.toString(), mTableHandler);
-            output.setSpan(table, start, start + 2, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            output.setSpan(new WrappingClickableSpan(table), start, start + 3,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-
-        } else {
-            end(output, Table.class, false);
-        }
-    }
-
-    private void handleHorizontalRule(Editable output) {
-        final Object obj = getLast(output, HorizontalRule.class);
-        final int start = output.getSpanStart(obj);
-        output.removeSpan(obj); //Remove the old span
-        output.replace(start, output.length(), " "); //We need a non-empty span
-        output.setSpan(new HorizontalRuleSpan(), start, start + 1, 0); //Insert the bar span
-    }
-
-    private void handleCodeTag(Editable output) {
-        final Object obj = getLast(output, Code.class);
-        final int start = output.getSpanStart(obj);
-        final int end = output.length();
-        if(end > start + 1) {
-            final CharSequence chars = extractSpanText(output, Code.class);
-            output.removeSpan(obj);
-            output.insert(start, "\n \n"); // Another line for our CodeSpan to cover
-            final CodeSpan code = new CodeSpan(chars.toString(), mCodeHandler);
-            output.setSpan(code, start, start + 2, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            output.setSpan(new WrappingClickableSpan(code), start, start + 3,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        }
-    }
-
-    private void handleULTag(Editable output) {
-        if(output.length() > 0 && output.charAt(output.length() - 1) != '\n') {
-            output.append("\n");
-        }
-
-        if(mLists.peek().second) {
-            //Check for checkboxes
-            if(output.length() > 2 &&
-                    ((output.charAt(0) >= '\u2610' && output.charAt(0) <= '\u2612')
-                            || (output.charAt(1) >= '\u2610' && output
-                            .charAt(1) <= '\u2612')
-                    )) {
-                end(output, Ul.class, false,
-                        new LeadingMarginSpan.Standard(
-                                mListIndent * (mLists.size() - 1))
-                );
-            } else {
-                end(output, Ul.class, false,
-                        new LeadingMarginSpan.Standard(
-                                mListIndent * (mLists.size() - 1)),
-                        new BulletSpan(mSingleIndent)
-                );
+**HtmlTagHandler.java**
+``` java
+private void storeTableTags(boolean opening, String tag) {
+        if(mTableLevel > 0 || tag.equalsIgnoreCase("table")) {
+            mTableHtmlBuilder.append("<");
+            if(!opening) {
+                mTableHtmlBuilder.append("/");
             }
-        } else {
-            end(output, Ul.class, false,
-                    new LeadingMarginSpan.Standard(mListIndent * (mLists.size() - 1))
-            );
+            mTableHtmlBuilder
+                    .append(tag.toLowerCase())
+                    .append(">");
         }
     }
+```
 
-    private void handleOLTag(Editable output) {
-        if(output.length() > 0 && output.charAt(output.length() - 1) != '\n') {
-            output.append("\n");
-        }
-        int numberMargin = mListIndent * (mLists.size() - 1);
-        if(mLists.size() > 2) {
-            // Counter effect of nested spans
-            numberMargin -= (mLists.size() - 2) * mListIndent;
-        }
-        if(mLists.peek().second) {
-            end(output, Ol.class, false,
-                    new LeadingMarginSpan.Standard(numberMargin),
-                    new ListNumberSpan(mTextPaint, mOlIndices.lastElement().first - 1,
-                            mLists.peek().third
-                    )
-            );
-        } else {
-            end(output, Ol.class, false,
-                    new LeadingMarginSpan.Standard(numberMargin)
-            );
-        }
-    }
+This builds the HTML for a table so that it can be displayed later.
 
-    private void handleFontTag(Editable output) {
-        final ForegroundColor fgc = getLast(output, ForegroundColor.class);
-        final BackgroundColor bgc = getLast(output, BackgroundColor.class);
-        final Font f = getLast(output, Font.class);
-        if(fgc != null) {
-            final int start = output.getSpanStart(fgc);
-            final int end = output.length();
-            output.removeSpan(fgc);
-            output.setSpan(new ForegroundColorSpan(safelyParseColor(fgc.color)), start, end,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        }
-        if(bgc != null) {
-            final int start = output.getSpanStart(bgc);
-            final int end = output.length();
-            output.removeSpan(bgc);
+#### Span opening and closing
 
-            final int color = safelyParseColor(bgc.color);
-            if(bgc.rounded) {
-                output.insert(end, "\u00A0");
-                output.insert(start, "\u00A0");
-                output.setSpan(new RoundedBackgroundEndSpan(color, false), start, start + 1,
-                        Spanned.SPAN_INCLUSIVE_EXCLUSIVE
-                );
-                output.setSpan(new RoundedBackgroundEndSpan(color, true), end, end + 1,
-                        Spanned.SPAN_EXCLUSIVE_INCLUSIVE
-                );
-                output.setSpan(new BackgroundColorSpan(color), start + 1, end,
-                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
-                );
-            } else {
-                output.setSpan(new BackgroundColorSpan(color), start, end,
-                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                );
-            }
+The ```TagHandler``` works by placing MARK spans in the ```Editable```.
+A MARK span is a span which must be removed later and acts as a placeholder for a new span.
 
-        }
-        if(f != null) {
-            final int start = output.getSpanStart(f);
-            final int end = output.length();
-            output.removeSpan(f);
-            output.setSpan(new TypefaceSpan(f.face), start, end,
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        }
-    }
-
-    private void handleATag(Editable output) {
-        final A obj = getLast(output, A.class);
-        final int start = output.getSpanStart(obj);
-        final int end = output.length();
-        output.removeSpan(obj);
-        if(isValidURL(obj.href)) {
-            output.setSpan(new CleanURLSpan(obj.href, mLinkHandler), start, end,
-                    Spannable.SPAN_INCLUSIVE_EXCLUSIVE
-            );
-        }
-    }
-
-    private void handleImageTag(Editable output, String source) {
-        Drawable d = new ColorDrawable(Color.TRANSPARENT);
-        if (mImageGetter != null) {
-            d = mImageGetter.getDrawable(source);
-        }
-        final int len = output.length();
-        output.append("\uFFFC");
-        final ClickableImageSpan is = new ClickableImageSpan(d,mImageClickHandler);
-        output.setSpan(is, len, output.length(),
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        output.setSpan(new WrappingClickableSpan(is), len, output.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    }
-
-    /**
-     * Mark the opening tag by using private classes
-     */
-    private void start(Editable output, Object mark) {
+**HtmlTagHandler.java**
+``` java
+private void start(Editable output, Object mark) {
         final int point = output.length();
         output.setSpan(mark, point, point, Spannable.SPAN_MARK_MARK);
     }
+```
 
-    /**
-     * Modified from {@link android.text.Html}
-     */
-    private void end(Editable output, Class kind, boolean paragraphStyle, Object... replaces) {
+The MARK span has 0 length and is placed at the end of the ```Editable```.
+
+**HtmlTagHandler.java**
+``` java
+private void end(Editable output, Class kind, boolean paragraphStyle, Object... replaces) {
         final Object obj = getLast(output, kind);
         final int start = output.getSpanStart(obj);
         final int end = output.length();
 
         // If we're in a table, then we need to store the raw HTML for later
         if(mTableLevel > 0) {
-            final CharSequence extractedSpanText = extractSpanText(output, kind);
-            mTableHtmlBuilder.append(extractedSpanText);
+            mTableHtmlBuilder.append(extractSpanText(output, kind));
         }
 
         output.removeSpan(obj);
@@ -8398,73 +8071,50 @@ public class HtmlTagHandler implements Html.TagHandler {
             }
         }
     }
+```
 
-    /**
-     * Returns the text contained within a span and deletes it from the output string
-     */
-    private CharSequence extractSpanText(Editable output, Class kind) {
-        final Object obj = getLast(output, kind);
-        final int start = output.getSpanStart(obj);
-        final int end = output.length();
+When a tag is ended it must be replaced by one or more spans, or removed.
 
-        final CharSequence extractedSpanText = output.subSequence(start, end);
-        output.delete(start, end);
-        return extractedSpanText;
-    }
+The span is extracted with ```getLast```
 
-    private static int safelyParseColor(String color) {
-        try {
-            return Color.parseColor(color);
-        } catch(Exception e) {
-            switch(color) {
-                case "black":
-                    return Color.BLACK;
-                case "white":
-                    return Color.WHITE;
-                case "red":
-                    return Color.RED;
-                case "blue":
-                    return Color.BLUE;
-                case "green":
-                    return Color.GREEN;
-                case "grey":
-                    return Color.GRAY;
-                case "yellow":
-                    return Color.YELLOW;
-                case "aqua":
-                    return 0xff00ffff;
-                case "fuchsia":
-                    return 0xffff00ff;
-                case "lime":
-                    return 0xff00ff00;
-                case "maroon":
-                    return 0xff800000;
-                case "navy":
-                    return 0xffff00ff;
-                case "olive":
-                    return 0xff808000;
-                case "purple":
-                    return 0xff800080;
-                case "silver":
-                    return 0xffc0c0c0;
-                case "teal":
-                    return 0xff008080;
-                default:
-                    return Color.WHITE;
-
+**HtmlTagHandler.java**
+``` java
+private static <T> T getLast(Editable text, Class<T> kind) {
+        final T[] objs = text.getSpans(0, text.length(), kind);
+        if(objs.length == 0) {
+            return null;
+        } else {
+            //In reverse as items are returned in order they were inserted
+            for(int i = objs.length; i > 0; i--) {
+                if(text.getSpanFlags(objs[i - 1]) == Spannable.SPAN_MARK_MARK) {
+                    return objs[i - 1];
+                }
             }
+            return null;
         }
     }
+```
 
-    private static Boolean safelyParseBoolean(String bool, boolean def) {
-        try {
-            return Boolean.valueOf(bool);
-        } catch(Exception e) {
-            return def;
-        }
-    }
+This finds all of the objects of the given class and iterates backwards through them searching for a span with the MARK flags.
 
-    private static String getAttribute(@NonNull String attr, @NonNull XMLReader reader, String defaultAttr) {
+If the tag is within a table, the text contained within it is extracted and added to the table ```StringBuilder```.
+
+The span start and end positions are then stored and it is removed from the ```Editable```.
+
+If the span is of non-zero length, it is replaced.
+If the span is an instance of ```ParagraphStyle```, a newline must be added after it.
+Once this check has ben completed, each of the spans in the replaces array are place over the position which was previously occupied by the MARK span.
+
+#### Attribute extraction
+
+Unfortunately, the ```TagHandler``` has no direct access to the attributes of the tags that are passed to it.
+However, it is able to access them when the tag is being opened.
+
+This is done with ```getAttribute```
+
+**HtmlTagHandler.java**
+``` java
+private static String getAttribute(@NonNull String attr, @NonNull XMLReader reader, String defaultAttr) {
         try {
             final Field fElement = reader.getClass().getDeclaredField("theNewElement");
             fElement.setAccessible(true);
@@ -8489,132 +8139,6 @@ public class HtmlTagHandler implements Html.TagHandler {
         }
         return defaultAttr;
     }
-
-    private void storeTableTags(boolean opening, String tag) {
-        if(mTableLevel > 0 || tag.equalsIgnoreCase("table")) {
-            mTableHtmlBuilder.append("<");
-            if(!opening) {
-                mTableHtmlBuilder.append("/");
-            }
-            mTableHtmlBuilder
-                    .append(tag.toLowerCase())
-                    .append(">");
-        }
-    }
-
-
-    /**
-     * Get last marked position of a tag type
-     */
-    private static <T> T getLast(Editable text, Class<T> kind) {
-        final T[] objs = text.getSpans(0, text.length(), kind);
-        if(objs.length == 0) {
-            return null;
-        } else {
-            //In reverse as items are returned in order they were inserted
-            for(int i = objs.length; i > 0; i--) {
-                if(text.getSpanFlags(objs[i - 1]) == Spannable.SPAN_MARK_MARK) {
-                    return objs[i - 1];
-                }
-            }
-            return null;
-        }
-    }
-
-    private static class Ul {
-
-    }
-
-    private static class Ol {
-    }
-
-    private static class Code {
-    }
-
-    private static class Center {
-    }
-
-    private static class StrikeThrough {
-    }
-
-    private static class Table {
-    }
-
-    private static class Tr {
-    }
-
-    private static class Th {
-    }
-
-    private static class Td {
-    }
-
-    private static class HorizontalRule {
-    }
-
-    private static class BlockQuote {
-    }
-
-    private static class InlineCode {
-    }
-
-    private static class A {
-
-        String href;
-
-        A(String href) {
-            this.href = href;
-        }
-
-    }
-
-    private static class ForegroundColor {
-        String color;
-
-        ForegroundColor(String color) {
-            this.color = color;
-        }
-
-    }
-
-    private static class BackgroundColor {
-        String color;
-        boolean rounded;
-
-        BackgroundColor(String color, boolean rounded) {
-            this.color = color;
-            this.rounded = rounded;
-        }
-    }
-
-    private static class Font {
-        String face;
-
-        Font(String face) {
-            this.face = face;
-        }
-    }
-
-    private static class Triple<T, U, V> {
-
-        T first;
-        U second;
-        V third;
-
-        Triple(T t, U u, V v) {
-            first = t;
-            second = u;
-            third = v;
-        }
-
-        static <T, U, V> Triple<T, U, V> create(T t, U u, V v) {
-            return new Triple<>(t, u, v);
-        }
-
-    }
-
-}
-
 ```
 
 This method uses reflection to attempt to extract the attribute from the ```XMLReader```.
@@ -8623,7 +8147,18 @@ First the element field is collected, made accessible and accessed from the ```X
 Next the attributes field is collected, made accessible and accessed from the element.
 Next the data field is collected, made accessible and accessed from the attributes.
 
-The ```data``` field is a string aray
+The ```data``` field is a string array containing the attribute names, types, and values.
+
+A href to a user might appear as [, href, href, CDATA, https://github.com/user, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+
+while a font tag with a colour and background colour may appear as [, background-color, background-color, CDATA, navy, , color, color, CDATA, red, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+
+Once the attribute is first found in the array, the next item will be tha attribute again, the item after will be the data type, and the item after that will be the actual data.
+
+The length value extracted from the attrs object is the actual number of attributes present.
+
+The loop iterates through every 5th item, beginning at index 1, as index 0 is always empty.
+If the the index contains the tag, the value 4 positions after is returned.
 
 #### List tags
 
@@ -8654,6 +8189,25 @@ private static class Triple<T, U, V> {
 }
 ```
 
+##### Unordered list opening
+If the tag is an unordered list tag, a new ```Triple``` is pushed to the stack, containing the tag, the "bulleted" attribute used to specify whether bullets should be shown, and the
+NUMBER ```ListType```, although it will not be used.
+
+
+##### Ordered list opening
+
+If the tag is an ordered list tag, a new ```Triple``` is push to the stack, containing the tag, the numbered attribute, and the ```ListType``` found from the string value of the "type" attribute.
+
+An index of 1 and the ```ListType``` are then push to the mOlIndices stack.
+
+##### List item opening
+
+If the tag is a list tag, the last character of the output is checked to ensure that it is a newline, otherwise the line will not wrap.
+
+If mLists is not empty, the parent list tag is checked.
+If it is an ordered list, the ```Ol``` span is started, and a ```Pair``` containing the top index in the stack plus one, and the parent ```ListType``` is pushed to the stack.
+
+If it is an unordered list, the ```Ul``` span is started
 
 <div style="page-break-after: always;"></div>
 

@@ -3446,17 +3446,54 @@ public static String overrideTags(@Nullable String html) {
 The ```HtmlTagHandler``` is passed the handlers which are required for each of the span types.
 It is also passed the ```TextView``` itself, which is required for measuring indentations.
 
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $public HtmlTagHandler$"
+
 #### Tag opening and closing
 
 Each tag is delegated to the ```HtmlTagHandler``` through the ```handleTag``` method, which has the parameters ```boolean opening, String tag, Editable output, XMLReader xmlReader```.
 If ```opening``` is true, the tag, output and xmlReader are passed to ```handleOpeningTag```. Otherwise the tag and output are passed to ```handleClosingTag```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $public void handleTag$"
+
+```handleOpeningTag``` switches the tag to begin the correct span type in the ```Editable```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleOpeningTag$"
 
 After the tag has been handled, any table tags are stored with ```storeTableTags```.
 This checks if the current table depth is greater than 0, or the tag is "table".
 If so, the opening bracket is added to the mTableHtmlBuilder ```StringBuilder```, along with the closing forward slash if the tag is being closed.
 The tag is then appended and closed.
 
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void storeTableTags$"
+
 This builds the HTML for a table so that it can be displayed later.
+
+#### Span opening and closing
+
+The ```TagHandler``` works by placing MARK spans in the ```Editable```.
+A MARK span is a span which must be removed later and acts as a placeholder for a new span.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void start$"
+
+The MARK span has 0 length and is placed at the end of the ```Editable```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void end$"
+
+When a tag is ended it must be replaced by one or more spans, or removed.
+
+The span is extracted with ```getLast```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private static <T> T getLast$"
+
+This finds all of the objects of the given class and iterates backwards through them searching for a span with the MARK flags.
+
+If the tag is within a table, the text contained within it is extracted and added to the table ```StringBuilder```.
+
+The span start and end positions are then stored and it is removed from the ```Editable```.
+
+If the span is of non-zero length, it is replaced.
+If the span is an instance of ```ParagraphStyle```, a newline must be added after it.
+Once this check has ben completed, each of the spans in the replaces array are place over the position which was previously occupied by the MARK span.
 
 #### Attribute extraction
 
@@ -3465,7 +3502,7 @@ However, it is able to access them when the tag is being opened.
 
 This is done with ```getAttribute```
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private static String getAttribute$"
 
 This method uses reflection to attempt to extract the attribute from the ```XMLReader```.
 
@@ -3473,7 +3510,18 @@ First the element field is collected, made accessible and accessed from the ```X
 Next the attributes field is collected, made accessible and accessed from the element.
 Next the data field is collected, made accessible and accessed from the attributes.
 
-The ```data``` field is a string aray
+The ```data``` field is a string array containing the attribute names, types, and values.
+
+A href to a user might appear as [, href, href, CDATA, https://github.com/user, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+
+while a font tag with a colour and background colour may appear as [, background-color, background-color, CDATA, navy, , color, color, CDATA, red, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]
+
+Once the attribute is first found in the array, the next item will be tha attribute again, the item after will be the data type, and the item after that will be the actual data.
+
+The length value extracted from the attrs object is the actual number of attributes present.
+
+The loop iterates through every 5th item, beginning at index 1, as index 0 is always empty.
+If the the index contains the tag, the value 4 positions after is returned.
 
 #### List tags
 
@@ -3504,6 +3552,25 @@ private static class Triple<T, U, V> {
 }
 ```
 
+##### Unordered list opening
+If the tag is an unordered list tag, a new ```Triple``` is pushed to the stack, containing the tag, the "bulleted" attribute used to specify whether bullets should be shown, and the
+NUMBER ```ListType```, although it will not be used.
+
+
+##### Ordered list opening
+
+If the tag is an ordered list tag, a new ```Triple``` is push to the stack, containing the tag, the numbered attribute, and the ```ListType``` found from the string value of the "type" attribute.
+
+An index of 1 and the ```ListType``` are then push to the mOlIndices stack.
+
+##### List item opening
+
+If the tag is a list tag, the last character of the output is checked to ensure that it is a newline, otherwise the line will not wrap.
+
+If mLists is not empty, the parent list tag is checked.
+If it is an ordered list, the ```Ol``` span is started, and a ```Pair``` containing the top index in the stack plus one, and the parent ```ListType``` is pushed to the stack.
+
+If it is an unordered list, the ```Ul``` span is started
 
 #page
 
