@@ -6498,7 +6498,6 @@ import android.text.style.ClickableSpan;
 import android.view.MotionEvent;
 import android.widget.TextView;
 
-import com.tpb.mdtext.views.MarkdownEditText;
 import com.tpb.mdtext.views.MarkdownTextView;
 
 /**
@@ -6556,8 +6555,6 @@ public class ClickableMovementMethod extends LinkMovementMethod {
     private void triggerSpanHit(TextView widget) {
         if(widget instanceof MarkdownTextView) {
             ((MarkdownTextView) widget).setSpanHit();
-        } else if(widget instanceof MarkdownEditText) {
-            ((MarkdownEditText) widget).setSpanHit();
         }
     }
 
@@ -7268,7 +7265,513 @@ The ```ResImageGetter``` attempts to load a drawable from a resource name, check
 
 ##### MarkdownTextView
 
-```MarkdownTextView``` is used to 
+```MarkdownTextView``` is used to implement each of the individual objectives described above. It handles backgrround parsing of the markdown as well as dealing with click handling and
+the caching of content.
+
+The ```MarkdownTextView``` contains a ```LinkClickHandler```, ```ImageClickHandler```, ```TableClickHandler```, and ```CodeClickHandler```.
+
+**MarkdownTextView.java**
+``` java
+package com.tpb.mdtext.views;
+
+import android.content.Context;
+import android.graphics.Color;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.annotation.RawRes;
+import android.support.v7.widget.AppCompatTextView;
+import android.text.Html;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.util.AttributeSet;
+import android.view.MotionEvent;
+import android.view.View;
+
+import com.tpb.mdtext.ClickableMovementMethod;
+import com.tpb.mdtext.HtmlTagHandler;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.SpanCache;
+import com.tpb.mdtext.TextUtils;
+import com.tpb.mdtext.dialogs.CodeDialog;
+import com.tpb.mdtext.dialogs.ImageDialog;
+import com.tpb.mdtext.dialogs.TableDialog;
+import com.tpb.mdtext.handlers.CodeClickHandler;
+import com.tpb.mdtext.handlers.ImageClickHandler;
+import com.tpb.mdtext.handlers.LinkClickHandler;
+import com.tpb.mdtext.handlers.TableClickHandler;
+import com.tpb.mdtext.views.spans.CodeSpan;
+import com.tpb.mdtext.views.spans.TableSpan;
+
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.util.Scanner;
+
+
+public class MarkdownTextView extends AppCompatTextView implements View.OnClickListener {
+
+    public static final String TAG = MarkdownTextView.class.getSimpleName();
+
+    @Nullable private LinkClickHandler mLinkHandler;
+    @Nullable private ImageClickHandler mImageClickHandler;
+    @Nullable private TableClickHandler mTableHandler;
+    @Nullable private CodeClickHandler mCodeHandler;
+    @Nullable private Handler mParseHandler;
+
+    private boolean mSpanHit = false;
+    private OnClickListener mOnClickListener;
+    private float[] mLastClickPosition = new float[] {-1, -1};
+
+    private WeakReference<SpanCache> mSpanCache;
+
+    public MarkdownTextView(Context context, AttributeSet attrs, int defStyle) {
+        super(context, attrs, defStyle);
+        init(context);
+    }
+
+    public MarkdownTextView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        init(context);
+    }
+
+    public MarkdownTextView(Context context) {
+        super(context);
+        init(context);
+    }
+
+    private void init(Context context) {
+        if(!CodeSpan.isInitialised()) CodeSpan.initialise(context);
+        if(!TableSpan.isInitialised()) TableSpan.initialise(context);
+        setDefaultHandlers(context);
+        setTextIsSelectable(true);
+        setCursorVisible(false);
+        setClickable(true);
+        setTextColor(Color.WHITE);
+    }
+
+    public void setParseHandler(@Nullable Handler parseHandler) {
+        mParseHandler = parseHandler;
+    }
+
+    public void setLinkClickHandler(LinkClickHandler handler) {
+        mLinkHandler = handler;
+    }
+
+    public void setImageHandler(ImageClickHandler imageHandler) {
+        mImageClickHandler = imageHandler;
+    }
+
+    public void setCodeClickHandler(CodeClickHandler handler) {
+        mCodeHandler = handler;
+    }
+
+    public void setTableClickHandler(TableClickHandler handler) {
+        mTableHandler = handler;
+    }
+
+    public void setDefaultHandlers(Context context) {
+        setCodeClickHandler(new CodeDialog(context));
+        setImageHandler(new ImageDialog(context));
+        setTableClickHandler(new TableDialog(context));
+    }
+
+    public void setMarkdown(@NonNull String markdown) {
+        setMarkdown(markdown, null, null);
+    }
+
+    public void setMarkdown(@RawRes int resId) {
+        setMarkdown(resId, null);
+    }
+
+    private void setMarkdown(@RawRes int resId, @Nullable Html.ImageGetter imageGetter) {
+        final InputStream inputStreamText = getContext().getResources().openRawResource(resId);
+        setMarkdown(convertStreamToString(inputStreamText), imageGetter, null);
+    }
+
+    public void setMarkdown(@NonNull final String markdown, @Nullable final Html.ImageGetter imageGetter, @Nullable SpanCache cache) {
+        mSpanCache = new WeakReference<>(cache);
+        //If we have a handler use it
+        if(mParseHandler != null) {
+            mParseHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    parseAndSetMd(markdown, imageGetter);
+                }
+            });
+        } else {
+            parseAndSetMd(markdown, imageGetter);
+        }
+    }
+
+    private void parseAndSetMd(@NonNull String markdown, @Nullable final Html.ImageGetter imageGetter) {
+        final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
+                imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
+        );
+
+        // Override tags to stop Html.fromHtml destroying some of them
+        markdown = htmlTagHandler.overrideTags(Markdown.parseMD(markdown));
+        final Spanned text;
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            text = removeHtmlBottomPadding(
+                    Html.fromHtml(markdown, Html.FROM_HTML_MODE_COMPACT, imageGetter,
+                            htmlTagHandler
+                    ));
+        } else {
+            text = removeHtmlBottomPadding(Html.fromHtml(markdown, imageGetter, htmlTagHandler));
+        }
+
+        // Convert to a buffer to allow editing
+        final SpannableString buffer = new SpannableString(text);
+
+        //Add links for emails and web-urls
+        TextUtils.addLinks(buffer);
+        if(Looper.myLooper() == Looper.getMainLooper()) {
+            setMarkdownText(buffer);
+        } else {
+            //Post back on UI thread
+            MarkdownTextView.this.post(new Runnable() {
+                @Override
+                public void run() {
+                    setMarkdownText(buffer);
+                }
+            });
+        }
+    }
+
+    private void setMarkdownText(SpannableString buffer) {
+        setText(buffer);
+        if(!(getMovementMethod() instanceof ClickableMovementMethod)) {
+            setMovementMethod(ClickableMovementMethod.getInstance());
+        }
+        if(mSpanCache != null && mSpanCache.get() != null) {
+            mSpanCache.get().cache(buffer);
+            mSpanCache = null;
+        }
+    }
+
+    @NonNull
+    private static String convertStreamToString(@NonNull InputStream is) {
+        final Scanner s = new Scanner(is).useDelimiter("\\A");
+        return s.hasNext() ? s.next() : "";
+    }
+
+    private static Spanned removeHtmlBottomPadding(Spanned text) {
+        while(text.length() > 0 && text.charAt(text.length() - 1) == '\n') {
+            text = (Spanned) text.subSequence(0, text.length() - 1);
+        }
+        return text;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if(event.getAction() == MotionEvent.ACTION_DOWN) {
+            mLastClickPosition[0] = event.getRawX();
+            mLastClickPosition[1] = event.getRawY();
+            if(hasSelection()) clearFocus();
+        } else if(event.getAction() == MotionEvent.ACTION_UP) {
+            mSpanHit = false;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    public float[] getLastClickPosition() {
+        if(mLastClickPosition[0] == -1) {
+            // If we haven't been clicked yet, get the centre of the view
+            final int[] pos = new int[2];
+            getLocationOnScreen(pos);
+            mLastClickPosition[0] = pos[0] + getWidth() / 2;
+            mLastClickPosition[1] = pos[1] + getHeight() / 2;
+        }
+        return mLastClickPosition;
+    }
+
+    public void setSpanHit() {
+        mSpanHit = true;
+    }
+
+    @Override
+    public void onClick(View v) {
+        if(!mSpanHit && mOnClickListener != null) mOnClickListener.onClick(v);
+    }
+
+    @Override
+    public void setOnClickListener(@Nullable OnClickListener l) {
+        mOnClickListener = l;
+        super.setOnClickListener(this);
+    }
+
+    @Override
+    protected boolean getDefaultEditable() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N || super.getDefaultEditable();
+    }
+
+    @Override
+    public boolean isSuggestionsEnabled() {
+        return false;
+    }
+}
+
+```
+
+Each of the constructors calls ```init``` which checks for the initialisation of ```CodeSpan``` and ```TableSpan```, creates the default handlers, enables text selection and clicking, 
+and sets the text colour.
+
+After this are setters for each of the handlers.
+
+The raw markdown text can be set from a string or a resource id.
+Each of these methods can also take an ```ImageGeter```.
+
+The ```setMarkdown``` method which takes an a ```SpanCacher``` creates a ```WeakReference``` to the ```SpanCacher``` and then checks if there is a ```Handler``` to perform parsing on 
+another thread.
+If the handler exists, the call to ```parseAndSetMd``` is run on the ```Handler```, otherwise it is called on the UI thread.
+
+In ```parseAndSetMd``` the ```HtmlTagHandler``` is created to parse HTML to spans.
+The span text is then overriden to stop the built in ```Html.fromHtml``` capturing but ignoring numerous tags.
+
+If the Android version is APi 25 or greater, the COMPACT flag is used to ensure the styling is the same as on previous versions.
+In either case, ```removeHtmlBottomPadding``` is called, as ```Html.fromHtml``` adds two newlines to the end of the parsed HTML.
+
+In order to add the URL and email address links, the ```Spanned``` object must be converted to an ```Editable```.
+The links are then added, and the text can be set.
+
+If the current ```Looper``` is the main ```Looper```, then the code is running on the UI thread and the text can be set immediately.
+Otherwise, it must be posted on the ```TextView``` itself so that it runs on the UI thread.
+
+```setMarkdownText``` sets the text, and ensures that the movement method is a ```ClickableMovementMethod```.
+Finally, if a ```SpanCacher``` exists, it is passed the ```SpannableString```.
+
+The remaining methods are used to handle clicking on the ```TextView```.
+```onTouchEvent``` captures all touch events.
+If the event action is down the position is stored for use in animations, and any selection is cleared.
+If the event is up, the span hit flag is reset.
+
+```setSpanHit``` is used to set the span hit flag, as described in ```ClickableMovementMethod```.
+
+```onClick``` is used to forward the click events to the actual ```OnClickListener``` if it exists and a span has not been hit in the same click event.
+
+```setOnClickListener``` is overriden to store the ```OnClickListener``` and ensure that click events are passed to the ```MarkdownTextView``` itself.
+
+```getDefaultEditable``` checks the Android version, returning true if the SDK version is 25 or above, otherwise returning the default value.
+This fixes a problem introduced in SDK 25 where span priority is not respected, which can cause problems when displaying indented content, such as lists.
+
+```isSuggestionEnabled``` is overriden to ensure that suggestions are never shown on the ```MarkdownTextView```, even though it may appear to be editable.
+
+##### MarkdownEditText
+
+The ```MarkdownEditText``` is very similar to ```MarkdownTextView``` except that it extends ```EditText```, a subclass of ```TextView```, does not include support for processing on another
+thread, and adds support for toggling between and editable and non-editable state.
+
+**MarkdownEditText.java**
+``` java
+package com.tpb.mdtext.views;
+
+import android.content.Context;
+import android.os.Build;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.annotation.RawRes;
+import android.support.v7.widget.AppCompatEditText;
+import android.text.Editable;
+import android.text.Html;
+import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.util.AttributeSet;
+
+import com.tpb.mdtext.ClickableMovementMethod;
+import com.tpb.mdtext.HtmlTagHandler;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.TextUtils;
+import com.tpb.mdtext.dialogs.CodeDialog;
+import com.tpb.mdtext.dialogs.ImageDialog;
+import com.tpb.mdtext.dialogs.TableDialog;
+import com.tpb.mdtext.handlers.CodeClickHandler;
+import com.tpb.mdtext.handlers.ImageClickHandler;
+import com.tpb.mdtext.handlers.LinkClickHandler;
+import com.tpb.mdtext.handlers.TableClickHandler;
+import com.tpb.mdtext.views.spans.CodeSpan;
+import com.tpb.mdtext.views.spans.TableSpan;
+
+import java.io.InputStream;
+import java.util.Scanner;
+
+
+/**
+ * Created by theo on 27/02/17.
+ */
+
+public class MarkdownEditText extends AppCompatEditText {
+
+    public static final String TAG = MarkdownEditText.class.getSimpleName();
+
+    private boolean mIsEditing = true;
+    private Editable mSavedText = new SpannableStringBuilder();
+    @Nullable private LinkClickHandler mLinkHandler;
+    @Nullable private ImageClickHandler mImageClickHandler;
+    @Nullable private TableClickHandler mTableHandler;
+    @Nullable private CodeClickHandler mCodeHandler;
+
+
+    public MarkdownEditText(Context context, AttributeSet attrs, int defStyle) {
+        super(context, attrs, defStyle);
+        init(context);
+    }
+
+    public MarkdownEditText(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        init(context);
+    }
+
+    public MarkdownEditText(Context context) {
+        super(context);
+        init(context);
+    }
+
+    private void init(Context context ) {
+        if(!CodeSpan.isInitialised()) CodeSpan.initialise(context);
+        if(!TableSpan.isInitialised()) TableSpan.initialise(context);
+        setDefaultHandlers(context);
+        setPadding(0, getPaddingTop(), 0, getPaddingBottom());
+    }
+
+    public void setLinkClickHandler(LinkClickHandler handler) {
+        mLinkHandler = handler;
+    }
+
+    public void setImageHandler(ImageClickHandler imageHandler) {
+        mImageClickHandler = imageHandler;
+    }
+
+    public void setTableClickHandler(TableClickHandler handler) {
+        mTableHandler = handler;
+    }
+
+    public void setCodeClickHandler(CodeClickHandler handler) {
+        mCodeHandler = handler;
+    }
+
+    public void setDefaultHandlers(Context context) {
+        setCodeClickHandler(new CodeDialog(context));
+        setImageHandler(new ImageDialog(context));
+        setTableClickHandler(new TableDialog(context));
+    }
+
+    public void setMarkdown(@NonNull String html) {
+        setMarkdown(html, null);
+    }
+
+    public void setMarkdown(@RawRes int resId) {
+        setMarkdown(resId, null);
+    }
+
+    private void setMarkdown(@RawRes int resId, @Nullable Html.ImageGetter imageGetter) {
+        InputStream inputStreamText = getContext().getResources().openRawResource(resId);
+        setMarkdown(convertStreamToString(inputStreamText), imageGetter);
+    }
+
+    public void setMarkdown(@NonNull final String markdown, @Nullable final Html.ImageGetter imageGetter) {
+        final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
+                imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
+        );
+
+        // Override tags to stop Html.fromHtml destroying some of them
+        final String overridden = htmlTagHandler.overrideTags(Markdown.parseMD(markdown));
+        final Spanned text;
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            text = removeHtmlBottomPadding(
+                    Html.fromHtml(overridden, Html.FROM_HTML_MODE_COMPACT, imageGetter,
+                            htmlTagHandler
+                    ));
+        } else {
+            text = removeHtmlBottomPadding(
+                    Html.fromHtml(overridden, imageGetter, htmlTagHandler));
+        }
+
+        // Convert to a buffer to allow editing
+        final SpannableString buffer = new SpannableString(text);
+
+        //Add links for emails and web-urls
+        TextUtils.addLinks(buffer);
+        setText(buffer);
+        if(!(getMovementMethod() instanceof ClickableMovementMethod)) {
+            setMovementMethod(ClickableMovementMethod.getInstance());
+        }
+    }
+
+    @NonNull
+    private static String convertStreamToString(@NonNull InputStream is) {
+        final Scanner s = new Scanner(is).useDelimiter("\\A");
+        return s.hasNext() ? s.next() : "";
+    }
+
+    @Nullable
+    private static Spanned removeHtmlBottomPadding(@Nullable Spanned text) {
+        if(text == null) {
+            return null;
+        }
+
+        while(text.length() > 0 && text.charAt(text.length() - 1) == '\n') {
+            text = (Spanned) text.subSequence(0, text.length() - 1);
+        }
+        return text;
+    }
+
+    public boolean isEditing() {
+        return mIsEditing;
+    }
+
+    public void enableEditing() {
+        if(mIsEditing) return;
+        setFocusable(true);
+        setFocusableInTouchMode(true);
+        setCursorVisible(true);
+        setEnabled(true);
+        mIsEditing = true;
+    }
+
+    public void disableEditing() {
+        if(!mIsEditing) return;
+        setFocusable(false);
+        setCursorVisible(false);
+        mIsEditing = false;
+    }
+
+    public void saveText() {
+        mSavedText = getText();
+    }
+
+    public void restoreText() {
+        setText(mSavedText);
+    }
+
+    public Editable getInputText() {
+        return mIsEditing ? getText() : mSavedText;
+    }
+
+    @Override
+    public boolean isSuggestionsEnabled() {
+        return mIsEditing;
+    }
+
+}
+
+```
+
+As before, the ```CodeSpan``` and ```TableSpan``` are initialised, and the default handlers are set.
+The ```MarkdownEditText``` then removes padding on either side of it, as the spans should be shown across the entire canvas and have no access to the padding information.
+
+As before, markdown can be set from a string or a resource id, with or without an ```ImageGetter```. 
+As text is expected to change, the ```MarkdownEditText``` does not support caching the parsed spans.
+
+In order to support two text states, the ```MarkdownTextView``` contains an editing flag, and an ```Editable``` containing any saved text.
+
+```saveText``` saves the current text to this ```Editable```, and ```restoreText``` restores it.
+
+The ```getInputText``` method is used to always return the text being edited, rather than the parsed form.
+
+```enableEditing``` and ```disableEditing``` do as their names suggest, enabling or disable the cursor and focusing, and setting the mIsEditing flag.
 
 <div style="page-break-after: always;"></div>
 
