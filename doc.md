@@ -1179,7 +1179,8 @@ The client must implement the following features:
                 <ol type="i">
                     <li> Code blocks
                         <ol type="1">
-                            Display short code blocks as monospaced text blocks within the text body
+                            <li>Display short code blocks as monospaced text blocks within the text body</li>
+                            <li>Display large code blocks as placeholders for a separate view</li>
                         </ol>
                     <li>Parse strikethroughs and create the correct spans </li>
                     <li>Images
@@ -1218,6 +1219,7 @@ The client must implement the following features:
                         </ol>
                     </li>
                     <li>When displaying background colours, choose a text colour which contrasts the label colour</li>
+                    <li>Display tables as placeholders for a separate view</li>
                 </ol>
             </li>
             <li> Link handling
@@ -2825,6 +2827,8 @@ The ```Paint``` colour is then changed to light grey and the new rectangle is dr
 
 The only caveat to this method is that if the span it must be ensured that there is an empty line for the ```HorizontalRuleSpan``` to fill.
 
+This span completes objective 9.ii.b
+
 #### QuoteSpan
 
 Android already includes a span for quotes, however it only draws a line to the start of the text and is not configurable, instead using blue (0, 255, 0).
@@ -2958,6 +2962,8 @@ As 1 == 1, the function returns map.get(1).
 As there are no further recursive calls, the function returns map.get(40) + map.get(5) + map.get(1).
 This evaluates to "xl" + "v" + "i", which is correct.
 
+This span completes objetive 9.iv.b
+
 #### RoundedBackgroundEndSpan
 
 GitHub labels are shown with coloured backgrounds which have rounded corners.
@@ -3006,6 +3012,8 @@ Finally, in ```draw``` the ```InlineCodeSpan``` first draws the text, offset by 
 The background is an opaque grey rectangle which fills the full width of the ```TextView```.
 
 ![InlineCodeSpan](http://imgur.com/vP5nytU.png)
+
+This span completes objective 9.ii.a.1
 
 #### Dealing with more complex content
 
@@ -3075,6 +3083,8 @@ This allows the ```BitMap``` to be loaded and the correct strings to be loaded f
 
 ![CodeSpan](http://imgur.com/vC8m9BG.png)
 
+This span completes objective 9.ii.a.2
+
 ##### TableSpan
 
 The ```TableSpan``` is structured in a very similar manner to ```CodeSpan``` as it also draws a "button" style span across two lines, and draws a bitmap if it has been initialised.
@@ -3086,12 +3096,16 @@ code and a language.
 
 ![Table span](http://imgur.com/NDA1ydi.png)
 
+This span completes objective 9.ii.i
+
 ##### ClickableImageSpan
 
 ```ClickableImageSpan``` extends ```ImageSpan``` and is used to implement click listening for the ```ImageClickHandler```.
 It also ensures that the actual drawable is returned from a ```URLDrawable```, which will be explained in the "Image loading and caching" section.
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/ImageSpan.java"
+#import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/ClickableImageSpan.java"
+
+This span completes objective 9.ii.c.3, as well as 9.ii.c.5 once click handling is explained below.
 
 ##### Handling clicks
 
@@ -3174,11 +3188,15 @@ They can be replaced with any other implementation of their respective interface
 The ```CodeDialog``` creates a dialog to display a ```HighlightJsView```, which is a ```WebView``` with the highlightjs library embedded.
 It also attempts to find the correct language for highlighting the code.
 
+This completes objective 9.ii.a.2
+
 #import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/ImageDialog.java"
 
 The ```ImageDialog``` is used to show an image across the entire screen, while maintaining its aspect ratio.
 
 It uses a ```FillingImageView``` which overrides the ```onMeasure``` method of ```ImageView``` to ensure that the image aspect ratio is maintained.
+
+This completes objective 9.ii.c.5
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/FillingImageView.java"
 
@@ -3194,6 +3212,7 @@ height matching the ratio calculated earlier.
 
 The ```TableDialog``` uses the ```MarkdownWebView``` created earlier to display the HTML of the table in a ```WebView``` using the GitHub style CSS.
 
+This dialog completes objective 9.ii.i
 
 ##### Image loading and caching 
 
@@ -3246,6 +3265,8 @@ Once the scale of the result ```Drawable``` has been set, the scale of the ```UR
 If the ```DrawableCatcher``` is non-null, the drawable and URL are passed to it.
 
 Finally, in order to draw the ```URLDrawable``` the container is invalidated and its text is set to its current text to force a layout refresh.
+
+This completes objective 9.ii.c.1, 9.ii.c.2, and 9.ii.c.4.
 
 ###### Loading images from Assets and Resources
 
