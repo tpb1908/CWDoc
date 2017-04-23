@@ -3715,6 +3715,35 @@ If the foreground colour is non-null and non-empty, a new ```ForegroundColor``` 
 
 If the background colour is non-null and non-empty, a new ```BackgroundColor``` span is started with the background colour, and whether it should be rounded.
 
+##### Font tag closing
+
+A closing font tag is passed to ```handleFontTag```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleFontTag$"
+
+This extracts the spans for each of the the three possible attributes.
+
+If the ```ForegroundColor``` is non null, the start and end are stored, the span is removed, and a ```ForegroundColorSpan``` is set with the parsed color of the the ```ForegroundColor```
+span.
+
+The colour is parsed using ```safelyParseColor```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private int safelyParseColor$"
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private int parseStringColor$"
+
+The method checks if the colour begins with a hash, "#", in which case it attempts to parse the assumed hexadecimal value using ```Color.parseColor```.
+If this fails, or the colour does not begin with a hash, ```parseStringColor``` is called, which switches the string across the different HTML colour values, before returning the
+```TextPaint``` colour if a colour is not matched.
+
+If the ```BackgroundColor``` is non-null, its positions are saved and it is removed.
+The background colour is then parsed, and if the span should be rounded, no break space characters are inserted around the span, before two ```RoundedBackgroundEndSpans``` are inserted
+around a ```BackgroundColorSpan```.
+Otherwise, only the ```BackgroundColorSpan``` is inserted.
+
+If the ```Font``` span is non null, its positions are saved and it is removed.
+A ```TypeFaceSpan``` is then inserted across its previous range.
+
 #page
 
 ## User Activity

@@ -8403,6 +8403,136 @@ If the foreground colour is non-null and non-empty, a new ```ForegroundColor``` 
 
 If the background colour is non-null and non-empty, a new ```BackgroundColor``` span is started with the background colour, and whether it should be rounded.
 
+##### Font tag closing
+
+A closing font tag is passed to ```handleFontTag```
+
+**HtmlTagHandler.java**
+``` java
+private void handleFontTag(Editable output) {
+        final ForegroundColor fgc = getLast(output, ForegroundColor.class);
+        final BackgroundColor bgc = getLast(output, BackgroundColor.class);
+        final Font f = getLast(output, Font.class);
+        if(fgc != null) {
+            final int start = output.getSpanStart(fgc);
+            final int end = output.length();
+            output.removeSpan(fgc);
+            output.setSpan(new ForegroundColorSpan(safelyParseColor(fgc.color)), start, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+        if(bgc != null) {
+            final int start = output.getSpanStart(bgc);
+            final int end = output.length();
+            output.removeSpan(bgc);
+
+            final int color = safelyParseColor(bgc.color);
+            if(bgc.rounded) {
+                output.insert(end, "\u00A0");
+                output.insert(start, "\u00A0");
+                output.setSpan(new RoundedBackgroundEndSpan(color, false), start, start + 1,
+                        Spanned.SPAN_INCLUSIVE_EXCLUSIVE
+                );
+                output.setSpan(new RoundedBackgroundEndSpan(color, true), end, end + 1,
+                        Spanned.SPAN_EXCLUSIVE_INCLUSIVE
+                );
+                output.setSpan(new BackgroundColorSpan(color), start + 1, end,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                );
+            } else {
+                output.setSpan(new BackgroundColorSpan(color), start, end,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+
+        }
+        if(f != null) {
+            final int start = output.getSpanStart(f);
+            final int end = output.length();
+            output.removeSpan(f);
+            output.setSpan(new TypefaceSpan(f.face), start, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+    }
+```
+
+This extracts the spans for each of the the three possible attributes.
+
+If the ```ForegroundColor``` is non null, the start and end are stored, the span is removed, and a ```ForegroundColorSpan``` is set with the parsed color of the the ```ForegroundColor```
+span.
+
+The colour is parsed using ```safelyParseColor```.
+
+**HtmlTagHandler.java**
+``` java
+private int safelyParseColor(String color) {
+        if(color.startsWith("#")) {
+            try {
+                return Color.parseColor(color);
+            } catch(Exception e) {
+                return parseStringColor(color);
+            }
+        } else {
+            return parseStringColor(color);
+        }
+    }
+```
+
+**HtmlTagHandler.java**
+``` java
+private int parseStringColor(String color) {
+        switch(color) {
+            case "black":
+                return Color.BLACK;
+            case "white":
+                return Color.WHITE;
+            case "red":
+                return Color.RED;
+            case "blue":
+                return Color.BLUE;
+            case "green":
+                return Color.GREEN;
+            case "grey":
+                return Color.GRAY;
+            case "yellow":
+                return Color.YELLOW;
+            case "aqua":
+                return 0xff00ffff;
+            case "fuchsia":
+                return 0xffff00ff;
+            case "lime":
+                return 0xff00ff00;
+            case "maroon":
+                return 0xff800000;
+            case "navy":
+                return 0xffff00ff;
+            case "olive":
+                return 0xff808000;
+            case "purple":
+                return 0xff800080;
+            case "silver":
+                return 0xffc0c0c0;
+            case "teal":
+                return 0xff008080;
+            default:
+                return mTextPaint.getColor();
+        }
+    }
+```
+
+The method checks if the colour begins with a hash, "#", in which case it attempts to parse the assumed hexadecimal value using ```Color.parseColor```.
+If this fails, or the colour does not begin with a hash, ```parseStringColor``` is called, which switches the string across the different HTML colour values, before returning the
+```TextPaint``` colour if a colour is not matched.
+
+If the ```BackgroundColor``` is non-null, its positions are saved and it is removed.
+The background colour is then parsed, and if the span should be rounded, no break space characters are inserted around the span, before two ```RoundedBackgroundEndSpans``` are inserted
+around a ```BackgroundColorSpan```.
+Otherwise, only the ```BackgroundColorSpan``` is inserted.
+
+If the ```Font``` span is non null, its positions are saved and it is removed.
+A ```TypeFaceSpan``` is then inserted across its previous range.
+
 <div style="page-break-after: always;"></div>
 
 ## User Activity
