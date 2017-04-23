@@ -3334,7 +3334,7 @@ This fixes a problem introduced in SDK 25 where span priority is not respected, 
 
 ```isSuggestionEnabled``` is overriden to ensure that suggestions are never shown on the ```MarkdownTextView```, even though it may appear to be editable.
 
-##### MarkdownEditText
+#### MarkdownEditText
 
 The ```MarkdownEditText``` is very similar to ```MarkdownTextView``` except that it extends ```EditText```, a subclass of ```TextView```, does not include support for processing on another
 thread, and adds support for toggling between and editable and non-editable state.
@@ -3354,6 +3354,156 @@ In order to support two text states, the ```MarkdownTextView``` contains an edit
 The ```getInputText``` method is used to always return the text being edited, rather than the parsed form.
 
 ```enableEditing``` and ```disableEditing``` do as their names suggest, enabling or disable the cursor and focusing, and setting the mIsEditing flag.
+
+#### Tag handling
+
+Androids' ```Html.fromHtml``` method parses simple Html to a ```Spanned``` object.
+The method supports the following tags:
+- bold
+- big
+- blockquote
+- break
+- cite
+- define
+- emphasis
+- font color and face
+- headers
+- italics
+- paragraphs
+- small
+- strong
+- subscript
+- superscript
+- underline
+- href
+
+Most of these spans only modify the ```TextPaint``` to draw text with a certain size, colour or styling.
+
+In order to implement the spans rewuired for GitHub flavoured markdown, some of these tags must be overriden, and others implemented.
+
+Overriden tags-
+- unordered list
+- ordered list
+- list item
+- blockquote
+- href
+- font
+- image
+
+Implemented tags
+- table
+- table row
+- table header
+- table data
+- code
+- strikethrough
+- inlinecode
+
+##### Overriding tags
+
+Only tags which are not recognised are delegated to the ```TagHandler```.
+In order to capture these tags they must be overriden prior to parsing.
+
+This is done with the ```TextUtils``` replace method implemented earlier.
+
+``` java
+private static final String UNORDERED_LIST_TAG = "ESCAPED_UL_TAG";
+private static final String ORDERED_LIST_TAG = "ESCAPED_OL_TAG";
+private static final String LIST_ITEM_TAG = "ESCAPED_LI_TAG";
+private static final String BLOCKQUOTE_TAG = "ESCAPED_BLOCKQUOTE_TAG";
+private static final String A_TAG = "ESCAPED_A_TAG";
+private static final String FONT_TAG = "ESCAPED_FONT_TAG";
+private static final String IMAGE_TAG = "ESCAPED_IMG_TAG";
+
+private static final Map<String, String> ESCAPE_MAP = new HashMap<>();
+
+static {
+    ESCAPE_MAP.put("<ul", "<" + UNORDERED_LIST_TAG);
+    ESCAPE_MAP.put("</ul>", "</" + UNORDERED_LIST_TAG + ">");
+    ESCAPE_MAP.put("<ol", "<" + ORDERED_LIST_TAG);
+    ESCAPE_MAP.put("</ol>", "</" + ORDERED_LIST_TAG + ">");
+    ESCAPE_MAP.put("<li", "<" + LIST_ITEM_TAG);
+    ESCAPE_MAP.put("</li>", "</" + LIST_ITEM_TAG + ">");
+    ESCAPE_MAP.put("<blockquote>", "<" + BLOCKQUOTE_TAG + ">");
+    ESCAPE_MAP.put("</blockquote>", "</" + BLOCKQUOTE_TAG + ">");
+    ESCAPE_MAP.put("<a", "<" + A_TAG);
+    ESCAPE_MAP.put("</a>", "</" + A_TAG + ">");
+    ESCAPE_MAP.put("<font", "<" + FONT_TAG);
+    ESCAPE_MAP.put("</font>", "</" + FONT_TAG + ">");
+    ESCAPE_MAP.put("<img", "<" + IMAGE_TAG);
+    ESCAPE_MAP.put("</img>", "</" + IMAGE_TAG + ">");
+}
+
+private static final Pattern ESCAPE_PATTERN = TextUtils.generatePattern(ESCAPE_MAP.keySet());
+
+public static String overrideTags(@Nullable String html) {
+    return TextUtils.replace(html, ESCAPE_MAP, ESCAPE_PATTERN);
+}
+```
+
+#### Handlers
+
+The ```HtmlTagHandler``` is passed the handlers which are required for each of the span types.
+It is also passed the ```TextView``` itself, which is required for measuring indentations.
+
+#### Tag opening and closing
+
+Each tag is delegated to the ```HtmlTagHandler``` through the ```handleTag``` method, which has the parameters ```boolean opening, String tag, Editable output, XMLReader xmlReader```.
+If ```opening``` is true, the tag, output and xmlReader are passed to ```handleOpeningTag```. Otherwise the tag and output are passed to ```handleClosingTag```.
+
+After the tag has been handled, any table tags are stored with ```storeTableTags```.
+This checks if the current table depth is greater than 0, or the tag is "table".
+If so, the opening bracket is added to the mTableHtmlBuilder ```StringBuilder```, along with the closing forward slash if the tag is being closed.
+The tag is then appended and closed.
+
+This builds the HTML for a table so that it can be displayed later.
+
+#### Attribute extraction
+
+Unfortunately, the ```TagHandler``` has no direct access to the attributes of the tags that are passed to it.
+However, it is able to access them when the tag is being opened.
+
+This is done with ```getAttribute```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java"
+
+This method uses reflection to attempt to extract the attribute from the ```XMLReader```.
+
+First the element field is collected, made accessible and accessed from the ```XMLReader```.
+Next the attributes field is collected, made accessible and accessed from the element.
+Next the data field is collected, made accessible and accessed from the attributes.
+
+The ```data``` field is a string aray
+
+#### List tags
+
+List tags and numberings are stored in two stacks.
+```mLists``` is a stack of triples containing the tag, whether the list is bulleted, and the list type.
+```mOlIndices``` is a stack of pairs of integers and ```ListTypes``` which is used when exiting a nested span to continue the previous lists' numbering.
+
+Note:
+The ```Triple``` is a generic class like ```Pair``` which holds three generic types.
+
+``` java
+private static class Triple<T, U, V> {
+
+    T first;
+    U second;
+    V third;
+
+    Triple(T t, U u, V v) {
+        first = t;
+        second = u;
+        third = v;
+    }
+
+    static <T, U, V> Triple<T, U, V> create(T t, U u, V v) {
+        return new Triple<>(t, u, v);
+    }
+
+}
+```
+
 
 #page
 

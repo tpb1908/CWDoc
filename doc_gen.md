@@ -7406,12 +7406,11 @@ public class MarkdownTextView extends AppCompatTextView implements View.OnClickL
     }
 
     private void parseAndSetMd(@NonNull String markdown, @Nullable final Html.ImageGetter imageGetter) {
+        // Override tags to stop Html.fromHtml destroying some of them
+        markdown = HtmlTagHandler.overrideTags(Markdown.parseMD(markdown));
         final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
                 imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
         );
-
-        // Override tags to stop Html.fromHtml destroying some of them
-        markdown = htmlTagHandler.overrideTags(Markdown.parseMD(markdown));
         final Spanned text;
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             text = removeHtmlBottomPadding(
@@ -7558,7 +7557,7 @@ This fixes a problem introduced in SDK 25 where span priority is not respected, 
 
 ```isSuggestionEnabled``` is overriden to ensure that suggestions are never shown on the ```MarkdownTextView```, even though it may appear to be editable.
 
-##### MarkdownEditText
+#### MarkdownEditText
 
 The ```MarkdownEditText``` is very similar to ```MarkdownTextView``` except that it extends ```EditText```, a subclass of ```TextView```, does not include support for processing on another
 thread, and adds support for toggling between and editable and non-editable state.
@@ -7672,12 +7671,11 @@ public class MarkdownEditText extends AppCompatEditText {
     }
 
     public void setMarkdown(@NonNull final String markdown, @Nullable final Html.ImageGetter imageGetter) {
+        // Override tags to stop Html.fromHtml destroying some of them
+        final String overridden = HtmlTagHandler.overrideTags(Markdown.parseMD(markdown));
         final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
                 imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
         );
-
-        // Override tags to stop Html.fromHtml destroying some of them
-        final String overridden = htmlTagHandler.overrideTags(Markdown.parseMD(markdown));
         final Spanned text;
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             text = removeHtmlBottomPadding(
@@ -7772,6 +7770,890 @@ In order to support two text states, the ```MarkdownTextView``` contains an edit
 The ```getInputText``` method is used to always return the text being edited, rather than the parsed form.
 
 ```enableEditing``` and ```disableEditing``` do as their names suggest, enabling or disable the cursor and focusing, and setting the mIsEditing flag.
+
+#### Tag handling
+
+Androids' ```Html.fromHtml``` method parses simple Html to a ```Spanned``` object.
+The method supports the following tags:
+- bold
+- big
+- blockquote
+- break
+- cite
+- define
+- emphasis
+- font color and face
+- headers
+- italics
+- paragraphs
+- small
+- strong
+- subscript
+- superscript
+- underline
+- href
+
+Most of these spans only modify the ```TextPaint``` to draw text with a certain size, colour or styling.
+
+In order to implement the spans rewuired for GitHub flavoured markdown, some of these tags must be overriden, and others implemented.
+
+Overriden tags-
+- unordered list
+- ordered list
+- list item
+- blockquote
+- href
+- font
+- image
+
+Implemented tags
+- table
+- table row
+- table header
+- table data
+- code
+- strikethrough
+- inlinecode
+
+##### Overriding tags
+
+Only tags which are not recognised are delegated to the ```TagHandler```.
+In order to capture these tags they must be overriden prior to parsing.
+
+This is done with the ```TextUtils``` replace method implemented earlier.
+
+``` java
+private static final String UNORDERED_LIST_TAG = "ESCAPED_UL_TAG";
+private static final String ORDERED_LIST_TAG = "ESCAPED_OL_TAG";
+private static final String LIST_ITEM_TAG = "ESCAPED_LI_TAG";
+private static final String BLOCKQUOTE_TAG = "ESCAPED_BLOCKQUOTE_TAG";
+private static final String A_TAG = "ESCAPED_A_TAG";
+private static final String FONT_TAG = "ESCAPED_FONT_TAG";
+private static final String IMAGE_TAG = "ESCAPED_IMG_TAG";
+
+private static final Map<String, String> ESCAPE_MAP = new HashMap<>();
+
+static {
+    ESCAPE_MAP.put("<ul", "<" + UNORDERED_LIST_TAG);
+    ESCAPE_MAP.put("</ul>", "</" + UNORDERED_LIST_TAG + ">");
+    ESCAPE_MAP.put("<ol", "<" + ORDERED_LIST_TAG);
+    ESCAPE_MAP.put("</ol>", "</" + ORDERED_LIST_TAG + ">");
+    ESCAPE_MAP.put("<li", "<" + LIST_ITEM_TAG);
+    ESCAPE_MAP.put("</li>", "</" + LIST_ITEM_TAG + ">");
+    ESCAPE_MAP.put("<blockquote>", "<" + BLOCKQUOTE_TAG + ">");
+    ESCAPE_MAP.put("</blockquote>", "</" + BLOCKQUOTE_TAG + ">");
+    ESCAPE_MAP.put("<a", "<" + A_TAG);
+    ESCAPE_MAP.put("</a>", "</" + A_TAG + ">");
+    ESCAPE_MAP.put("<font", "<" + FONT_TAG);
+    ESCAPE_MAP.put("</font>", "</" + FONT_TAG + ">");
+    ESCAPE_MAP.put("<img", "<" + IMAGE_TAG);
+    ESCAPE_MAP.put("</img>", "</" + IMAGE_TAG + ">");
+}
+
+private static final Pattern ESCAPE_PATTERN = TextUtils.generatePattern(ESCAPE_MAP.keySet());
+
+public static String overrideTags(@Nullable String html) {
+    return TextUtils.replace(html, ESCAPE_MAP, ESCAPE_PATTERN);
+}
+```
+
+#### Handlers
+
+The ```HtmlTagHandler``` is passed the handlers which are required for each of the span types.
+It is also passed the ```TextView``` itself, which is required for measuring indentations.
+
+#### Tag opening and closing
+
+Each tag is delegated to the ```HtmlTagHandler``` through the ```handleTag``` method, which has the parameters ```boolean opening, String tag, Editable output, XMLReader xmlReader```.
+If ```opening``` is true, the tag, output and xmlReader are passed to ```handleOpeningTag```. Otherwise the tag and output are passed to ```handleClosingTag```.
+
+After the tag has been handled, any table tags are stored with ```storeTableTags```.
+This checks if the current table depth is greater than 0, or the tag is "table".
+If so, the opening bracket is added to the mTableHtmlBuilder ```StringBuilder```, along with the closing forward slash if the tag is being closed.
+The tag is then appended and closed.
+
+This builds the HTML for a table so that it can be displayed later.
+
+#### Attribute extraction
+
+Unfortunately, the ```TagHandler``` has no direct access to the attributes of the tags that are passed to it.
+However, it is able to access them when the tag is being opened.
+
+This is done with ```getAttribute```
+
+**HtmlTagHandler.java**
+``` java
+package com.tpb.mdtext;
+
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.util.Pair;
+import android.text.Editable;
+import android.text.Html;
+import android.text.Layout;
+import android.text.Spannable;
+import android.text.Spanned;
+import android.text.TextPaint;
+import android.text.style.AlignmentSpan;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.BulletSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.LeadingMarginSpan;
+import android.text.style.StrikethroughSpan;
+import android.text.style.TypefaceSpan;
+import android.util.Log;
+import android.widget.TextView;
+
+import com.tpb.mdtext.handlers.CodeClickHandler;
+import com.tpb.mdtext.handlers.ImageClickHandler;
+import com.tpb.mdtext.handlers.LinkClickHandler;
+import com.tpb.mdtext.handlers.TableClickHandler;
+import com.tpb.mdtext.views.spans.CleanURLSpan;
+import com.tpb.mdtext.views.spans.ClickableImageSpan;
+import com.tpb.mdtext.views.spans.CodeSpan;
+import com.tpb.mdtext.views.spans.HorizontalRuleSpan;
+import com.tpb.mdtext.views.spans.InlineCodeSpan;
+import com.tpb.mdtext.views.spans.ListNumberSpan;
+import com.tpb.mdtext.views.spans.QuoteSpan;
+import com.tpb.mdtext.views.spans.RoundedBackgroundEndSpan;
+import com.tpb.mdtext.views.spans.TableSpan;
+import com.tpb.mdtext.views.spans.WrappingClickableSpan;
+
+import org.xml.sax.XMLReader;
+
+import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Stack;
+import java.util.regex.Pattern;
+
+import static com.tpb.mdtext.TextUtils.isValidURL;
+
+public class HtmlTagHandler implements Html.TagHandler {
+    private static final String TAG = HtmlTagHandler.class.getSimpleName();
+
+    private static final String UNORDERED_LIST_TAG = "ESCAPED_UL_TAG";
+    private static final String ORDERED_LIST_TAG = "ESCAPED_OL_TAG";
+    private static final String LIST_ITEM_TAG = "ESCAPED_LI_TAG";
+    private static final String BLOCKQUOTE_TAG = "ESCAPED_BLOCKQUOTE_TAG";
+    private static final String A_TAG = "ESCAPED_A_TAG";
+    private static final String FONT_TAG = "ESCAPED_FONT_TAG";
+    private static final String IMAGE_TAG = "ESCAPED_IMG_TAG";
+
+    private static final Map<String, String> ESCAPE_MAP = new HashMap<>();
+
+    static {
+        ESCAPE_MAP.put("<ul", "<" + UNORDERED_LIST_TAG);
+        ESCAPE_MAP.put("</ul>", "</" + UNORDERED_LIST_TAG + ">");
+        ESCAPE_MAP.put("<ol", "<" + ORDERED_LIST_TAG);
+        ESCAPE_MAP.put("</ol>", "</" + ORDERED_LIST_TAG + ">");
+        ESCAPE_MAP.put("<li", "<" + LIST_ITEM_TAG);
+        ESCAPE_MAP.put("</li>", "</" + LIST_ITEM_TAG + ">");
+        ESCAPE_MAP.put("<blockquote>", "<" + BLOCKQUOTE_TAG + ">");
+        ESCAPE_MAP.put("</blockquote>", "</" + BLOCKQUOTE_TAG + ">");
+        ESCAPE_MAP.put("<a", "<" + A_TAG);
+        ESCAPE_MAP.put("</a>", "</" + A_TAG + ">");
+        ESCAPE_MAP.put("<font", "<" + FONT_TAG);
+        ESCAPE_MAP.put("</font>", "</" + FONT_TAG + ">");
+        ESCAPE_MAP.put("<img", "<" + IMAGE_TAG);
+        ESCAPE_MAP.put("</img>", "</" + IMAGE_TAG + ">");
+    }
+
+    private static final Pattern ESCAPE_PATTERN = TextUtils.generatePattern(ESCAPE_MAP.keySet());
+
+    public static String overrideTags(@Nullable String html) {
+        return TextUtils.replace(html, ESCAPE_MAP, ESCAPE_PATTERN);
+    }
+
+    // Stack of nested list tags, bulleted flag and list type (For OL)
+    private final Stack<Triple<String, Boolean, ListNumberSpan.ListType>> mLists = new Stack<>();
+    // Tracks indices of nested ordered lists
+    private final Stack<Pair<Integer, ListNumberSpan.ListType>> mOlIndices = new Stack<>();
+    private StringBuilder mTableHtmlBuilder = new StringBuilder();
+    private int mTableLevel = 0;
+    private static int mSingleIndent = 10;
+    private static final int mListIndent = mSingleIndent * 2;
+    private final TextPaint mTextPaint;
+    private LinkClickHandler mLinkHandler;
+    private CodeClickHandler mCodeHandler;
+    private TableClickHandler mTableHandler;
+    private ImageClickHandler mImageClickHandler;
+    private Html.ImageGetter mImageGetter;
+
+    public HtmlTagHandler(TextView tv, Html.ImageGetter imageGetter,
+                          @Nullable LinkClickHandler linkHandler,
+                          @Nullable ImageClickHandler imageClickHandler,
+                          @Nullable CodeClickHandler codeHandler,
+                          @Nullable TableClickHandler tableHandler) {
+        mTextPaint = tv.getPaint();
+        mSingleIndent = (int) mTextPaint.measureText("t");
+        mImageGetter = imageGetter;
+        mImageClickHandler = imageClickHandler;
+        mLinkHandler = linkHandler;
+        mCodeHandler = codeHandler;
+        mTableHandler = tableHandler;
+    }
+
+    @Override
+    public void handleTag(final boolean opening, final String tag, Editable output, final XMLReader xmlReader) {
+        if(opening) {
+            handleOpeningTag(tag, output, xmlReader);
+        } else {
+            handleClosingTag(tag, output);
+        }
+        storeTableTags(opening, tag);
+    }
+
+    private void handleOpeningTag(final String tag, Editable output, final XMLReader xmlReader) {
+        switch(tag.toUpperCase()) {
+            case UNORDERED_LIST_TAG:
+                mLists.push(
+                        Triple.create(
+                                tag,
+                                safelyParseBoolean(
+                                        getAttribute("bulleted", xmlReader, "true"), true
+                                ),
+                                ListNumberSpan.ListType.NUMBER
+                        )
+                );
+                break;
+            case ORDERED_LIST_TAG:
+                final ListNumberSpan.ListType type = ListNumberSpan.ListType
+                        .fromString(getAttribute("type", xmlReader, ""));
+                mLists.push(
+                        Triple.create(
+                                tag,
+                                safelyParseBoolean(
+                                        getAttribute("numbered", xmlReader, "true"), true
+                                ),
+                                type
+                        )
+                );
+                mOlIndices.push(Pair.create(1, type));
+                break;
+            case LIST_ITEM_TAG:
+                if(output.length() > 0 && output.charAt(output.length() - 1) != '\n') {
+                    output.append("\n");
+                }
+                if(!mLists.isEmpty()) {
+                    String parentList = mLists.peek().first;
+                    if(parentList.equalsIgnoreCase(ORDERED_LIST_TAG)) {
+                        start(output, new Ol());
+                        mOlIndices.push(Pair.create(mOlIndices.pop().first + 1, mLists.peek().third));
+                    } else if(parentList.equalsIgnoreCase(UNORDERED_LIST_TAG)) {
+                        start(output, new Ul());
+                    }
+                } else {
+                    start(output, new Ol());
+                    mOlIndices.push(Pair.create(1, ListNumberSpan.ListType.NUMBER));
+                }
+                break;
+            case "TABLE":
+                start(output, new Table());
+                if(mTableLevel == 0) {
+                    mTableHtmlBuilder = new StringBuilder();
+                }
+                mTableLevel++;
+                break;
+            case FONT_TAG:
+                final String font = getAttribute("face", xmlReader, "");
+                final String fgColor = getAttribute("color", xmlReader, "");
+                final String bgColor = getAttribute("background-color", xmlReader, "");
+                final boolean rounded = safelyParseBoolean(getAttribute("rounded", xmlReader, ""),
+                        false
+                );
+                if(font != null && !font.isEmpty()) {
+                    start(output, new Font(font));
+                }
+                if(fgColor != null && !fgColor.isEmpty()) {
+                    start(output, new ForegroundColor(fgColor));
+                }
+                if(bgColor != null && !bgColor.isEmpty()) {
+                    start(output, new BackgroundColor(bgColor, rounded));
+                }
+                break;
+            case "CODE":
+                start(output, new Code());
+                break;
+            case "CENTER":
+                start(output, new Center());
+                break;
+            case "S":
+            case "STRIKE":
+                start(output, new StrikeThrough());
+                break;
+            case "TR":
+                start(output, new Tr());
+                break;
+            case "TH":
+                start(output, new Th());
+                break;
+            case "TD":
+                start(output, new Td());
+                break;
+            case "HR":
+                start(output, new HorizontalRule());
+                break;
+            case BLOCKQUOTE_TAG:
+                start(output, new BlockQuote());
+                break;
+            case A_TAG:
+                start(output, new A(getAttribute("href", xmlReader, "invalid_url")));
+                break;
+            case IMAGE_TAG:
+                handleImageTag(output, getAttribute("src", xmlReader, ""));
+                break;
+            case "INLINECODE":
+                start(output, new InlineCode());
+                break;
+
+        }
+    }
+
+    private void handleClosingTag(final String tag, Editable output) {
+        switch(tag.toUpperCase()) {
+            case UNORDERED_LIST_TAG:
+                mLists.pop();
+                break;
+            case ORDERED_LIST_TAG:
+                mLists.pop();
+                mOlIndices.pop();
+                break;
+            case LIST_ITEM_TAG:
+                if(!mLists.isEmpty()) {
+                    if(mLists.peek().first.equalsIgnoreCase(UNORDERED_LIST_TAG)) {
+                        handleULTag(output);
+                    } else if(mLists.peek().first.equalsIgnoreCase(ORDERED_LIST_TAG)) {
+                        handleOLTag(output);
+                    }
+                } else {
+                    end(output, Ol.class, true);
+                }
+                break;
+            case "CODE":
+                handleCodeTag(output);
+                break;
+            case "HR":
+                handleHorizontalRule(output);
+                break;
+            case "CENTER":
+                end(output, Center.class, true,
+                        new AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
+                );
+                break;
+            case "S":
+            case "STRIKE":
+                end(output, StrikeThrough.class, false, new StrikethroughSpan());
+                break;
+            case "TABLE":
+                handleTableTag(output);
+                break;
+            case BLOCKQUOTE_TAG:
+                handleBlockQuoteTag(output);
+                break;
+            case A_TAG:
+                handleATag(output);
+                break;
+            case "INLINECODE":
+                handleInlineCodeTag(output);
+                break;
+            case FONT_TAG:
+                handleFontTag(output);
+                break;
+            case "TR":
+                end(output, Tr.class, false);
+                break;
+            case "TH":
+                end(output, Th.class, false);
+                break;
+            case "TD":
+                end(output, Td.class, false);
+                break;
+        }
+    }
+
+    private void handleBlockQuoteTag(Editable output) {
+        final Object obj = getLast(output, BlockQuote.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        output.removeSpan(obj);
+        output.setSpan(new QuoteSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    private void handleInlineCodeTag(Editable output) {
+        final Object obj = getLast(output, InlineCode.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        output.removeSpan(obj);
+        output.setSpan(new InlineCodeSpan(mTextPaint.getTextSize()), start, end,
+                Spannable.SPAN_INCLUSIVE_EXCLUSIVE
+        );
+    }
+
+    private void handleTableTag(Editable output) {
+        mTableLevel--;
+        // When we're back at the root-level table
+        if(mTableLevel == 0) {
+            final Table obj = getLast(output, Table.class);
+            final int start = output.getSpanStart(obj);
+            output.removeSpan(obj); //Remove the old span
+            output.insert(start, "\n \n");
+            final TableSpan table = new TableSpan(mTableHtmlBuilder.toString(), mTableHandler);
+            output.setSpan(table, start, start + 2, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            output.setSpan(new WrappingClickableSpan(table), start, start + 3,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+
+        } else {
+            end(output, Table.class, false);
+        }
+    }
+
+    private void handleHorizontalRule(Editable output) {
+        final Object obj = getLast(output, HorizontalRule.class);
+        final int start = output.getSpanStart(obj);
+        output.removeSpan(obj); //Remove the old span
+        output.replace(start, output.length(), " "); //We need a non-empty span
+        output.setSpan(new HorizontalRuleSpan(), start, start + 1, 0); //Insert the bar span
+    }
+
+    private void handleCodeTag(Editable output) {
+        final Object obj = getLast(output, Code.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        if(end > start + 1) {
+            final CharSequence chars = extractSpanText(output, Code.class);
+            output.removeSpan(obj);
+            output.insert(start, "\n \n"); // Another line for our CodeSpan to cover
+            final CodeSpan code = new CodeSpan(chars.toString(), mCodeHandler);
+            output.setSpan(code, start, start + 2, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            output.setSpan(new WrappingClickableSpan(code), start, start + 3,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+    }
+
+    private void handleULTag(Editable output) {
+        if(output.length() > 0 && output.charAt(output.length() - 1) != '\n') {
+            output.append("\n");
+        }
+
+        if(mLists.peek().second) {
+            //Check for checkboxes
+            if(output.length() > 2 &&
+                    ((output.charAt(0) >= '\u2610' && output.charAt(0) <= '\u2612')
+                            || (output.charAt(1) >= '\u2610' && output
+                            .charAt(1) <= '\u2612')
+                    )) {
+                end(output, Ul.class, false,
+                        new LeadingMarginSpan.Standard(
+                                mListIndent * (mLists.size() - 1))
+                );
+            } else {
+                end(output, Ul.class, false,
+                        new LeadingMarginSpan.Standard(
+                                mListIndent * (mLists.size() - 1)),
+                        new BulletSpan(mSingleIndent)
+                );
+            }
+        } else {
+            end(output, Ul.class, false,
+                    new LeadingMarginSpan.Standard(mListIndent * (mLists.size() - 1))
+            );
+        }
+    }
+
+    private void handleOLTag(Editable output) {
+        if(output.length() > 0 && output.charAt(output.length() - 1) != '\n') {
+            output.append("\n");
+        }
+        int numberMargin = mListIndent * (mLists.size() - 1);
+        if(mLists.size() > 2) {
+            // Counter effect of nested spans
+            numberMargin -= (mLists.size() - 2) * mListIndent;
+        }
+        if(mLists.peek().second) {
+            end(output, Ol.class, false,
+                    new LeadingMarginSpan.Standard(numberMargin),
+                    new ListNumberSpan(mTextPaint, mOlIndices.lastElement().first - 1,
+                            mLists.peek().third
+                    )
+            );
+        } else {
+            end(output, Ol.class, false,
+                    new LeadingMarginSpan.Standard(numberMargin)
+            );
+        }
+    }
+
+    private void handleFontTag(Editable output) {
+        final ForegroundColor fgc = getLast(output, ForegroundColor.class);
+        final BackgroundColor bgc = getLast(output, BackgroundColor.class);
+        final Font f = getLast(output, Font.class);
+        if(fgc != null) {
+            final int start = output.getSpanStart(fgc);
+            final int end = output.length();
+            output.removeSpan(fgc);
+            output.setSpan(new ForegroundColorSpan(safelyParseColor(fgc.color)), start, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+        if(bgc != null) {
+            final int start = output.getSpanStart(bgc);
+            final int end = output.length();
+            output.removeSpan(bgc);
+
+            final int color = safelyParseColor(bgc.color);
+            if(bgc.rounded) {
+                output.insert(end, "\u00A0");
+                output.insert(start, "\u00A0");
+                output.setSpan(new RoundedBackgroundEndSpan(color, false), start, start + 1,
+                        Spanned.SPAN_INCLUSIVE_EXCLUSIVE
+                );
+                output.setSpan(new RoundedBackgroundEndSpan(color, true), end, end + 1,
+                        Spanned.SPAN_EXCLUSIVE_INCLUSIVE
+                );
+                output.setSpan(new BackgroundColorSpan(color), start + 1, end,
+                        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+                );
+            } else {
+                output.setSpan(new BackgroundColorSpan(color), start, end,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+
+        }
+        if(f != null) {
+            final int start = output.getSpanStart(f);
+            final int end = output.length();
+            output.removeSpan(f);
+            output.setSpan(new TypefaceSpan(f.face), start, end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+    }
+
+    private void handleATag(Editable output) {
+        final A obj = getLast(output, A.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        output.removeSpan(obj);
+        if(isValidURL(obj.href)) {
+            output.setSpan(new CleanURLSpan(obj.href, mLinkHandler), start, end,
+                    Spannable.SPAN_INCLUSIVE_EXCLUSIVE
+            );
+        }
+    }
+
+    private void handleImageTag(Editable output, String source) {
+        Drawable d = new ColorDrawable(Color.TRANSPARENT);
+        if (mImageGetter != null) {
+            d = mImageGetter.getDrawable(source);
+        }
+        final int len = output.length();
+        output.append("\uFFFC");
+        final ClickableImageSpan is = new ClickableImageSpan(d,mImageClickHandler);
+        output.setSpan(is, len, output.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        output.setSpan(new WrappingClickableSpan(is), len, output.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    /**
+     * Mark the opening tag by using private classes
+     */
+    private void start(Editable output, Object mark) {
+        final int point = output.length();
+        output.setSpan(mark, point, point, Spannable.SPAN_MARK_MARK);
+    }
+
+    /**
+     * Modified from {@link android.text.Html}
+     */
+    private void end(Editable output, Class kind, boolean paragraphStyle, Object... replaces) {
+        final Object obj = getLast(output, kind);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+
+        // If we're in a table, then we need to store the raw HTML for later
+        if(mTableLevel > 0) {
+            final CharSequence extractedSpanText = extractSpanText(output, kind);
+            mTableHtmlBuilder.append(extractedSpanText);
+        }
+
+        output.removeSpan(obj);
+        if(start != end) {
+            int len = end;
+            // paragraph styles like AlignmentSpan need to end with a new line!
+            if(paragraphStyle) {
+                output.append("\n");
+                len++;
+            }
+            for(Object replace : replaces) {
+                if(output.length() > 0) {
+                    output.setSpan(replace, start, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns the text contained within a span and deletes it from the output string
+     */
+    private CharSequence extractSpanText(Editable output, Class kind) {
+        final Object obj = getLast(output, kind);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+
+        final CharSequence extractedSpanText = output.subSequence(start, end);
+        output.delete(start, end);
+        return extractedSpanText;
+    }
+
+    private static int safelyParseColor(String color) {
+        try {
+            return Color.parseColor(color);
+        } catch(Exception e) {
+            switch(color) {
+                case "black":
+                    return Color.BLACK;
+                case "white":
+                    return Color.WHITE;
+                case "red":
+                    return Color.RED;
+                case "blue":
+                    return Color.BLUE;
+                case "green":
+                    return Color.GREEN;
+                case "grey":
+                    return Color.GRAY;
+                case "yellow":
+                    return Color.YELLOW;
+                case "aqua":
+                    return 0xff00ffff;
+                case "fuchsia":
+                    return 0xffff00ff;
+                case "lime":
+                    return 0xff00ff00;
+                case "maroon":
+                    return 0xff800000;
+                case "navy":
+                    return 0xffff00ff;
+                case "olive":
+                    return 0xff808000;
+                case "purple":
+                    return 0xff800080;
+                case "silver":
+                    return 0xffc0c0c0;
+                case "teal":
+                    return 0xff008080;
+                default:
+                    return Color.WHITE;
+
+            }
+        }
+    }
+
+    private static Boolean safelyParseBoolean(String bool, boolean def) {
+        try {
+            return Boolean.valueOf(bool);
+        } catch(Exception e) {
+            return def;
+        }
+    }
+
+    private static String getAttribute(@NonNull String attr, @NonNull XMLReader reader, String defaultAttr) {
+        try {
+            final Field fElement = reader.getClass().getDeclaredField("theNewElement");
+            fElement.setAccessible(true);
+            final Object element = fElement.get(reader);
+            final Field fAtts = element.getClass().getDeclaredField("theAtts");
+            fAtts.setAccessible(true);
+            final Object attrs = fAtts.get(element);
+            final Field fData = attrs.getClass().getDeclaredField("data");
+            fData.setAccessible(true);
+            final String[] data = (String[]) fData.get(attrs);
+            final Field fLength = attrs.getClass().getDeclaredField("length");
+            fLength.setAccessible(true);
+            final int len = (Integer) fLength.get(attrs);
+            for(int i = 0; i < len; i++) {
+                if(attr.equals(data[i * 5 + 1])) {
+                    return data[i * 5 + 4];
+                }
+            }
+
+        } catch(Exception e) {
+            Log.e(TAG, "handleTag: ", e);
+        }
+        return defaultAttr;
+    }
+
+    private void storeTableTags(boolean opening, String tag) {
+        if(mTableLevel > 0 || tag.equalsIgnoreCase("table")) {
+            mTableHtmlBuilder.append("<");
+            if(!opening) {
+                mTableHtmlBuilder.append("/");
+            }
+            mTableHtmlBuilder
+                    .append(tag.toLowerCase())
+                    .append(">");
+        }
+    }
+
+
+    /**
+     * Get last marked position of a tag type
+     */
+    private static <T> T getLast(Editable text, Class<T> kind) {
+        final T[] objs = text.getSpans(0, text.length(), kind);
+        if(objs.length == 0) {
+            return null;
+        } else {
+            //In reverse as items are returned in order they were inserted
+            for(int i = objs.length; i > 0; i--) {
+                if(text.getSpanFlags(objs[i - 1]) == Spannable.SPAN_MARK_MARK) {
+                    return objs[i - 1];
+                }
+            }
+            return null;
+        }
+    }
+
+    private static class Ul {
+
+    }
+
+    private static class Ol {
+    }
+
+    private static class Code {
+    }
+
+    private static class Center {
+    }
+
+    private static class StrikeThrough {
+    }
+
+    private static class Table {
+    }
+
+    private static class Tr {
+    }
+
+    private static class Th {
+    }
+
+    private static class Td {
+    }
+
+    private static class HorizontalRule {
+    }
+
+    private static class BlockQuote {
+    }
+
+    private static class InlineCode {
+    }
+
+    private static class A {
+
+        String href;
+
+        A(String href) {
+            this.href = href;
+        }
+
+    }
+
+    private static class ForegroundColor {
+        String color;
+
+        ForegroundColor(String color) {
+            this.color = color;
+        }
+
+    }
+
+    private static class BackgroundColor {
+        String color;
+        boolean rounded;
+
+        BackgroundColor(String color, boolean rounded) {
+            this.color = color;
+            this.rounded = rounded;
+        }
+    }
+
+    private static class Font {
+        String face;
+
+        Font(String face) {
+            this.face = face;
+        }
+    }
+
+    private static class Triple<T, U, V> {
+
+        T first;
+        U second;
+        V third;
+
+        Triple(T t, U u, V v) {
+            first = t;
+            second = u;
+            third = v;
+        }
+
+        static <T, U, V> Triple<T, U, V> create(T t, U u, V v) {
+            return new Triple<>(t, u, v);
+        }
+
+    }
+
+}
+
+```
+
+This method uses reflection to attempt to extract the attribute from the ```XMLReader```.
+
+First the element field is collected, made accessible and accessed from the ```XMLReader```.
+Next the attributes field is collected, made accessible and accessed from the element.
+Next the data field is collected, made accessible and accessed from the attributes.
+
+The ```data``` field is a string aray
+
+#### List tags
+
+List tags and numberings are stored in two stacks.
+```mLists``` is a stack of triples containing the tag, whether the list is bulleted, and the list type.
+```mOlIndices``` is a stack of pairs of integers and ```ListTypes``` which is used when exiting a nested span to continue the previous lists' numbering.
+
+Note:
+The ```Triple``` is a generic class like ```Pair``` which holds three generic types.
+
+``` java
+private static class Triple<T, U, V> {
+
+    T first;
+    U second;
+    V third;
+
+    Triple(T t, U u, V v) {
+        first = t;
+        second = u;
+        third = v;
+    }
+
+    static <T, U, V> Triple<T, U, V> create(T t, U u, V v) {
+        return new Triple<>(t, u, v);
+    }
+
+}
+```
+
 
 <div style="page-break-after: always;"></div>
 
