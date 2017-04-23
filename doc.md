@@ -3495,6 +3495,86 @@ If the span is of non-zero length, it is replaced.
 If the span is an instance of ```ParagraphStyle```, a newline must be added after it.
 Once this check has ben completed, each of the spans in the replaces array are place over the position which was previously occupied by the MARK span.
 
+#### Span clases
+
+Each span has its own marker class, which is used to extract it from the ```Editable```
+
+``` java
+private static class Ul {
+
+}
+
+private static class Ol {
+}
+
+private static class Code {
+}
+
+private static class Center {
+}
+
+private static class StrikeThrough {
+}
+
+private static class Table {
+}
+
+private static class Tr {
+}
+
+private static class Th {
+}
+
+private static class Td {
+}
+
+private static class HorizontalRule {
+}
+
+private static class BlockQuote {
+}
+
+private static class InlineCode {
+}
+
+private static class A {
+
+    String href;
+
+    A(String href) {
+        this.href = href;
+    }
+
+}
+
+private static class ForegroundColor {
+    String color;
+
+    ForegroundColor(String color) {
+        this.color = color;
+    }
+
+}
+
+private static class BackgroundColor {
+    String color;
+    boolean rounded;
+
+    BackgroundColor(String color, boolean rounded) {
+        this.color = color;
+        this.rounded = rounded;
+    }
+}
+
+private static class Font {
+    String face;
+
+    Font(String face) {
+        this.face = face;
+    }
+}
+```
+
 #### Attribute extraction
 
 Unfortunately, the ```TagHandler``` has no direct access to the attributes of the tags that are passed to it.
@@ -3571,6 +3651,69 @@ If mLists is not empty, the parent list tag is checked.
 If it is an ordered list, the ```Ol``` span is started, and a ```Pair``` containing the top index in the stack plus one, and the parent ```ListType``` is pushed to the stack.
 
 If it is an unordered list, the ```Ul``` span is started
+
+If mLists is empty, this means that there is list item without a parent.
+A new ```Ol``` span is started, and the new index is pushed to mOlIndices.
+
+##### Unordered list closing
+
+mLists is popped, removing the ```Ul``` tag.
+
+##### Ordered list closing
+
+mLists and mOlIndices are popped, removing the ```Ol``` tag and its index.
+
+##### List item closing
+
+If mLists is non-empty the parent tag is checked.
+If it is an unordered list tag, the ```Editable``` is passed to ```handleULTag```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleULTag$"
+
+This method checks the last character, ensuring that the tag ends in a newline.
+It then checks if the list should have bullets, if not the tag is ended with a new ```LeadingMarginSpan``` proportional to the list size.
+
+If the unordered list should have bullets, the bullets can either be bullet points or checkboxes.
+
+If the ```Editable``` is sufficiently long for the character to be there, the output is checked to see whether the first or second character is within the range of the checkbox characters.
+If it is, a ```LeadingMarginSpan``` is applied.
+Otherwise, a ```LeadingMarginSpan``` and a ```BulletSpan``` are applied.
+
+#### Table tags
+
+##### Table tag opening
+
+When a table tag is opened, the ```Table``` span is started.
+If the table depth is 0, the ```StringBuilder``` is recreated.
+The table level is then incremented.
+
+##### Table tag closing
+
+A closing table tag is passed to ```handleTableTag```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleTableTag$"
+
+The table level is decremented, as we have just closed a table tag.
+
+If the table level is 0, the last ```Table``` is found, its start position stored, and the span removed.
+Two newlines separated by a space are then inserted, making space for the ```TableSpan```.
+The ```TableSpan``` is created with the value of the table ```StringBuilder```, and the ```TableClickHandler```.
+The span is inserted, and then a ```WrappingClickableSpan``` is inserted around the ```TableSpan```.
+
+If the table level is not 0, the ```Table``` span is closed.
+
+#### Font tags
+
+##### Font tag opening
+
+When a font tag is opened, four attributes are extracted.
+These are the font, the text colour, the background colour, and whether the background colour should be rounded.
+
+If the font is non-null and non-empty, a new ```Font``` span is started with the ```Font```.
+
+If the foreground colour is non-null and non-empty, a new ```ForegroundColor``` span is started with the font colour.
+
+If the background colour is non-null and non-empty, a new ```BackgroundColor``` span is started with the background colour, and whether it should be rounded.
 
 #page
 
