@@ -3730,10 +3730,7 @@ The colour is parsed using ```safelyParseColor```.
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private int safelyParseColor$"
 
-#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private int parseStringColor$"
-
-The method checks if the colour begins with a hash, "#", in which case it attempts to parse the assumed hexadecimal value using ```Color.parseColor```.
-If this fails, or the colour does not begin with a hash, ```parseStringColor``` is called, which switches the string across the different HTML colour values, before returning the
+The method attempts to parse the color with ```Color.parseColor```. If this fails, it switches the string across the different HTML colour values, before returning the
 ```TextPaint``` colour if a colour is not matched.
 
 If the ```BackgroundColor``` is non-null, its positions are saved and it is removed.
@@ -3743,6 +3740,98 @@ Otherwise, only the ```BackgroundColorSpan``` is inserted.
 
 If the ```Font``` span is non null, its positions are saved and it is removed.
 A ```TypeFaceSpan``` is then inserted across its previous range.
+
+#### Code tags
+
+A code tag is opened by starting a new ```Code``` span.
+
+A code tag is closed with ```handleCodeTag```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleCodeTag$"
+
+The tag is extracted and its position saved.
+If the span has a length greater than 1, the ```CodeSpan``` is to be inserted.
+
+First the text is extracted with ```extractSpanText```.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private CharSequence extractSpanText$"
+
+This method finds the span, captures the subsequence from the ```Editable```, removes it, and then returns the extracted ```CharSequence```.
+
+Once the ```CharSequence``` has been extracted, spacing for the ```CodeSpan``` is inserted, the ```CodeSpan``` itself is inserted, and a ```WrappingClickableSpan``` is inserted around
+it.
+
+#### Center tags
+
+Center tags are opened by starting a ```Center``` span .
+
+They are closed by ending the ```Center``` span with an ```AlignmentSpan``` with ```Layout.Alignment.ALIGN_CENTER```.
+
+#### Strikethrough tags
+
+Strikethrough tags are opened by starting a ```StrikeThrough``` span.
+
+They are closed by ending the ```StrikeThroughSpan``` with a ```StrikeThroughSpan```.
+
+#### Table row, header, and data
+
+Table row, header, and data tags are started with ```Tr```, ```Th```, and ```Td``` spans respectively, and ended with these spans.
+
+#### Horizontal rule tags
+
+Horizontal rule tags are opened by starting a new ```HorizontalRule``` span.
+
+They are ended with ```handleHorizontalRuleTag```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleHorizontalRuleTag$"
+
+This finds the ```HorizontalRule``` span, stores its length, removes the span, inserts a space for the ```HorizontalRuleSpan``` to occupy, and then inserts the ```HorizontalRuleSpan```.
+
+#### Blockquote tags
+
+Blockquote tags are opened by starting a new ```BlockQuote``` span.
+
+They are ended with ```handleBlockQuoteTag```
+
+This finds the ```BlockQuote``` span, stores its start and end positions, removes the ```BlockQuote``` span, and inserts a ```QuoteSpan``` across these indices.
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleBlockQuoteTag$"
+
+#### A tags
+
+A tags are opened by starting a new ```A``` tag with the extracted "href" attribute.
+
+They are ended with ```handleATag```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleATag$"
+
+This finds and removes the span.
+It then checks if the href is valid.
+If it is valid, a ```CleanURLSpan``` is inserted.
+If it is not valid, the href is inserted before the a tag text.
+
+#### Image tags
+
+Image tags are handled immediately with ```handleImageTag```.
+
+The ```Drawable``` is initially constructed as a transparent ```ColorDrawable```.
+If the ```ImageGetter``` is non-null, the drawable is loaded from it.
+
+The original length is stored, before an object replacement character, &#65532;, is inserted.
+
+The ```ClickableImageSpan``` is then created, inserted, and wrapped with a ```WrappingClickableSpan```.
+
+As the spans are inserted over the object replacement character, they will draw over it once they have been loaded.
+
+#### InlineCode tags
+
+Inline code tags are started with ```InlineCode``` spans.
+
+They are closed with ```handleInlineCodeTag```
+
+#import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleInlineCodeTag$"
+
+This replaces the ```InlineCode``` span with an ```InlineCodeSpan```, passing the correct text size.
 
 #page
 

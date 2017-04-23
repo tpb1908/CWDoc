@@ -7394,12 +7394,12 @@ public class MarkdownTextView extends AppCompatTextView implements View.OnClickL
         mSpanCache = new WeakReference<>(cache);
         //If we have a handler use it
         if(mParseHandler != null) {
-            mParseHandler.post(new Runnable() {
+            mParseHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     parseAndSetMd(markdown, imageGetter);
                 }
-            });
+            }, 1);
         } else {
             parseAndSetMd(markdown, imageGetter);
         }
@@ -8467,62 +8467,50 @@ The colour is parsed using ```safelyParseColor```.
 **HtmlTagHandler.java**
 ``` java
 private int safelyParseColor(String color) {
-        if(color.startsWith("#")) {
-            try {
-                return Color.parseColor(color);
-            } catch(Exception e) {
-                return parseStringColor(color);
+        try {
+            return Color.parseColor(color);
+        } catch(Exception e) {
+            switch(color) {
+                case "black":
+                    return Color.BLACK;
+                case "white":
+                    return Color.WHITE;
+                case "red":
+                    return Color.RED;
+                case "blue":
+                    return Color.BLUE;
+                case "green":
+                    return Color.GREEN;
+                case "grey":
+                    return Color.GRAY;
+                case "yellow":
+                    return Color.YELLOW;
+                case "aqua":
+                    return 0xff00ffff;
+                case "fuchsia":
+                    return 0xffff00ff;
+                case "lime":
+                    return 0xff00ff00;
+                case "maroon":
+                    return 0xff800000;
+                case "navy":
+                    return 0xffff00ff;
+                case "olive":
+                    return 0xff808000;
+                case "purple":
+                    return 0xff800080;
+                case "silver":
+                    return 0xffc0c0c0;
+                case "teal":
+                    return 0xff008080;
+                default:
+                    return mTextPaint.getColor();
             }
-        } else {
-            return parseStringColor(color);
         }
     }
 ```
 
-**HtmlTagHandler.java**
-``` java
-private int parseStringColor(String color) {
-        switch(color) {
-            case "black":
-                return Color.BLACK;
-            case "white":
-                return Color.WHITE;
-            case "red":
-                return Color.RED;
-            case "blue":
-                return Color.BLUE;
-            case "green":
-                return Color.GREEN;
-            case "grey":
-                return Color.GRAY;
-            case "yellow":
-                return Color.YELLOW;
-            case "aqua":
-                return 0xff00ffff;
-            case "fuchsia":
-                return 0xffff00ff;
-            case "lime":
-                return 0xff00ff00;
-            case "maroon":
-                return 0xff800000;
-            case "navy":
-                return 0xffff00ff;
-            case "olive":
-                return 0xff808000;
-            case "purple":
-                return 0xff800080;
-            case "silver":
-                return 0xffc0c0c0;
-            case "teal":
-                return 0xff008080;
-            default:
-                return mTextPaint.getColor();
-        }
-    }
-```
-
-The method checks if the colour begins with a hash, "#", in which case it attempts to parse the assumed hexadecimal value using ```Color.parseColor```.
-If this fails, or the colour does not begin with a hash, ```parseStringColor``` is called, which switches the string across the different HTML colour values, before returning the
+The method attempts to parse the color with ```Color.parseColor```. If this fails, it switches the string across the different HTML colour values, before returning the
 ```TextPaint``` colour if a colour is not matched.
 
 If the ```BackgroundColor``` is non-null, its positions are saved and it is removed.
@@ -8532,6 +8520,170 @@ Otherwise, only the ```BackgroundColorSpan``` is inserted.
 
 If the ```Font``` span is non null, its positions are saved and it is removed.
 A ```TypeFaceSpan``` is then inserted across its previous range.
+
+#### Code tags
+
+A code tag is opened by starting a new ```Code``` span.
+
+A code tag is closed with ```handleCodeTag```
+
+**HtmlTagHandler.java**
+``` java
+private void handleCodeTag(Editable output) {
+        final Object obj = getLast(output, Code.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        if(end > start + 1) {
+            final CharSequence chars = extractSpanText(output, Code.class);
+            output.removeSpan(obj);
+            output.insert(start, "\n \n"); // Another line for our CodeSpan to cover
+            final CodeSpan code = new CodeSpan(chars.toString(), mCodeHandler);
+            output.setSpan(code, start, start + 2, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            output.setSpan(new WrappingClickableSpan(code), start, start + 3,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+    }
+```
+
+The tag is extracted and its position saved.
+If the span has a length greater than 1, the ```CodeSpan``` is to be inserted.
+
+First the text is extracted with ```extractSpanText```.
+
+**HtmlTagHandler.java**
+``` java
+private CharSequence extractSpanText(Editable output, Class kind) {
+        final Object obj = getLast(output, kind);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+
+        final CharSequence extractedSpanText = output.subSequence(start, end);
+        output.delete(start, end);
+        return extractedSpanText;
+    }
+```
+
+This method finds the span, captures the subsequence from the ```Editable```, removes it, and then returns the extracted ```CharSequence```.
+
+Once the ```CharSequence``` has been extracted, spacing for the ```CodeSpan``` is inserted, the ```CodeSpan``` itself is inserted, and a ```WrappingClickableSpan``` is inserted around
+it.
+
+#### Center tags
+
+Center tags are opened by starting a ```Center``` span .
+
+They are closed by ending the ```Center``` span with an ```AlignmentSpan``` with ```Layout.Alignment.ALIGN_CENTER```.
+
+#### Strikethrough tags
+
+Strikethrough tags are opened by starting a ```StrikeThrough``` span.
+
+They are closed by ending the ```StrikeThroughSpan``` with a ```StrikeThroughSpan```.
+
+#### Table row, header, and data
+
+Table row, header, and data tags are started with ```Tr```, ```Th```, and ```Td``` spans respectively, and ended with these spans.
+
+#### Horizontal rule tags
+
+Horizontal rule tags are opened by starting a new ```HorizontalRule``` span.
+
+They are ended with ```handleHorizontalRuleTag```
+
+**HtmlTagHandler.java**
+``` java
+private void handleHorizontalRuleTag(Editable output) {
+        final Object obj = getLast(output, HorizontalRule.class);
+        final int start = output.getSpanStart(obj);
+        output.removeSpan(obj); //Remove the old span
+        output.replace(start, output.length(), " "); //We need a non-empty span
+        output.setSpan(new HorizontalRuleSpan(), start, start + 1, 0); //Insert the bar span
+    }
+```
+
+This finds the ```HorizontalRule``` span, stores its length, removes the span, inserts a space for the ```HorizontalRuleSpan``` to occupy, and then inserts the ```HorizontalRuleSpan```.
+
+#### Blockquote tags
+
+Blockquote tags are opened by starting a new ```BlockQuote``` span.
+
+They are ended with ```handleBlockQuoteTag```
+
+This finds the ```BlockQuote``` span, stores its start and end positions, removes the ```BlockQuote``` span, and inserts a ```QuoteSpan``` across these indices.
+
+**HtmlTagHandler.java**
+``` java
+private void handleBlockQuoteTag(Editable output) {
+        final Object obj = getLast(output, BlockQuote.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        output.removeSpan(obj);
+        output.setSpan(new QuoteSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+```
+
+#### A tags
+
+A tags are opened by starting a new ```A``` tag with the extracted "href" attribute.
+
+They are ended with ```handleATag```
+
+**HtmlTagHandler.java**
+``` java
+private void handleATag(Editable output) {
+        final A obj = getLast(output, A.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        output.removeSpan(obj);
+        if(isValidURL(obj.href)) {
+            output.setSpan(new CleanURLSpan(obj.href, mLinkHandler), start, end,
+                    Spannable.SPAN_INCLUSIVE_EXCLUSIVE
+            );
+        } else {
+            output.insert(start, obj.href.concat(" "));
+        }
+    }
+```
+
+This finds and removes the span.
+It then checks if the href is valid.
+If it is valid, a ```CleanURLSpan``` is inserted.
+If it is not valid, the href is inserted before the a tag text.
+
+#### Image tags
+
+Image tags are handled immediately with ```handleImageTag```.
+
+The ```Drawable``` is initially constructed as a transparent ```ColorDrawable```.
+If the ```ImageGetter``` is non-null, the drawable is loaded from it.
+
+The original length is stored, before an object replacement character, &#65532;, is inserted.
+
+The ```ClickableImageSpan``` is then created, inserted, and wrapped with a ```WrappingClickableSpan```.
+
+As the spans are inserted over the object replacement character, they will draw over it once they have been loaded.
+
+#### InlineCode tags
+
+Inline code tags are started with ```InlineCode``` spans.
+
+They are closed with ```handleInlineCodeTag```
+
+**HtmlTagHandler.java**
+``` java
+private void handleInlineCodeTag(Editable output) {
+        final Object obj = getLast(output, InlineCode.class);
+        final int start = output.getSpanStart(obj);
+        final int end = output.length();
+        output.removeSpan(obj);
+        output.setSpan(new InlineCodeSpan(mTextPaint.getTextSize()), start, end,
+                Spannable.SPAN_INCLUSIVE_EXCLUSIVE
+        );
+    }
+```
+
+This replaces the ```InlineCode``` span with an ```InlineCodeSpan```, passing the correct text size.
 
 <div style="page-break-after: always;"></div>
 
