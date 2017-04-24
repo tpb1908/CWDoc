@@ -1283,8 +1283,8 @@ The client must implement the following features:
                     <li>Unicode insertion
                         <ol type="1">
                             <li>Display a list of possible unicode characters</li>
-                            <li>Allow searching emojis by their names</li>
-                            <li>Insert the chosen emoji into the text editor</li>
+                            <li>Allow searching characters by their names</li>
+                            <li>Insert the chosen characters into the text editor</li>
                         </ol>
                     </li>
                 </ol>
@@ -3973,6 +3973,50 @@ The method first posts to the front of the UI queue with a runnable to show the 
 It then begins the upload process, passing an ```ImgurUploadListener``` which cancels the dialog and formats the image link once the image has been uploaded, before calling
 ```imageLoadComplete```.
 The call also passes an ```UploadProgressListener``` which sets the progress of the ```ProgressDialog``` to the percentage of bytes uploaded out of the total.
+
+##### Character insertion
+
+While most mobile keyboards provide a sufficient set of keys for general usage, most have no way to input less common characters.
+
+Objective 10.iii.d is to implement a method for searching for an inserting unicode characters into the markdown being edited.
+
+This has been achieved in the ```CharacterActivity```.
+
+#import "app/src/main/java/com/tpb/projects/editors/CharacterActivity.java"
+
+The layout for this ```Activity``` consists of an ```EditText``` for search input, and a ```RecyclerView``` in which to display the searchable content.
+
+The viewholder layout used for displaying each character consists of two ```TextViews```, to display the character and its name.
+
+``` XML
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:orientation="vertical"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:layout_margin="8dp"
+              android:background="?attr/selectableItemBackgroundBorderless">
+
+    <TextView
+        android:id="@+id/text_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:textAppearance="@android:style/TextAppearance.Material.Title"/>
+
+    <TextView
+        android:id="@+id/text_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"/>
+
+</LinearLayout>
+```
+
+The full range of characters defined in the ```Character``` class is from 0 to 1114111.
+It is not reasonable to load all of these characters at once.
+
+##### Emoji insertion
 
 #page
 
