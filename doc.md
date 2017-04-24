@@ -3306,7 +3306,7 @@ If the handler exists, the call to ```parseAndSetMd``` is run on the ```Handler`
 In ```parseAndSetMd``` the ```HtmlTagHandler``` is created to parse HTML to spans.
 The span text is then overriden to stop the built in ```Html.fromHtml``` capturing but ignoring numerous tags.
 
-If the Android version is APi 25 or greater, the COMPACT flag is used to ensure the styling is the same as on previous versions.
+If the Android version is APi 25 or greater, the LEGACY flag is used to ensure the styling is the same as on previous versions.
 In either case, ```removeHtmlBottomPadding``` is called, as ```Html.fromHtml``` adds two newlines to the end of the parsed HTML.
 
 In order to add the URL and email address links, the ```Spanned``` object must be converted to an ```Editable```.
@@ -3823,6 +3823,8 @@ The ```ClickableImageSpan``` is then created, inserted, and wrapped with a ```Wr
 
 As the spans are inserted over the object replacement character, they will draw over it once they have been loaded.
 
+As no MARK span is inserted, it does not need to be (and obviously cannot) be removed.
+
 #### InlineCode tags
 
 Inline code tags are started with ```InlineCode``` spans.
@@ -3832,6 +3834,145 @@ They are closed with ```handleInlineCodeTag```
 #import "markdowntextview/src/main/java/com/tpb/mdtext/HtmlTagHandler.java $private void handleInlineCodeTag$"
 
 This replaces the ```InlineCode``` span with an ```InlineCodeSpan```, passing the correct text size.
+
+#page
+
+## Markdown editing
+
+Now that markdown parsing has been implemented, markdown editing can be implemented. 
+
+The first order objectives under objective 10 were to, "Implement toggling of a text editor between raw markdown and formatted markdown", "Add utility buttons for markdown features", and
+"Add utility buttons for markdown features".
+
+As each of these objectives are closely linked, being part of the same UI element, it makes sense to implement them together.
+
+### Implementing a re-usable editor
+
+The markdown editor will be used in numerous sections of the app.
+In some cases such as editing project cards it needs only allow the input and preview of a single block of markdown content, whereas in others such as editing an Issue it must also be 
+able to facilitate editing aspects of the model that it is working with, such as assignees and tags.
+
+This can be achieved by using a single primary layout, containing the control elements for the editor, and a stub to contain the elements related to the particular model being edited.
+
+#import "app/src/main/res/layout/activity_markdown_editor.xml"
+
+The markdown_editor layout contains three children.
+
+![Markdown editor layout](http://imgur.com/L0yRDAr.png)
+
+In vertical order, from top to bottom:
+
+The first child contains the navigation buttons for the entire editor, allowing the edit action to be completed or discarded.
+
+The second child is the content layout. The ```ScrollView``` wraps a ```ViewStub``` which will be inflated to display the editor layout.
+
+The third and final child is a ```HorizontalScrollView``` containing a ```LinearLayout``` which will be used to display the list of editor action buttons.
+
+#### The EditorActivity
+
+#import "app/src/main/java/com/tpb/projects/editors/EditorActivity.java"
+
+The ```EditorActivity``` is an abstract class dealing with the process for creating and uploading images, as well as inserting special characters and emojis.
+
+##### Image uploading
+
+Objective 10.iii.a is to implement a feature allowing the user to upload an image of their choosing to a hosting service, retrieve the URL for the image, and insert it into the ```EditText```.
+
+I chose to use Imgur to host user images as it is established, free, sufficiently fast, and provides an hourly upload limit of 1250 images for authenticated clients which is more than 
+sufficient.
+
+A client ID and secret can be generated on the Imgur website for an app linked to any Imgur user account.
+
+The image upload endpoint is simple to use, requiring only authentication and the image.
+
+| Method | POST |
+| --- | --- |
+| Route | https://api.imgur.com/3/image |
+| Alternative Route | https://api.imgur.com/3/upload |
+| Response Model | Basic |
+
+Parameters
+| Key | Required | Description | 
+| --- | --- | --- |
+| image	| required | A binary file, base64 data, or a URL for an image. (up to 10MB) |
+| album	| optional | The id of the album you want to add the image to. For anonymous albums, {album} should be the deletehash that is returned at creation. |
+| type	| optional | The type of the file that's being sent; file, base64 or URL |
+| name	| optional | The name of the file, this is automatically detected if uploading a file with a POST and multipart / form-data |
+| title	| optional | The title of the image. |
+| description | optional | The description of the image. |
+
+Image uploading is handled with the ```Uploader```.
+
+#import "gitapi/src/main/java/com/tpb/github/data/Uploader.java"
+
+Given an ```ImgurUploadListener```, base 64 encoded image, an ```UploadProgressListener```, and the client id, ```uploadImage``` attempts to upload the image.
+
+##### Image upload process
+
+When the user requests to insert an image link, there are multiple sources from which they may wish to choose their image.
+
+First, they may wish to take a new picture.
+Second, they may wish to choose an image from their gallery.
+Third, they may already have a link to an image.
+
+###### Image source choice
+
+When ```showUploadDialog``` is called, it creates a dialog to display these options.
+
+When the user selects an action, the item selection listener triggers the appropriate action.
+
+If the user clicks cancel, the dialog is dismissed.
+
+###### Pre-existing image link
+
+If the user has selected, "Insert image link", ```displayImageLinkDialog``` is called.
+
+This shows a dialog containing two ```EditTexts```, one for the title and one for the description of the image.
+If the user selects the "Insert" bbutton, their input is formatted and passed to ```insertString``` for the implementation of ```EditorActivity``` to deal with.
+
+If the user has selected another option, the image will need to be uploaded, so the ```ProgressDialog``` mUploadDialog is created if it has not been already.
+If the selected option is to take a picture, ```attemptTakePicture``` is called.
+
+###### New image capture
+
+This creates a new ```Intent``` with the ```MediaStore.ACTION_IMAGE_CAPTURE``` action.
+The ```Activity``` for the ```Intent``` is then resolved.
+If it is null, there is no camera app, or no camera, and an error message is shown.
+If there is a camera, a new file must be created in which to store the image.
+
+```createImageFile``` is called, which attempts to create a new image file in the system pictures directory, with a name in the form JPEG_yyyyMMdd_HHmmss.jpg, with the date format filled
+in with the current time. This should guarantee a unique image file.
+
+If the file is created successfully, it is stored, and the Uri is passed as the OUTPUT extra for the ```Intent```. Otherwise ```imageLoadException``` is called.
+
+The ```startActivityForResult``` call means that a result will be returned to the calling ```Activity```.
+In ```onActivityResult``` the requestCode parameter will be the same as that sent with the ```Intent```. If the resultCode is RESULT_OK, the request was succesful.
+
+In the case of an image taken with the camera, a new ```ProgressDialog``` is created and shown, and an ```AsyncTask``` is started to convert the ```BitMap``` image into a base64 encoded
+string in the PNG format.
+Once the conversion is complete, the ```ProgressDialog``` is cancelled, and ```uploadImage``` is called.
+
+###### Existing image from gallery
+
+If the user has selected "Choose from gallery", a new ```Intent``` with the ```Intent.ACTION_GET_CONTENT``` action, and the ```MediaStore.Images.Media.EXTERNAL_CONTENT_URI``` Uri is created.
+The ```Intent``` type is set to image, and the ```Intent``` is started for a result with the ```SELECT_FILE``` request code.
+
+If the user chooses a file, the result code will be RESULT_OK.
+The Uri of the file is accessed from the data ```Intent```, the ```ProgressDialog``` is shown, and an ```AsyncTask``` is started to attempt to load the image from the ```File```.
+
+```attemptLoadImage``` opens a ```ParcelFileDescriptor```  for the image in read only mode.
+The ```ParcelFileDescriptor``` returns a Java.IO ```FileDescriptor``` which handles device specific file access.
+In this case the ```BitMapFactory``` is used to load the file as a ```BitMap``` image, which is then read as a ```ByteArrayOutPutStream```, compressed, and returned as a base64 string.
+
+###### Image upload
+
+An image from the camera or the users files must now be uploaded.
+This is done when ```uploadImage``` is called.
+
+The method first posts to the front of the UI queue with a runnable to show the upload dialog.
+It then begins the upload process, passing an ```ImgurUploadListener``` which cancels the dialog and formats the image link once the image has been uploaded, before calling
+```imageLoadComplete```.
+The call also passes an ```UploadProgressListener``` which sets the progress of the ```ProgressDialog``` to the percentage of bytes uploaded out of the total.
 
 #page
 

@@ -7394,12 +7394,12 @@ public class MarkdownTextView extends AppCompatTextView implements View.OnClickL
         mSpanCache = new WeakReference<>(cache);
         //If we have a handler use it
         if(mParseHandler != null) {
-            mParseHandler.postDelayed(new Runnable() {
+            mParseHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     parseAndSetMd(markdown, imageGetter);
                 }
-            }, 1);
+            });
         } else {
             parseAndSetMd(markdown, imageGetter);
         }
@@ -7408,34 +7408,41 @@ public class MarkdownTextView extends AppCompatTextView implements View.OnClickL
     private void parseAndSetMd(@NonNull String markdown, @Nullable final Html.ImageGetter imageGetter) {
         // Override tags to stop Html.fromHtml destroying some of them
         markdown = HtmlTagHandler.overrideTags(Markdown.parseMD(markdown));
+
         final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
                 imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
         );
-        final Spanned text;
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            text = removeHtmlBottomPadding(
-                    Html.fromHtml(markdown, Html.FROM_HTML_MODE_COMPACT, imageGetter,
-                            htmlTagHandler
-                    ));
-        } else {
-            text = removeHtmlBottomPadding(Html.fromHtml(markdown, imageGetter, htmlTagHandler));
-        }
+        try {
+            final Spanned text;
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                text = removeHtmlBottomPadding(
+                        Html.fromHtml(markdown, Html.FROM_HTML_MODE_LEGACY, imageGetter,
+                                htmlTagHandler
+                        ));
+            } else {
+                text = removeHtmlBottomPadding(
+                        Html.fromHtml(markdown, imageGetter, htmlTagHandler));
+            }
 
-        // Convert to a buffer to allow editing
-        final SpannableString buffer = new SpannableString(text);
+            // Convert to a buffer to allow editing
+            final SpannableString buffer = new SpannableString(text);
 
-        //Add links for emails and web-urls
-        TextUtils.addLinks(buffer);
-        if(Looper.myLooper() == Looper.getMainLooper()) {
-            setMarkdownText(buffer);
-        } else {
-            //Post back on UI thread
-            MarkdownTextView.this.post(new Runnable() {
-                @Override
-                public void run() {
-                    setMarkdownText(buffer);
-                }
-            });
+            //Add links for emails and web-urls
+            TextUtils.addLinks(buffer);
+            if(Looper.myLooper() == Looper.getMainLooper()) {
+                setMarkdownText(buffer);
+            } else {
+                //Post back on UI thread
+                MarkdownTextView.this.getHandler().post(new Runnable() {
+                    @Override
+                    public void run() {
+                        setMarkdownText(buffer);
+                    }
+                });
+            }
+        } catch(Exception e) {
+            markdown = "Error parsing markdown\n\n\n" + Html.fromHtml(Html.escapeHtml(markdown));
+            setText(markdown);
         }
     }
 
@@ -7529,7 +7536,7 @@ If the handler exists, the call to ```parseAndSetMd``` is run on the ```Handler`
 In ```parseAndSetMd``` the ```HtmlTagHandler``` is created to parse HTML to spans.
 The span text is then overriden to stop the built in ```Html.fromHtml``` capturing but ignoring numerous tags.
 
-If the Android version is APi 25 or greater, the COMPACT flag is used to ensure the styling is the same as on previous versions.
+If the Android version is APi 25 or greater, the LEGACY flag is used to ensure the styling is the same as on previous versions.
 In either case, ```removeHtmlBottomPadding``` is called, as ```Html.fromHtml``` adds two newlines to the end of the parsed HTML.
 
 In order to add the URL and email address links, the ```Spanned``` object must be converted to an ```Editable```.
@@ -7679,7 +7686,7 @@ public class MarkdownEditText extends AppCompatEditText {
         final Spanned text;
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             text = removeHtmlBottomPadding(
-                    Html.fromHtml(overridden, Html.FROM_HTML_MODE_COMPACT, imageGetter,
+                    Html.fromHtml(overridden, Html.FROM_HTML_MODE_LEGACY, imageGetter,
                             htmlTagHandler
                     ));
         } else {
@@ -8664,6 +8671,8 @@ The ```ClickableImageSpan``` is then created, inserted, and wrapped with a ```Wr
 
 As the spans are inserted over the object replacement character, they will draw over it once they have been loaded.
 
+As no MARK span is inserted, it does not need to be (and obviously cannot) be removed.
+
 #### InlineCode tags
 
 Inline code tags are started with ```InlineCode``` spans.
@@ -8684,6 +8693,548 @@ private void handleInlineCodeTag(Editable output) {
 ```
 
 This replaces the ```InlineCode``` span with an ```InlineCodeSpan```, passing the correct text size.
+
+<div style="page-break-after: always;"></div>
+
+## Markdown editing
+
+Now that markdown parsing has been implemented, markdown editing can be implemented. 
+
+The first order objectives under objective 10 were to, "Implement toggling of a text editor between raw markdown and formatted markdown", "Add utility buttons for markdown features", and
+"Add utility buttons for markdown features".
+
+As each of these objectives are closely linked, being part of the same UI element, it makes sense to implement them together.
+
+### Implementing a re-usable editor
+
+The markdown editor will be used in numerous sections of the app.
+In some cases such as editing project cards it needs only allow the input and preview of a single block of markdown content, whereas in others such as editing an Issue it must also be 
+able to facilitate editing aspects of the model that it is working with, such as assignees and tags.
+
+This can be achieved by using a single primary layout, containing the control elements for the editor, and a stub to contain the elements related to the particular model being edited.
+
+**activity_markdown_editor.xml**
+``` xml
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+    <LinearLayout
+        android:id="@+id/markdown_activity_buttons"
+        android:layout_width="match_parent"
+        android:layout_height="?android:attr/actionBarSize"
+        android:layout_alignParentTop="true"
+        android:orientation="horizontal"
+        android:background="@color/colorPrimary"
+        android:elevation="2dp"
+        android:baselineAligned="false">
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_weight="0.5"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical">
+
+            <Button
+                android:id="@+id/markdown_editor_discard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="@string/action_discard"
+                android:drawableStart="@drawable/ic_cancel"
+                android:background="?android:attr/selectableItemBackground"
+                style="@style/Widget.AppCompat.Button.Borderless"/>
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_weight="0.5"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical">
+
+            <Button
+                android:id="@+id/markdown_editor_done"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="@string/action_done"
+                android:drawableStart="@drawable/ic_done"
+                android:background="?android:attr/selectableItemBackground"
+                style="@style/Widget.AppCompat.Button.Borderless"/>
+
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/markdown_activity_buttons"
+        android:layout_above="@+id/markdown_edit_scrollview"
+        android:fillViewport="true">
+
+        <ViewStub
+            android:id="@+id/editor_stub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
+    </ScrollView>
+
+    <HorizontalScrollView
+        android:id="@+id/markdown_edit_scrollview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:scrollbars="none"
+        android:layout_marginTop="8dp"
+        android:minHeight="48dp"
+        android:background="@color/cardview_dark_background">
+
+        <LinearLayout
+            android:id="@+id/markdown_edit_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
+
+</RelativeLayout>
+```
+
+The markdown_editor layout contains three children.
+
+![Markdown editor layout](http://imgur.com/L0yRDAr.png)
+
+In vertical order, from top to bottom:
+
+The first child contains the navigation buttons for the entire editor, allowing the edit action to be completed or discarded.
+
+The second child is the content layout. The ```ScrollView``` wraps a ```ViewStub``` which will be inflated to display the editor layout.
+
+The third and final child is a ```HorizontalScrollView``` containing a ```LinearLayout``` which will be used to display the list of editor action buttons.
+
+#### The EditorActivity
+
+**EditorActivity.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.app.ProgressDialog;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
+import android.support.v4.content.FileProvider;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Base64;
+import android.util.Log;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Toast;
+
+import com.androidnetworking.error.ANError;
+import com.tpb.github.data.Uploader;
+import com.tpb.projects.BuildConfig;
+import com.tpb.projects.R;
+import com.tpb.projects.common.CircularRevealActivity;
+import com.tpb.projects.util.UI;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileDescriptor;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+/**
+ * Created by theo on 16/02/17.
+ */
+
+public abstract class EditorActivity extends CircularRevealActivity {
+    private static final String TAG = EditorActivity.class.getSimpleName();
+
+    private static final int REQUEST_CAMERA = 9403; //Random request codes
+    private static final int SELECT_FILE = 6113;
+    private String mCurrentFilePath;
+    protected ProgressDialog mUploadDialog;
+
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            if(requestCode == EmojiActivity.REQUEST_CODE_CHOOSE_EMOJI) {
+                if(data.hasExtra(getString(R.string.intent_emoji))) {
+                    emojiChosen(data.getStringExtra(getString(R.string.intent_emoji)));
+                }
+            } else if(requestCode == CharacterActivity.REQUEST_CODE_INSERT_CHARACTER) {
+                if(data.hasExtra(getString(R.string.intent_character))) {
+                    insertString(data.getStringExtra(getString(R.string.intent_character)));
+                }
+            } else {
+                final ProgressDialog pd = new ProgressDialog(this);
+                pd.setCanceledOnTouchOutside(false);
+                pd.setCancelable(false);
+                if(requestCode == REQUEST_CAMERA) {
+
+                    pd.setTitle(R.string.title_image_conversion);
+                    pd.show();
+                    AsyncTask.execute(() -> { // Execute asynchronously
+                        final Bitmap image = BitmapFactory.decodeFile(mCurrentFilePath);
+                        final ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                        image.compress(Bitmap.CompressFormat.PNG, 100, stream);
+                        pd.cancel();
+                        uploadImage(Base64.encodeToString(stream.toByteArray(), Base64.DEFAULT));
+                    });
+
+                } else if(requestCode == SELECT_FILE) {
+                    final Uri selectedFile = data.getData();
+                    pd.setTitle(R.string.title_image_conversion);
+                    pd.show();
+                    AsyncTask.execute(() -> {
+                        try {
+                            final String image = attemptLoadImage(selectedFile);
+                            pd.cancel();
+                            uploadImage(image);
+                        } catch(IOException ioe) {
+                            pd.cancel();
+                            imageLoadException(ioe);
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    abstract void imageLoadComplete(String url);
+
+    abstract void imageLoadException(IOException ioe);
+
+    void showImageUploadDialog() {
+        final CharSequence[] items = {
+                getString(R.string.text_take_a_picture),
+                getString(R.string.text_choose_from_gallery),
+                getString(R.string.text_insert_image_link),
+                getString(R.string.action_cancel)
+        };
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(getString(R.string.text_upload_an_image));
+        builder.setItems(items, (dialog, which) -> {
+            if(which == 3) {
+                dialog.dismiss();
+            } else if(which == 2) {
+                displayImageLinkDialog();
+            } else {
+                if(mUploadDialog == null) {
+                    mUploadDialog = new ProgressDialog(EditorActivity.this);
+                    mUploadDialog.setTitle(R.string.title_image_upload);
+                    mUploadDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+                }
+                if(which == 0) {
+                    attemptTakePicture();
+                } else if(which == 1) {
+                    final Intent intent = new Intent(
+                            Intent.ACTION_GET_CONTENT,
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                    );
+                    intent.setType("image/*");
+                    startActivityForResult(intent, SELECT_FILE);
+
+                }
+            }
+        });
+        builder.show();
+    }
+
+    private void displayImageLinkDialog() {
+        final LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setPaddingRelative(UI.pxFromDp(16), 0, UI.pxFromDp(16), 0);
+
+        final EditText desc = new EditText(this);
+        desc.setHint(R.string.hint_url_description);
+        wrapper.addView(desc);
+
+        final EditText url = new EditText(this);
+        url.setHint(R.string.hint_url_url);
+        wrapper.addView(url);
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle(R.string.title_insert_image_link);
+        builder.setView(wrapper);
+
+        builder.setPositiveButton(R.string.action_insert, (v, di) -> {
+            insertString(String.format(getString(R.string.text_image_link_with_desc),
+                    desc.getText().toString(),
+                    url.getText().toString()
+            ));
+        });
+        builder.setNegativeButton(R.string.action_cancel, null);
+
+        builder.create().show();
+    }
+
+    private void attemptTakePicture() {
+        final Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        // Check if there is an activity which can take a picture
+        if(intent.resolveActivity(getPackageManager()) != null) {
+            File photoFile = null;
+            try {
+                //Create the file for the image to be stored in
+                photoFile = createImageFile();
+            } catch(IOException ioe) {
+                Log.e(TAG, "attemptTakePicture: ", ioe);
+                imageLoadException(ioe);
+            }
+
+            if(photoFile != null) {
+                final Uri photoURI = FileProvider
+                        .getUriForFile(this, "com.tpb.projects.provider", photoFile);
+                intent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                startActivityForResult(intent, REQUEST_CAMERA);
+            } else {
+                imageLoadException(
+                        new IOException(getString(R.string.error_image_file_not_created)));
+            }
+        } else {
+            Toast.makeText(this, R.string.error_no_application_for_picture, Toast.LENGTH_SHORT)
+                 .show();
+        }
+    }
+
+    private File createImageFile() throws IOException {
+        //Create an image file with a formatted name
+        final String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        final String imageFileName = "JPEG_" + timeStamp + "_";
+        final File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        final File image = File.createTempFile(
+                imageFileName,  /* prefix */
+                ".jpg",         /* suffix */
+                storageDir      /* directory */
+        );
+        mCurrentFilePath = image.getAbsolutePath();
+        return image;
+    }
+
+    private String attemptLoadImage(Uri uri) throws IOException {
+        // Open FileDescriptor in read mode
+        final ParcelFileDescriptor parcelFileDescriptor =
+                getContentResolver().openFileDescriptor(uri, "r");
+        final FileDescriptor fileDescriptor = parcelFileDescriptor.getFileDescriptor();
+        //Decode to a bitmap, and convert to a byte array
+        final Bitmap image = BitmapFactory.decodeFileDescriptor(fileDescriptor);
+        final ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        image.compress(Bitmap.CompressFormat.PNG, 100, stream);
+        //Return base64 string for Imgur
+        return Base64.encodeToString(stream.toByteArray(), Base64.DEFAULT);
+    }
+
+    private void uploadImage(String image64) {
+        new Handler(Looper.getMainLooper()).postAtFrontOfQueue(() -> mUploadDialog.show());
+        Uploader.uploadImage(
+                new Uploader.ImgurUploadListener() {
+                                 @Override
+                                 public void imageUploaded(String link) {
+                                     mUploadDialog.cancel();
+                                     final String snippet = String.format(getString(R.string.text_image_link), link);
+                                     imageLoadComplete(snippet);
+                                 }
+
+                                 @Override
+                                 public void uploadError(ANError error) {
+                                     mUploadDialog.cancel();
+                                     Toast.makeText(EditorActivity.this, error.getErrorBody(), Toast.LENGTH_SHORT).show();
+                                 }
+                             },
+                image64,
+                (bUP, bTotal) -> mUploadDialog.setProgress(Math.round((100 * bUP) / bTotal)),
+                BuildConfig.IMGUR_CLIENT_ID
+        );
+    }
+
+    protected abstract void emojiChosen(String emoji);
+
+    protected abstract void insertString(String c);
+
+}
+
+```
+
+The ```EditorActivity``` is an abstract class dealing with the process for creating and uploading images, as well as inserting special characters and emojis.
+
+##### Image uploading
+
+Objective 10.iii.a is to implement a feature allowing the user to upload an image of their choosing to a hosting service, retrieve the URL for the image, and insert it into the ```EditText```.
+
+I chose to use Imgur to host user images as it is established, free, sufficiently fast, and provides an hourly upload limit of 1250 images for authenticated clients which is more than 
+sufficient.
+
+A client ID and secret can be generated on the Imgur website for an app linked to any Imgur user account.
+
+The image upload endpoint is simple to use, requiring only authentication and the image.
+
+| Method | POST |
+| --- | --- |
+| Route | https://api.imgur.com/3/image |
+| Alternative Route | https://api.imgur.com/3/upload |
+| Response Model | Basic |
+
+Parameters
+| Key | Required | Description | 
+| --- | --- | --- |
+| image	| required | A binary file, base64 data, or a URL for an image. (up to 10MB) |
+| album	| optional | The id of the album you want to add the image to. For anonymous albums, {album} should be the deletehash that is returned at creation. |
+| type	| optional | The type of the file that's being sent; file, base64 or URL |
+| name	| optional | The name of the file, this is automatically detected if uploading a file with a POST and multipart / form-data |
+| title	| optional | The title of the image. |
+| description | optional | The description of the image. |
+
+Image uploading is handled with the ```Uploader```.
+
+**Uploader.java**
+``` java
+package com.tpb.github.data;
+
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.util.Log;
+
+import com.androidnetworking.AndroidNetworking;
+import com.androidnetworking.common.Priority;
+import com.androidnetworking.error.ANError;
+import com.androidnetworking.interfaces.JSONObjectRequestListener;
+import com.androidnetworking.interfaces.UploadProgressListener;
+
+import org.json.JSONObject;
+
+/**
+ * Created by theo on 15/02/17.
+ */
+
+public class Uploader {
+
+    private static final String IMGUR_AUTH_KEY = "Authorization";
+    private static final String IMGUR_AUTH_FORMAT = "Client-ID %1$s";
+
+    public static void uploadImage(@NonNull final ImgurUploadListener listener, String image64, @Nullable UploadProgressListener uploadListener, @NonNull String clientId) {
+        AndroidNetworking.upload("https://api.imgur.com/3/image")
+                         .addHeaders(IMGUR_AUTH_KEY, String.format(IMGUR_AUTH_FORMAT,
+                                 clientId
+                         ))
+                         .addMultipartParameter("image", image64)
+                         .setPriority(Priority.HIGH)
+                         .build()
+                         .setUploadProgressListener(uploadListener)
+                         .getAsJSONObject(new JSONObjectRequestListener() {
+                             @Override
+                             public void onResponse(JSONObject response) {
+                                 try {
+                                     final String link = response.getJSONObject("data").getString("link");
+                                     listener.imageUploaded(link);
+                                 } catch(Exception e) {
+                                     Log.e("Uploader", "onResponse: ", e);
+                                 }
+                             }
+
+                             @Override
+                             public void onError(ANError anError) {
+                                 listener.uploadError(anError);
+                             }
+                         });
+    }
+
+    public interface ImgurUploadListener {
+
+        void imageUploaded(String url);
+
+        void uploadError(ANError error);
+
+    }
+
+}
+
+```
+
+Given an ```ImgurUploadListener```, base 64 encoded image, an ```UploadProgressListener```, and the client id, ```uploadImage``` attempts to upload the image.
+
+##### Image upload process
+
+When the user requests to insert an image link, there are multiple sources from which they may wish to choose their image.
+
+First, they may wish to take a new picture.
+Second, they may wish to choose an image from their gallery.
+Third, they may already have a link to an image.
+
+###### Image source choice
+
+When ```showUploadDialog``` is called, it creates a dialog to display these options.
+
+When the user selects an action, the item selection listener triggers the appropriate action.
+
+If the user clicks cancel, the dialog is dismissed.
+
+###### Pre-existing image link
+
+If the user has selected, "Insert image link", ```displayImageLinkDialog``` is called.
+
+This shows a dialog containing two ```EditTexts```, one for the title and one for the description of the image.
+If the user selects the "Insert" bbutton, their input is formatted and passed to ```insertString``` for the implementation of ```EditorActivity``` to deal with.
+
+If the user has selected another option, the image will need to be uploaded, so the ```ProgressDialog``` mUploadDialog is created if it has not been already.
+If the selected option is to take a picture, ```attemptTakePicture``` is called.
+
+###### New image capture
+
+This creates a new ```Intent``` with the ```MediaStore.ACTION_IMAGE_CAPTURE``` action.
+The ```Activity``` for the ```Intent``` is then resolved.
+If it is null, there is no camera app, or no camera, and an error message is shown.
+If there is a camera, a new file must be created in which to store the image.
+
+```createImageFile``` is called, which attempts to create a new image file in the system pictures directory, with a name in the form JPEG_yyyyMMdd_HHmmss.jpg, with the date format filled
+in with the current time. This should guarantee a unique image file.
+
+If the file is created successfully, it is stored, and the Uri is passed as the OUTPUT extra for the ```Intent```. Otherwise ```imageLoadException``` is called.
+
+The ```startActivityForResult``` call means that a result will be returned to the calling ```Activity```.
+In ```onActivityResult``` the requestCode parameter will be the same as that sent with the ```Intent```. If the resultCode is RESULT_OK, the request was succesful.
+
+In the case of an image taken with the camera, a new ```ProgressDialog``` is created and shown, and an ```AsyncTask``` is started to convert the ```BitMap``` image into a base64 encoded
+string in the PNG format.
+Once the conversion is complete, the ```ProgressDialog``` is cancelled, and ```uploadImage``` is called.
+
+###### Existing image from gallery
+
+If the user has selected "Choose from gallery", a new ```Intent``` with the ```Intent.ACTION_GET_CONTENT``` action, and the ```MediaStore.Images.Media.EXTERNAL_CONTENT_URI``` Uri is created.
+The ```Intent``` type is set to image, and the ```Intent``` is started for a result with the ```SELECT_FILE``` request code.
+
+If the user chooses a file, the result code will be RESULT_OK.
+The Uri of the file is accessed from the data ```Intent```, the ```ProgressDialog``` is shown, and an ```AsyncTask``` is started to attempt to load the image from the ```File```.
+
+```attemptLoadImage``` opens a ```ParcelFileDescriptor```  for the image in read only mode.
+The ```ParcelFileDescriptor``` returns a Java.IO ```FileDescriptor``` which handles device specific file access.
+In this case the ```BitMapFactory``` is used to load the file as a ```BitMap``` image, which is then read as a ```ByteArrayOutPutStream```, compressed, and returned as a base64 string.
+
+###### Image upload
+
+An image from the camera or the users files must now be uploaded.
+This is done when ```uploadImage``` is called.
+
+The method first posts to the front of the UI queue with a runnable to show the upload dialog.
+It then begins the upload process, passing an ```ImgurUploadListener``` which cancels the dialog and formats the image link once the image has been uploaded, before calling
+```imageLoadComplete```.
+The call also passes an ```UploadProgressListener``` which sets the progress of the ```ProgressDialog``` to the percentage of bytes uploaded out of the total.
 
 <div style="page-break-after: always;"></div>
 
