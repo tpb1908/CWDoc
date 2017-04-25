@@ -4027,9 +4027,46 @@ Within the ```AsyncTask``` a new ```ArrayList``` of pairs of strings is created.
 The total length is set as ```MAX_CODE_POINT - MIN_CODE_POINT```, and ```lastIndex``` is set as 0, representing the index of the last block added to the adapter.
 For each character in the range, if the character is defined and not a control character, it is added to the ```ArrayList``` along with its name.
 
-If the current size of the ```ArrayList``` minus the last added index is greater than one 50<sup>th</sup> of the entire length, the characters are added to the adapter, and the lastIndex
+If the current size of the ```ArrayList``` minus the last added index is greater than one 250<sup>th</sup> of the entire length, the characters are added to the adapter, and the lastIndex
 is reset.
+This results in the valid characters being chunked into around 56 blocks.
 
+###### CharacterAdapter
+
+The ```CharacterAdapter``` holds three ```ArrayLists```. The first is mCharacters, which holds the ```Pairs``` of strings which are to be displayed.
+The other two ```ArrayLists``` are lists of integers which point to the positions in the first list.
+mFilteredPositions is the ```ArrayList``` which the adapter uses to determine its length and to find the strings which it should be binding to to the viewholders.
+mWorkingPositions is a separate ```ArrayList``` used during the filtering of positions on another thread. mFilteredPositions cannot be updated from another thread because the 
+```RecyclerView``` expects the data-set not to change without it being notified, and the ```RecyclerView``` cannot be notified as each character is filtered.
+
+When the ```Activity``` starts the ```AsyncTask``` begins to add blocks of characters to the adapter.
+When ```addCharacters``` is called, each of the characters from the start position onwards are added to mCharacters.
+Next, the original length of mFilteredPositions is saved, and each of the integer values from this point to the size of mCharacters is added to mFilteredPositions.
+Finally, a new runnable is posted to the UI thread to change the mSize variable and call ```notifyItemRangeInserted``` to notify the ```RecyclerView``` that a new range has been
+inserted. 
+In this case there is no need for a working ```ArrayList``` because items are being added, not removed, and as such mSize will always be smaller than the length of mFilteredPositions, meaning that the ```RecyclerView``` will never request a position past this point.
+
+When the user types something into the ```EditText```, ```filter``` is called with the query that they typed.
+This executes an ```AsyncTask``` to search the characters for their query.
+First, mWorkingPositions is re-created.
+Next, there are three possibilities for the search:
+
+-1. The query is empty, in which case all of the positions are added to mWorkingPositions
+-2. The query starts with the last query, meaning that the user has types another character. In this case the method iterates through the currently filtered positions and only searches the characters at these positions in mCharacters for the new query, as if the other characters did not contain the shorter query, they will not contain this one.
+-3. Otherwise, the entire mCharacters list is searched, and the matching positions are added to mWorkingPositions.
+
+Once mWorkingPositions has been built, the last query is updated, and a new runnable is posted to the UI thread to update the filtered positions.
+This swaps mFilteredPositions, updates the size, and notifies that the dataset has been changed.
+
+![Character Activity](http://imgur.com/7VGtJwB.png)
+
+###### Returning the chosen character
+
+When the user clicks on a character, ```choose``` is called in the ```CharacterAdapter```, which calls the ```choose``` method in ```CharacterActivity``` with the character string.
+This creates an ```Intent``` and adds the string as an extra, before setting the result code to RESULT_OK and the data to the ```Intent```, and finishing the ```Activity```.
+
+Returning to the ```onActivityResult``` method of ```EditorActivity```, the resultCode will be ```CharacterActivity.REQUEST_CODE_CHARACTER_INSERTED```.
+```insertString``` is then called with the character string.
 
 ##### Emoji insertion
 
