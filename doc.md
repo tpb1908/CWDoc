@@ -4013,8 +4013,23 @@ The viewholder layout used for displaying each character consists of two ```Text
 </LinearLayout>
 ```
 
+In ```onCreate```, the layout is inflated, and the text is set on the title and search ```Views```. The ```RecyclerView``` is then setup with a ```GridLayoutManager``` to display
+three viewholders per row, as each viewholder is quite small.
+
+After the adapter is created, a ```SimpleTextChangeWatcher``` is appl,ied to the search ```EditText``` to capture input as the user types, and pass it to the adapter for filtering.
+
+The characters are then loaded for the adapter.
 The full range of characters defined in the ```Character``` class is from 0 to 1114111.
-It is not reasonable to load all of these characters at once.
+It is not reasonable to load all of these characters at once, especially not on the UI thread.
+
+Instead, they must be loaded in chunks from another thread.
+Within the ```AsyncTask``` a new ```ArrayList``` of pairs of strings is created.
+The total length is set as ```MAX_CODE_POINT - MIN_CODE_POINT```, and ```lastIndex``` is set as 0, representing the index of the last block added to the adapter.
+For each character in the range, if the character is defined and not a control character, it is added to the ```ArrayList``` along with its name.
+
+If the current size of the ```ArrayList``` minus the last added index is greater than one 50<sup>th</sup> of the entire length, the characters are added to the adapter, and the lastIndex
+is reset.
+
 
 ##### Emoji insertion
 

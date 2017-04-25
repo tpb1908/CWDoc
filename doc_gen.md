@@ -9307,14 +9307,13 @@ public class CharacterActivity extends BaseActivity {
             final ArrayList<Pair<String, String>> characters = new ArrayList<>();
             final int length = Character.MAX_CODE_POINT - Character.MIN_CODE_POINT;
             int lastIndex = 0;
-            
+
             for(int i = Character.MIN_CODE_POINT; i < Character.MAX_CODE_POINT; i++) {
                 if(Character.isDefined(i) && !Character.isISOControl(i)) {
                     characters.add(Pair.create(String.valueOf((char) i), Character.getName(i)));
                     // 50 gives ~10 chunks
                     if((characters.size() - lastIndex) > length / 50) {
-                        final int start = lastIndex;
-                        adapter.addCharacters(characters.subList(start, characters.size()));
+                        adapter.addCharacters(characters, lastIndex);
                         lastIndex = characters.size();
                     }
                 }
@@ -9330,8 +9329,9 @@ public class CharacterActivity extends BaseActivity {
         private ArrayList<Integer> mWorkingPositions = new ArrayList<>();
         private int mSize = 0;
 
-        void addCharacters(List<Pair<String, String>> characters) {
-            mCharacters.addAll(characters);
+        void addCharacters(List<Pair<String, String>> characters, int start) {
+            for(int i = start; i < characters.size(); i++) mCharacters.add(characters.get(i));
+
             final int originalSize = mFilteredPositions.size();
             for(int i = originalSize; i < mCharacters.size(); i++) {
                 mFilteredPositions.add(i);
@@ -9442,8 +9442,23 @@ The viewholder layout used for displaying each character consists of two ```Text
 </LinearLayout>
 ```
 
+In ```onCreate```, the layout is inflated, and the text is set on the title and search ```Views```. The ```RecyclerView``` is then setup with a ```GridLayoutManager``` to display
+three viewholders per row, as each viewholder is quite small.
+
+After the adapter is created, a ```SimpleTextChangeWatcher``` is appl,ied to the search ```EditText``` to capture input as the user types, and pass it to the adapter for filtering.
+
+The characters are then loaded for the adapter.
 The full range of characters defined in the ```Character``` class is from 0 to 1114111.
-It is not reasonable to load all of these characters at once.
+It is not reasonable to load all of these characters at once, especially not on the UI thread.
+
+Instead, they must be loaded in chunks from another thread.
+Within the ```AsyncTask``` a new ```ArrayList``` of pairs of strings is created.
+The total length is set as ```MAX_CODE_POINT - MIN_CODE_POINT```, and ```lastIndex``` is set as 0, representing the index of the last block added to the adapter.
+For each character in the range, if the character is defined and not a control character, it is added to the ```ArrayList``` along with its name.
+
+If the current size of the ```ArrayList``` minus the last added index is greater than one 50<sup>th</sup> of the entire length, the characters are added to the adapter, and the lastIndex
+is reset.
+
 
 ##### Emoji insertion
 
