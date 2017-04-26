@@ -1261,6 +1261,7 @@ The client must implement the following features:
                     <li>List items</li>
                     <li>Numbered list items</li>
                     <li>Quote blocks</li>
+                    <li>Horizontal rules</li>
                 </ol>
             </li>
             <li>Add further utility buttons
@@ -1273,6 +1274,7 @@ The client must implement the following features:
                         </ol>
                     </li>
                     <li>Code tags</li>
+                    <li>Checkboxes</li>
                     <li>Emoji insertion
                         <ol type="1">
                             <li>Display a list of possible emojis</li>
@@ -3975,6 +3977,9 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
                 i = parseUsername(builder, chars, i);
             } else if(chars[i] == '#' && isWhiteSpace(p) && fullRepoPath != null) {
                 i = parseIssue(builder, chars, i, fullRepoPath);
+            }  else if(chars[i] == ']' && p == '[' && pp =='!') {
+                builder.setLength(builder.length() - 2);
+                builder.append("![No description]");
             } else if(pp == '[' && (p == 'x' || p == 'X') && chars[i] == ']') {
                 builder.setLength(builder.length() - 2);
                 builder.append("\u2611");  //☑ ballot box with check
@@ -6124,6 +6129,7 @@ import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.style.ReplacementSpan;
+import android.util.Base64;
 
 import com.tpb.mdtext.TextUtils;
 import com.tpb.mdtext.handlers.CodeClickHandler;
@@ -6160,6 +6166,7 @@ public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.W
         } else {
             mCode = code;
         }
+        mCode = new String(Base64.decode(mCode, Base64.DEFAULT));
     }
 
     @Override
@@ -6200,6 +6207,7 @@ public class CodeSpan extends ReplacementSpan implements WrappingClickableSpan.W
     }
 
     public void onClick() {
+
         if(mHandler.get() != null) mHandler.get().codeClicked(mCode, mLanguage);
     }
 

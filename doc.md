@@ -1261,6 +1261,7 @@ The client must implement the following features:
                     <li>List items</li>
                     <li>Numbered list items</li>
                     <li>Quote blocks</li>
+                    <li>Horizontal rules</li>
                 </ol>
             </li>
             <li>Add further utility buttons
@@ -1273,6 +1274,7 @@ The client must implement the following features:
                         </ol>
                     </li>
                     <li>Code tags</li>
+                    <li>Checkboxes</li>
                     <li>Emoji insertion
                         <ol type="1">
                             <li>Display a list of possible emojis</li>
