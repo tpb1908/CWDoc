@@ -3870,6 +3870,81 @@ The second child is the content layout. The ```ScrollView``` wraps a ```ViewStub
 
 The third and final child is a ```HorizontalScrollView``` containing a ```LinearLayout``` which will be used to display the list of editor action buttons.
 
+#### Utilities
+
+##### KeyBoardDismisingDialogFragment
+
+One of the longest running irritations with Android is its handling of the keyboard.
+There is no consistent method for changing the keyboard visibility, and the keyboard does not dismiss in scenarios when it would be expected to such as when a dialog is dismissed.
+
+#import "app/src/main/java/com/tpb/projects/editors/KeyboardDismissingDialogFragment.java"
+
+The ```KeyboardDismissingDialogFragment``` is a subclass of ```DialogFragment``` which ensures that the keyboard is closed when the dialog is dismissed.
+This is done by checking if a ```View``` is focused, and if so hiding the keyboard from the focused ```View```.
+
+##### MultiChoiceDialog
+
+The ```MultiChoiceDialog``` extends ```KeyboardDismissingDialogFragment``` and builds a multi choice dialog using the ```AlertDialog``` builder, allowing colouring the ```Views```.
+
+#import "app/src/main/java/com/tpb/projects/editors/MultiChoiceDialog.java"
+
+The ```MultiChoiceDialogListener``` interface is used for returning the chosen items, or notifying that the choice selection has been cancelled.
+
+When a ```MultiChoiceDialog``` is created, the choices must be set, and optionally the colours for each choice can be set.
+
+When ```onCreateDialog``` is called, a new ```AlertDialog.Builder``` is created, and the title is set from the resource id passed to the dialog.
+The multi choice items are then set, and listeners are added for the positive and negative buttons which call ```choicesComplete``` and ```choicesCancelled``` respectively.
+The listener set with the multi choice items sets the value in the checked array at the toggled position.
+
+The ```AlertDialog``` is then built, inflating the layout.
+The ```ListView``` can then be extracted from the ```AlertDialog```, and if there is a colors array, a listener is added to colour each of the ```ListView``` items, as this is not a
+built in feature.
+
+```addBackgroundSetterListener``` creates an array of ```SpannableStringBuilders``` to cache the coloured spans.
+It then adds an ```OnScrollListener```, and in ```onScroll``` it sets the text of each of the visible ```TextViews```.
+
+If no ```SpannableStringBuilder``` has been built, it is constructed with a ```BackgroundColorSpan``` and a ```ForegroundColorSpan``` using ```TextUtils.getTextColorForBackground``` and then stored in the cache array.
+The ```TextView``` text is then set to the ```SpannableStringBuilder```.
+
+##### MarkdownButtonAdapter 
+
+Objectives 10.ii and 10.iii are to implement buttons for inserting markdown control sequences into text.
+
+Many apps, such as Facebook messenger below, augment the keyboard by showing an extra row of buttons above it, specifically for the content type being input.
+
+![Messenger buttons](https://i.stack.imgur.com/FpZqh.png)
+
+As explained above, the ```HorizontalScrollView``` in ```activity_markdown_editor``` will be used to display these buttons.
+As the buttons are the same throughout each of the editors, a general adapter is used with an interface for inserting text or showing the format preview, which allows individual implementations of ```EditorActivity``` to deal with the ```Views``` that they have inflated.
+
+#import "app/src/main/java/com/tpb/projects/editors/MarkdownButtonAdapter.java"
+
+The ```MarkdownButtonAdapter``` is constructed with an ```EditorActivity```, the ```LinearLayout``` within which the ```Views``` are to be inserted, and the ```MarkdownButtonListener``` which will be called when a button is clicked.
+
+The class variables are assigned, and ```initViews``` is called.
+```initViews``` uses, ```createImageButton``` for each new ```ImageButton```. This method takes a resource id for the image to show on the button, inflates the button, sets its image resource id, adds the button to the ```LinearLayout``` and returns the button.
+
+15 ```ImageButtons``` are created, for 15 different actions.
+
+1. The first button is for displaying the markdown in its formatted state, and calls ```previewCalled``` on the listener.
+2. The second button calls ```showInsertLinkDialog```
+This creates a new ```LinearLayout``` with standard 16dp padding, inflates two ```EditTexts``` inside the ```LinearLayout```, and then builds an ```AlertDialog``` with the layout.
+When the positive button is clicked, the ```snippetEntered method is called on the listener, inserting the formatted URL.
+3. The third button calls ```showImageUploadDialog``` on the ```EditorActivity``` parent
+4. The fourth button inserts the the quadruple asterisks for bold text, and positions the cursor between the two pairs of asterisks.
+5. The fifth button inserts the double asterisks for italic text, and positions the cursor between the two.
+6. The sixth button inserts the quadruple tildes for strikethrough text, and positions the cursor between the two.
+7. The seventh button inserts the ticked checkbox characters, and positions the cursor after them.
+8. The eighth button inserts the empty checkbox characters, and positions the cursor after them.
+9. The ninth button inserts the triple hypens for a thematic break between two newlines, and positions the cursor after them.
+10. The tenth button inserts a spaced asterisk for a bullet point list item, and positions the cursor after it.
+11. The eleventh button inserts the first item in a numbered list, and positions the cursor after it.
+12. The twelvth button inserts the right chevron and positions the cursor after it.
+13. The thirteenth button inserts the two sets of triple backticks for a code block, separated by two newlines, and positions the cursor between the two sets.
+14. The fourteenth button launches the ```EmojiActivity``` from the parent ```Activity```.
+15. The fifteenth button launches the ```CharacterActivity``` from the parent ```Activity```.
+
+
 #### The EditorActivity
 
 #import "app/src/main/java/com/tpb/projects/editors/EditorActivity.java"

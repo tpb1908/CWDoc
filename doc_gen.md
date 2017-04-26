@@ -8827,6 +8827,411 @@ The second child is the content layout. The ```ScrollView``` wraps a ```ViewStub
 
 The third and final child is a ```HorizontalScrollView``` containing a ```LinearLayout``` which will be used to display the list of editor action buttons.
 
+#### Utilities
+
+##### KeyBoardDismisingDialogFragment
+
+One of the longest running irritations with Android is its handling of the keyboard.
+There is no consistent method for changing the keyboard visibility, and the keyboard does not dismiss in scenarios when it would be expected to such as when a dialog is dismissed.
+
+**KeyboardDismissingDialogFragment.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.content.Context;
+import android.os.Bundle;
+import android.support.v4.app.DialogFragment;
+import android.view.inputmethod.InputMethodManager;
+
+import com.tpb.projects.R;
+
+/**
+ * Created by theo on 31/12/16.
+ */
+
+public abstract class KeyboardDismissingDialogFragment extends DialogFragment {
+
+
+    @Override
+    public void dismiss() {
+        //Check if a text input is focused
+        if(getDialog().getCurrentFocus() != null) {
+            final InputMethodManager imm = (InputMethodManager) getContext()
+                    .getSystemService(Context.INPUT_METHOD_SERVICE);
+            //Close the keyboard with the window token of the focused text input
+            imm.hideSoftInputFromWindow(getDialog().getCurrentFocus().getWindowToken(),
+                    InputMethodManager.HIDE_NOT_ALWAYS
+            );
+        }
+        super.dismiss();
+    }
+
+    //Does the same as dismiss
+    @Override
+    public void dismissAllowingStateLoss() {
+        if(getDialog().getCurrentFocus() != null) {
+            final InputMethodManager imm = (InputMethodManager) getContext()
+                    .getSystemService(Context.INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(getDialog().getCurrentFocus().getWindowToken(),
+                    InputMethodManager.HIDE_NOT_ALWAYS
+            );
+        }
+        super.dismissAllowingStateLoss();
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        //Enable the slide in animation
+        getDialog().getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+    }
+
+}
+
+```
+
+The ```KeyboardDismissingDialogFragment``` is a subclass of ```DialogFragment``` which ensures that the keyboard is closed when the dialog is dismissed.
+This is done by checking if a ```View``` is focused, and if so hiding the keyboard from the focused ```View```.
+
+##### MultiChoiceDialog
+
+The ```MultiChoiceDialog``` extends ```KeyboardDismissingDialogFragment``` and builds a multi choice dialog using the ```AlertDialog``` builder, allowing colouring the ```Views```.
+
+**MultiChoiceDialog.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.v7.widget.AppCompatCheckedTextView;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
+import android.widget.AbsListView;
+import android.widget.ListView;
+
+import com.tpb.mdtext.TextUtils;
+import com.tpb.projects.R;
+
+/**
+ * Created by theo on 29/12/16.
+ */
+
+public class MultiChoiceDialog extends KeyboardDismissingDialogFragment {
+
+    private MultiChoiceDialogListener listener;
+    private String[] choices;
+    private boolean[] checked;
+    private ListView listView;
+    private int[] colors;
+
+    @NonNull
+    @Override
+    public Dialog onCreateDialog(Bundle savedInstanceState) {
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+
+        final Bundle arguments = getArguments();
+        final int titleRes = arguments.getInt(getContext().getString(R.string.intent_title_res));
+        builder.setTitle(titleRes);
+        builder.setMultiChoiceItems(choices, checked, (dialogInterface, i, b) -> checked[i] = b);
+        builder.setPositiveButton(R.string.action_ok, (dialogInterface, i) -> {
+            if(listener != null) listener.choicesComplete(choices, checked);
+        });
+        builder.setNegativeButton(R.string.action_cancel, (dialogInterface, i) -> {
+            if(listener != null) listener.choicesCancelled();
+        });
+        final AlertDialog dialog = builder.create();
+        listView = dialog.getListView();
+
+        dialog.setOnShowListener(dialogInterface -> {
+            if(colors != null) addBackgroundSetterListener();
+        });
+
+        return dialog;
+    }
+
+    private void addBackgroundSetterListener() {
+        final SpannableStringBuilder[] cache = new SpannableStringBuilder[choices.length];
+        listView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView absListView, int scrollState) {
+            }
+
+                    /*
+                    We have to get the TextViews after they are bound, so we wait for a scroll
+                    and then iterate through the TextView on screen
+                     */
+
+            @Override
+            public void onScroll(AbsListView absListView, int firstVisible, int visibleCount, int totalCount) {
+                for(int i = firstVisible; i < firstVisible + visibleCount; i++) {
+                    try {
+                        if(cache[i] == null) {
+                            final SpannableStringBuilder builder = new SpannableStringBuilder();
+                            builder.append(choices[i]);
+                            builder.setSpan(
+                                    new BackgroundColorSpan(colors[i]),
+                                    0,
+                                    builder.length(),
+                                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            );
+                            builder.setSpan(
+                                    new ForegroundColorSpan(
+                                            TextUtils
+                                                    .getTextColorForBackground(
+                                                            colors[i])
+                                    ),
+                                    0,
+                                    builder.length(),
+                                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            );
+                            cache[i] = builder;
+
+                        }
+                        ((AppCompatCheckedTextView) listView.getChildAt(i))
+                                .setText(cache[i]);
+                    } catch(ClassCastException ignored) {
+                    }
+
+                }
+            }
+        });
+    }
+
+    public void setBackgroundColors(int[] colors) {
+        this.colors = colors;
+    }
+
+    public void setChoices(String[] choices, boolean[] checked) {
+        this.choices = choices;
+        this.checked = checked;
+    }
+
+    public void setListener(MultiChoiceDialogListener listener) {
+        this.listener = listener;
+    }
+
+    public interface MultiChoiceDialogListener {
+
+        void choicesComplete(String[] choices, boolean[] checked);
+
+        void choicesCancelled();
+
+    }
+}
+
+```
+
+The ```MultiChoiceDialogListener``` interface is used for returning the chosen items, or notifying that the choice selection has been cancelled.
+
+When a ```MultiChoiceDialog``` is created, the choices must be set, and optionally the colours for each choice can be set.
+
+When ```onCreateDialog``` is called, a new ```AlertDialog.Builder``` is created, and the title is set from the resource id passed to the dialog.
+The multi choice items are then set, and listeners are added for the positive and negative buttons which call ```choicesComplete``` and ```choicesCancelled``` respectively.
+The listener set with the multi choice items sets the value in the checked array at the toggled position.
+
+The ```AlertDialog``` is then built, inflating the layout.
+The ```ListView``` can then be extracted from the ```AlertDialog```, and if there is a colors array, a listener is added to colour each of the ```ListView``` items, as this is not a
+built in feature.
+
+```addBackgroundSetterListener``` creates an array of ```SpannableStringBuilders``` to cache the coloured spans.
+It then adds an ```OnScrollListener```, and in ```onScroll``` it sets the text of each of the visible ```TextViews```.
+
+If no ```SpannableStringBuilder``` has been built, it is constructed with a ```BackgroundColorSpan``` and a ```ForegroundColorSpan``` using ```TextUtils.getTextColorForBackground``` and then stored in the cache array.
+The ```TextView``` text is then set to the ```SpannableStringBuilder```.
+
+##### MarkdownButtonAdapter 
+
+Objectives 10.ii and 10.iii are to implement buttons for inserting markdown control sequences into text.
+
+Many apps, such as Facebook messenger below, augment the keyboard by showing an extra row of buttons above it, specifically for the content type being input.
+
+![Messenger buttons](https://i.stack.imgur.com/FpZqh.png)
+
+As explained above, the ```HorizontalScrollView``` in ```activity_markdown_editor``` will be used to display these buttons.
+As the buttons are the same throughout each of the editors, a general adapter is used with an interface for inserting text or showing the format preview, which allows individual implementations of ```EditorActivity``` to deal with the ```Views``` that they have inflated.
+
+**MarkdownButtonAdapter.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.content.Intent;
+import android.support.annotation.DrawableRes;
+import android.support.annotation.NonNull;
+import android.support.v7.app.AlertDialog;
+import android.view.LayoutInflater;
+import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
+
+import com.tpb.projects.R;
+import com.tpb.projects.util.UI;
+
+/**
+ * Created by theo on 10/02/17.
+ */
+
+class MarkdownButtonAdapter {
+
+    private final EditorActivity mParent;
+    private final LinearLayout mScrollView;
+    private final MarkdownButtonListener mListener;
+
+    MarkdownButtonAdapter(EditorActivity parent, @NonNull LinearLayout scrollView, @NonNull MarkdownButtonListener listener) {
+        mParent = parent;
+        mScrollView = scrollView;
+        mListener = listener;
+        initViews();
+    }
+
+    private void initViews() {
+        ImageButton preview = createImageButton(R.drawable.ic_preview);
+        preview.setOnClickListener((v) -> mListener.previewCalled());
+
+        preview = createImageButton(R.drawable.ic_insert_link);
+        preview.setOnClickListener((v) -> showInsertLinkDialog());
+
+        preview = createImageButton(R.drawable.ic_photo);
+        preview.setOnClickListener((v) -> mParent.showImageUploadDialog());
+
+        preview = createImageButton(R.drawable.ic_format_bold);
+        preview.setOnClickListener((v) -> mListener.snippetEntered("****", 2));
+
+        preview = createImageButton(R.drawable.ic_format_italic);
+        preview.setOnClickListener((v) -> mListener.snippetEntered("**", 1));
+
+        preview = createImageButton(R.drawable.ic_format_strikethrough);
+        preview.setOnClickListener((v) -> mListener.snippetEntered("~~~~", 2));
+
+        preview = createImageButton(R.drawable.ic_check_box_checked);
+        preview.setOnClickListener((v) -> mListener.snippetEntered(" [x] ", 5));
+
+        preview = createImageButton(R.drawable.ic_check_box_empty);
+        preview.setOnClickListener((v) -> mListener.snippetEntered(" [] ", 4));
+
+        preview = createImageButton(R.drawable.ic_horizontal_rule);
+        preview.setOnClickListener((v) -> mListener.snippetEntered("\n---\n ", 5));
+
+        preview = createImageButton(R.drawable.ic_format_list_bulleted);
+        preview.setOnClickListener((v) -> mListener.snippetEntered(" * ", 3));
+
+        preview = createImageButton(R.drawable.ic_format_list_numbered);
+        preview.setOnClickListener((v) -> mListener.snippetEntered(" 1. ", 3));
+
+        preview = createImageButton(R.drawable.ic_format_quote);
+        preview.setOnClickListener((v) -> mListener.snippetEntered("> ", 2));
+
+        preview = createImageButton(R.drawable.ic_format_code);
+        preview.setOnClickListener((v) -> mListener.snippetEntered("```\n\n```", 4));
+
+        preview = createImageButton(R.drawable.ic_emoticon);
+        preview.setOnClickListener((v) -> showInsertEmoticonActivity());
+
+        preview = createImageButton(R.drawable.ic_character);
+        preview.setOnClickListener((v) -> showInsertCharacterActivity());
+    }
+
+    private ImageButton createImageButton(@DrawableRes int resId) {
+        final ImageButton ib = (ImageButton) LayoutInflater
+                .from(mParent)
+                .inflate(
+                        R.layout.shard_markdown_button,
+                        mScrollView,
+                        false
+                );
+        ib.setImageResource(resId);
+        mScrollView.addView(ib);
+        return ib;
+    }
+
+    private void showInsertLinkDialog() {
+        final LinearLayout wrapper = new LinearLayout(mParent);
+        wrapper.setOrientation(LinearLayout.VERTICAL);
+        wrapper.setPaddingRelative(UI.pxFromDp(16), 0, UI.pxFromDp(16), 0);
+
+        final EditText text = new EditText(mParent);
+        text.setHint(R.string.hint_url_description);
+        wrapper.addView(text);
+
+        final EditText url = new EditText(mParent);
+        url.setHint(R.string.hint_url_url);
+        wrapper.addView(url);
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(mParent);
+        builder.setTitle(R.string.title_insert_link);
+        builder.setView(wrapper);
+
+        builder.setPositiveButton(R.string.action_insert, (v, di) -> {
+            mListener.snippetEntered(
+                    String.format(
+                            mParent.getString(R.string.text_md_link),
+                            text.getText().toString(),
+                            url.getText().toString()
+                    ),
+                    0
+            );
+        });
+        builder.setNegativeButton(R.string.action_cancel, null);
+
+        builder.create().show();
+
+    }
+
+    private void showInsertEmoticonActivity() {
+        mParent.startActivityForResult(new Intent(mParent, EmojiActivity.class),
+                EmojiActivity.REQUEST_CODE_CHOOSE_EMOJI
+        );
+    }
+
+    private void showInsertCharacterActivity() {
+        mParent.startActivityForResult(new Intent(mParent, CharacterActivity.class),
+                CharacterActivity.REQUEST_CODE_INSERT_CHARACTER
+        );
+    }
+
+    interface MarkdownButtonListener {
+
+        void snippetEntered(String snippet, int relativePosition);
+
+        String getText();
+
+        void previewCalled();
+
+    }
+
+}
+
+```
+
+The ```MarkdownButtonAdapter``` is constructed with an ```EditorActivity```, the ```LinearLayout``` within which the ```Views``` are to be inserted, and the ```MarkdownButtonListener``` which will be called when a button is clicked.
+
+The class variables are assigned, and ```initViews``` is called.
+```initViews``` uses, ```createImageButton``` for each new ```ImageButton```. This method takes a resource id for the image to show on the button, inflates the button, sets its image resource id, adds the button to the ```LinearLayout``` and returns the button.
+
+15 ```ImageButtons``` are created, for 15 different actions.
+
+1. The first button is for displaying the markdown in its formatted state, and calls ```previewCalled``` on the listener.
+2. The second button calls ```showInsertLinkDialog```
+This creates a new ```LinearLayout``` with standard 16dp padding, inflates two ```EditTexts``` inside the ```LinearLayout```, and then builds an ```AlertDialog``` with the layout.
+When the positive button is clicked, the ```snippetEntered method is called on the listener, inserting the formatted URL.
+3. The third button calls ```showImageUploadDialog``` on the ```EditorActivity``` parent
+4. The fourth button inserts the the quadruple asterisks for bold text, and positions the cursor between the two pairs of asterisks.
+5. The fifth button inserts the double asterisks for italic text, and positions the cursor between the two.
+6. The sixth button inserts the quadruple tildes for strikethrough text, and positions the cursor between the two.
+7. The seventh button inserts the ticked checkbox characters, and positions the cursor after them.
+8. The eighth button inserts the empty checkbox characters, and positions the cursor after them.
+9. The ninth button inserts the triple hypens for a thematic break between two newlines, and positions the cursor after them.
+10. The tenth button inserts a spaced asterisk for a bullet point list item, and positions the cursor after it.
+11. The eleventh button inserts the first item in a numbered list, and positions the cursor after it.
+12. The twelvth button inserts the right chevron and positions the cursor after it.
+13. The thirteenth button inserts the two sets of triple backticks for a code block, separated by two newlines, and positions the cursor between the two sets.
+14. The fourteenth button launches the ```EmojiActivity``` from the parent ```Activity```.
+15. The fifteenth button launches the ```CharacterActivity``` from the parent ```Activity```.
+
+
 #### The EditorActivity
 
 **EditorActivity.java**
