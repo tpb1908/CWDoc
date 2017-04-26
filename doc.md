@@ -4070,6 +4070,36 @@ Returning to the ```onActivityResult``` method of ```EditorActivity```, the resu
 
 ##### Emoji insertion
 
+The ```EmojiActivity``` is very similar to the ```CharacterActivity``` except that it does not have to work on another thread as there are far fewer emojis. The Unicode 9.0 specification includes 1126 emoji characters which are easily searchable without impacting UI performance.
+The ```EmojiActivity``` does however store the last 9 emojis that the user used.
+
+#import "app/src/main/java/com/tpb/projects/editors/EmojiActivity.java"
+
+In ```onCreate``` the same layout as ```CharacterActivity``` is inflated, and the title and search hint are set to the appropriate string resources.
+The ```SharedPreferences``` used for storing common emojis is then loaded, and the ```RecyclerView``` is set up with a ```GridLayoutManager```.
+The ```EmojiAdapter``` is created, and set on the ```RecyclerView```, and finally a ```SimpleTextChangeWatcher``` is added to the search ```EditText```.
+
+The ```SimpleTextChangeWatcher``` replaces spaces in the search string with underscores before passing it to the adapter, as multi-word emoji names are separate by underscores rather than spaces.
+
+When the ```EmojiAdapter``` is created, it adds all of the ```Emoji``` from ```EmojiLoader``` to mEmojis.
+It then checks if anything is stored under the "common" key in the ```EmojiActivity``` shared preferences.
+If the ```EmojiActivity``` has been used before, the value under the "common" key will be a comma delimited list of emoji aliases, which are split and used to insert each of the common
+emojis at the start of the array.
+
+When the user enters a query, the currently filtered ```Emojis``` are cleared.
+If the query is empty, all of the ```Emojis``` are added to mFilteredEmojis.
+Otherwise, each ```Emoji``` is checked. If one of the aliases matches, the ```Emoji``` is added, if not the tags are checked for matches, and if one is found the ```Emoji``` is added.
+```notifyDataSetChanged``` is then called.
+
+![EmojiActivity](http://imgur.com/Bap3G8x.png)
+
+When the user chooses an ```Emoji```, it is added to the ```SharedPreferences``` before being returned.
+The common string is declared, and if mCommonEmojis contains the "common" key, the current value is loaded. If the emoji alias is already contained in the string, it is removed. Next, if the string contains more than 8 commas, 9 elements, the first item is removed. Finally, the common string is set to the current string.
+
+Next, the new emoji alias is added to common, and the common string is written to ```SharedPreferences```.
+
+Finally, the result ```Intent``` is created, the emoji alias is added as an extra, the result is set, and the ```EmojiActivity``` finishes.
+
 #page
 
 ## User Activity

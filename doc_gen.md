@@ -4123,11 +4123,11 @@ private static int parseIssue(StringBuilder builder, char[] cs, int pos, String 
         for(int i = pos + 1; i < cs.length; i++) {
             if(cs[i] >= '0' && cs[i] <= '9' && i != cs.length - 1) {
                 numBuilder.append(cs[i]);
-            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i)) && i > pos + 1) {
+            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i)))  {
                 if(i == cs.length - 1) {
                     if(cs[i] >= '0' && cs[i] <= '9') {
                         numBuilder.append(cs[i]);
-                    } else {
+                    } else if(!isWhiteSpace(cs[i])){
                         break;
                     }
                 }
@@ -6540,7 +6540,6 @@ public class ClickableMovementMethod extends LinkMovementMethod {
                     clickable[0].onClick(widget);
                     triggerSpanHit(widget);
                 }
-
                 return true;
             } else {
                 Selection.removeSelection(buffer);
@@ -7287,6 +7286,7 @@ import android.text.Html;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -7433,14 +7433,15 @@ public class MarkdownTextView extends AppCompatTextView implements View.OnClickL
                 setMarkdownText(buffer);
             } else {
                 //Post back on UI thread
-                MarkdownTextView.this.getHandler().post(new Runnable() {
+                MarkdownTextView.this.postDelayed(new Runnable() {
                     @Override
                     public void run() {
                         setMarkdownText(buffer);
                     }
-                });
+                }, 17);
             }
         } catch(Exception e) {
+            Log.e("TextView", "WTF", e);
             markdown = "Error parsing markdown\n\n\n" + Html.fromHtml(Html.escapeHtml(markdown));
             setText(markdown);
         }
@@ -9501,6 +9502,210 @@ Returning to the ```onActivityResult``` method of ```EditorActivity```, the resu
 ```insertString``` is then called with the character string.
 
 ##### Emoji insertion
+
+The ```EmojiActivity``` is very similar to the ```CharacterActivity``` except that it does not have to work on another thread as there are far fewer emojis. The Unicode 9.0 specification includes 1126 emoji characters which are easily searchable without impacting UI performance.
+The ```EmojiActivity``` does however store the last 9 emojis that the user used.
+
+**EmojiActivity.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.EditText;
+import android.widget.TextView;
+
+import com.tpb.mdtext.TextUtils;
+import com.tpb.mdtext.emoji.Emoji;
+import com.tpb.mdtext.emoji.EmojiLoader;
+import com.tpb.projects.R;
+import com.tpb.projects.common.BaseActivity;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.input.SimpleTextChangeWatcher;
+
+import java.util.ArrayList;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 23/03/17.
+ */
+
+public class EmojiActivity extends BaseActivity {
+
+    public static final int REQUEST_CODE_CHOOSE_EMOJI = 666;
+    private static final String PREFS_COMMON_EMOJIS = "COMMON_EMOJIS";
+
+    private SharedPreferences mCommonEmojis;
+    @BindView(R.id.search_title) TextView mTitle;
+    @BindView(R.id.search_recycler) RecyclerView mRecycler;
+    @BindView(R.id.search_search_box) EditText mSearch;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        setContentView(R.layout.activity_simple_search);
+        ButterKnife.bind(this);
+        mTitle.setText(R.string.title_activity_emoji);
+        mSearch.setHint(R.string.hint_search_characters);
+        mCommonEmojis = getSharedPreferences(PREFS_COMMON_EMOJIS, MODE_PRIVATE);
+        mRecycler.setLayoutManager(new GridLayoutManager(this, 3));
+        final EmojiAdapter adapter = new EmojiAdapter(mCommonEmojis);
+        mRecycler.setAdapter(adapter);
+        mSearch.addTextChangedListener(new SimpleTextChangeWatcher() {
+            @Override
+            public void textChanged() {
+                adapter.filter(mSearch.getText().toString().toLowerCase().replace(" ", "_"));
+            }
+        });
+    }
+
+    class EmojiAdapter extends RecyclerView.Adapter<EmojiAdapter.EmojiViewHolder> {
+
+        private ArrayList<Emoji> mEmojis = new ArrayList<>();
+        private ArrayList<Emoji> mFilteredEmojis = new ArrayList<>();
+
+        EmojiAdapter(SharedPreferences prefs) {
+            mEmojis.addAll(EmojiLoader.getAllEmoji());
+            if(prefs.getString("common", null) != null) {
+                final String[] common = prefs.getString("common", "").split(",");
+                for(String s : common) {
+                    final Emoji e = EmojiLoader.getEmojiForAlias(s);
+                    if(e != null) {
+                        mEmojis.remove(e);
+                        mEmojis.add(0, e);
+                    }
+                }
+            }
+            mFilteredEmojis.addAll(mEmojis);
+        }
+
+        void filter(String query) {
+            mFilteredEmojis.clear();
+            if(query.isEmpty()) {
+                mFilteredEmojis.addAll(mEmojis);
+            } else {
+                for(Emoji e : mEmojis) {
+                    boolean added = false;
+                    for(String s : e.getAliases()) {
+                        if(s.contains(query)) {
+                            mFilteredEmojis.add(e);
+                            added = true;
+                            break;
+                        }
+                    }
+                    if(!added) {
+                        for(String s : e.getTags()) {
+                            if(s.contains(query)) {
+                                mFilteredEmojis.add(e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            notifyDataSetChanged();
+        }
+
+        private void choose(int pos) {
+            EmojiActivity.this.choose(mFilteredEmojis.get(pos).getAliases().get(0));
+        }
+
+        @Override
+        public EmojiViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            return new EmojiViewHolder(LayoutInflater.from(parent.getContext())
+                                                     .inflate(R.layout.viewholder_text, parent,
+                                                             false
+                                                     ));
+        }
+
+        @Override
+        public void onBindViewHolder(EmojiViewHolder holder, int position) {
+            holder.mEmoji.setText(mFilteredEmojis.get(position).getUnicode());
+            holder.mName.setText(
+                    String.format(":%1$s:", mFilteredEmojis.get(position).getAliases().get(0)));
+        }
+
+        @Override
+        public int getItemCount() {
+            return mFilteredEmojis.size();
+        }
+
+        class EmojiViewHolder extends RecyclerView.ViewHolder {
+
+            @BindView(R.id.text_content) TextView mEmoji;
+            @BindView(R.id.text_info) TextView mName;
+
+            EmojiViewHolder(View itemView) {
+                super(itemView);
+                ButterKnife.bind(this, itemView);
+                itemView.setOnClickListener(v -> choose(getAdapterPosition()));
+            }
+        }
+
+    }
+
+    private void choose(String alias) {
+        String common = "";
+        if(mCommonEmojis.getString("common", null) != null) {
+            String current = mCommonEmojis.getString("common", "");
+            if(current.contains(alias)) {
+                final int index = current.indexOf(alias);
+                current = current.substring(0, index) + current.substring(index + alias.length());
+            }
+            if(TextUtils.instancesOf(current, ",") > 8) {
+                current = current.substring(current.indexOf(',') + 1);
+            }
+            common = current;
+        }
+        common += "," + alias;
+        mCommonEmojis.edit().putString("common", common).apply();
+
+        final Intent result = new Intent();
+        result.putExtra(getString(R.string.intent_emoji), alias);
+        setResult(RESULT_OK, result);
+        finish();
+    }
+
+}
+
+```
+
+In ```onCreate``` the same layout as ```CharacterActivity``` is inflated, and the title and search hint are set to the appropriate string resources.
+The ```SharedPreferences``` used for storing common emojis is then loaded, and the ```RecyclerView``` is set up with a ```GridLayoutManager```.
+The ```EmojiAdapter``` is created, and set on the ```RecyclerView```, and finally a ```SimpleTextChangeWatcher``` is added to the search ```EditText```.
+
+The ```SimpleTextChangeWatcher``` replaces spaces in the search string with underscores before passing it to the adapter, as multi-word emoji names are separate by underscores rather than spaces.
+
+When the ```EmojiAdapter``` is created, it adds all of the ```Emoji``` from ```EmojiLoader``` to mEmojis.
+It then checks if anything is stored under the "common" key in the ```EmojiActivity``` shared preferences.
+If the ```EmojiActivity``` has been used before, the value under the "common" key will be a comma delimited list of emoji aliases, which are split and used to insert each of the common
+emojis at the start of the array.
+
+When the user enters a query, the currently filtered ```Emojis``` are cleared.
+If the query is empty, all of the ```Emojis``` are added to mFilteredEmojis.
+Otherwise, each ```Emoji``` is checked. If one of the aliases matches, the ```Emoji``` is added, if not the tags are checked for matches, and if one is found the ```Emoji``` is added.
+```notifyDataSetChanged``` is then called.
+
+![EmojiActivity](http://imgur.com/Bap3G8x.png)
+
+When the user chooses an ```Emoji```, it is added to the ```SharedPreferences``` before being returned.
+The common string is declared, and if mCommonEmojis contains the "common" key, the current value is loaded. If the emoji alias is already contained in the string, it is removed. Next, if the string contains more than 8 commas, 9 elements, the first item is removed. Finally, the common string is set to the current string.
+
+Next, the new emoji alias is added to common, and the common string is written to ```SharedPreferences```.
+
+Finally, the result ```Intent``` is created, the emoji alias is added as an extra, the result is set, and the ```EmojiActivity``` finishes.
 
 <div style="page-break-after: always;"></div>
 
