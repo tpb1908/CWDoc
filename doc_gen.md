@@ -9216,7 +9216,7 @@ The class variables are assigned, and ```initViews``` is called.
 1. The first button is for displaying the markdown in its formatted state, and calls ```previewCalled``` on the listener.
 2. The second button calls ```showInsertLinkDialog```
 This creates a new ```LinearLayout``` with standard 16dp padding, inflates two ```EditTexts``` inside the ```LinearLayout```, and then builds an ```AlertDialog``` with the layout.
-When the positive button is clicked, the ```snippetEntered method is called on the listener, inserting the formatted URL.
+When the positive button is clicked, the ```snippetEntered``` method is called on the listener, inserting the formatted URL.
 3. The third button calls ```showImageUploadDialog``` on the ```EditorActivity``` parent
 4. The fourth button inserts the the quadruple asterisks for bold text, and positions the cursor between the two pairs of asterisks.
 5. The fifth button inserts the double asterisks for italic text, and positions the cursor between the two.
@@ -9226,7 +9226,7 @@ When the positive button is clicked, the ```snippetEntered method is called on t
 9. The ninth button inserts the triple hypens for a thematic break between two newlines, and positions the cursor after them.
 10. The tenth button inserts a spaced asterisk for a bullet point list item, and positions the cursor after it.
 11. The eleventh button inserts the first item in a numbered list, and positions the cursor after it.
-12. The twelvth button inserts the right chevron and positions the cursor after it.
+12. The twelfth button inserts the right chevron and positions the cursor after it.
 13. The thirteenth button inserts the two sets of triple backticks for a code block, separated by two newlines, and positions the cursor between the two sets.
 14. The fourteenth button launches the ```EmojiActivity``` from the parent ```Activity```.
 15. The fifteenth button launches the ```CharacterActivity``` from the parent ```Activity```.
@@ -9897,9 +9897,9 @@ This executes an ```AsyncTask``` to search the characters for their query.
 First, mWorkingPositions is re-created.
 Next, there are three possibilities for the search:
 
--1. The query is empty, in which case all of the positions are added to mWorkingPositions
--2. The query starts with the last query, meaning that the user has types another character. In this case the method iterates through the currently filtered positions and only searches the characters at these positions in mCharacters for the new query, as if the other characters did not contain the shorter query, they will not contain this one.
--3. Otherwise, the entire mCharacters list is searched, and the matching positions are added to mWorkingPositions.
+1. The query is empty, in which case all of the positions are added to mWorkingPositions
+2. The query starts with the last query, meaning that the user has types another character. In this case the method iterates through the currently filtered positions and only searches the characters at these positions in mCharacters for the new query, as if the other characters did not contain the shorter query, they will not contain this one.
+3. Otherwise, the entire mCharacters list is searched, and the matching positions are added to mWorkingPositions.
 
 Once mWorkingPositions has been built, the last query is updated, and a new runnable is posted to the UI thread to update the filtered positions.
 This swaps mFilteredPositions, updates the size, and notifies that the dataset has been changed.
@@ -10120,6 +10120,1121 @@ Next, the new emoji alias is added to common, and the common string is written t
 
 Finally, the result ```Intent``` is created, the emoji alias is added as an extra, the result is set, and the ```EmojiActivity``` finishes.
 
+### Implementations of EditorActivity
+
+The ```EditorActivity``` is used across multiple objectives.
+
+3.v.f, 3.v.g, 4.ii.b, 4.ii.c, 4.iii, 5.iii.b, 5.iii.c, 6.v, 6.vi, 6.vii, and 6.viii. 
+
+The ```EditorActivity``` is used for editing cards, comments, issues, and projects.
+
+#### CardEditor
+
+**CardEditor.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.app.Dialog;
+import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.TextInputLayout;
+import android.support.v7.app.AlertDialog;
+import android.text.InputFilter;
+import android.view.View;
+import android.view.ViewStub;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Card;
+import com.tpb.github.data.models.Issue;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownEditText;
+import com.tpb.projects.R;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.Util;
+import com.tpb.projects.util.input.KeyBoardVisibilityChecker;
+import com.tpb.projects.util.input.SimpleTextChangeWatcher;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+
+/**
+ * Created by theo on 13/02/17.
+ */
+
+public class CardEditor extends EditorActivity {
+    public static final int REQUEST_CODE_NEW_CARD = 1606;
+    public static final int REQUEST_CODE_EDIT_CARD = 7180;
+
+    @BindView(R.id.card_note_edit) MarkdownEditText mEditor;
+    @BindView(R.id.card_from_issue_button) Button mIssueButton;
+    @BindView(R.id.card_clear_issue_button) Button mClearButton;
+    @BindView(R.id.markdown_edit_buttons) LinearLayout mEditButtons;
+    @BindView(R.id.markdown_editor_discard) Button mDiscardButton;
+    @BindView(R.id.markdown_editor_done) Button mDoneButton;
+    @BindView(R.id.card_note_wrapper) TextInputLayout mEditorWrapper;
+    private KeyBoardVisibilityChecker mKeyBoardChecker;
+
+    private Card mCard;
+
+    private boolean mHasBeenEdited = false;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(
+                prefs.isDarkThemeEnabled() ? R.style.AppTheme_Transparent_Dark : R.style.AppTheme_Transparent);
+        setContentView(R.layout.activity_markdown_editor);
+
+        final ViewStub stub = (ViewStub) findViewById(R.id.editor_stub);
+
+        stub.setLayoutResource(R.layout.stub_card_editor);
+        stub.inflate();
+        ButterKnife.bind(this);
+
+        final Intent launchIntent = getIntent();
+
+        if(launchIntent.hasExtra(getString(R.string.parcel_card))) { //We are editing a card
+            mCard = launchIntent.getParcelableExtra(getString(R.string.parcel_card));
+            mEditor.setText(mCard.getNote());
+        } else {
+            mCard = new Card();
+            addFromIssueButtonListeners(launchIntent);
+        }
+
+        new MarkdownButtonAdapter(this, mEditButtons,
+                new MarkdownButtonAdapter.MarkdownButtonListener() {
+                    @Override
+                    public void snippetEntered(String snippet, int relativePosition) {
+                        if(mEditor.hasFocus() && mEditor.isEnabled() && mEditor.isEditing()) {
+                            final int start = Math.max(mEditor.getSelectionStart(), 0);
+                            mEditor.getText().insert(start, snippet);
+                            mEditor.setSelection(start + relativePosition);
+                        }
+                    }
+
+                    @Override
+                    public String getText() {
+                        return mEditor.getInputText().toString();
+                    }
+
+                    @Override
+                    public void previewCalled() {
+                        if(mEditor.isEditing()) {
+                            mEditor.saveText();
+                            mEditor.disableEditing();
+                            mEditor.setMarkdown(
+                                    Markdown.formatMD(mEditor.getInputText().toString(), null),
+                                    new HttpImageGetter(mEditor)
+                            );
+                        } else {
+                            mEditor.restoreText();
+                            mEditor.enableEditing();
+                        }
+                    }
+                }
+        );
+
+        final View content = findViewById(android.R.id.content);
+        content.setVisibility(View.VISIBLE);
+
+        mKeyBoardChecker = new KeyBoardVisibilityChecker(content,
+                new KeyBoardVisibilityChecker.KeyBoardVisibilityListener() {
+                    @Override
+                    public void keyboardShown() {
+                        mIssueButton.setVisibility(View.GONE);
+                    }
+
+                    @Override
+                    public void keyboardHidden() {
+                        if(mIssueButton.hasOnClickListeners()) {
+                            mIssueButton.postDelayed(() -> mIssueButton.setVisibility(View.VISIBLE),
+                                    100
+                            );
+                        }
+                    }
+                }
+        );
+
+        mEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
+            @Override
+            public void textChanged() {
+                mHasBeenEdited = mHasBeenEdited || mEditor.isEditing();
+            }
+        });
+    }
+
+    private void bindIssue(Issue issue) {
+        mEditor.setMarkdown(Formatter.buildIssueSpan(this, issue, true, true, true, true, false)
+                                     .toString(),
+                new HttpImageGetter(mEditor)
+        );
+
+    }
+
+    private void addFromIssueButtonListeners(Intent launchIntent) {
+        final String fullRepoName = launchIntent.getStringExtra(getString(R.string.intent_repo));
+        final ArrayList<Integer> invalidIds = launchIntent
+                .getIntegerArrayListExtra(getString(R.string.intent_int_arraylist));
+
+        mIssueButton.setVisibility(View.VISIBLE);
+        mIssueButton.setOnClickListener(v -> {
+            final ProgressDialog pd = new ProgressDialog(CardEditor.this);
+            pd.setTitle(R.string.text_loading_issues);
+            pd.setCancelable(false);
+            pd.show();
+            Loader.getLoader(CardEditor.this).loadOpenIssues(new Loader.ListLoader<Issue>() {
+                private int selectedIssuePosition = 0;
+
+                @Override
+                public void listLoadComplete(List<Issue> loadedIssues) {
+                    if(isClosing()) return; // There is no window to attach to
+                    pd.dismiss();
+
+                    //We check which Issues are not already attached to a card
+                    final ArrayList<Issue> validIssues = new ArrayList<>();
+                    for(Issue i : loadedIssues) {
+                        if(invalidIds.indexOf(i.getId()) == -1) validIssues.add(i);
+                    }
+                    if(validIssues.isEmpty()) {
+                        Toast.makeText(CardEditor.this, R.string.error_no_issues,
+                                Toast.LENGTH_SHORT
+                        ).show();
+                        return;
+                    }
+
+                    final String[] issues = new String[validIssues.size()];
+                    for(int i = 0; i < validIssues.size(); i++) {
+                        issues[i] = String.format(getString(R.string.text_issue_single_line),
+                                validIssues.get(i).getNumber(), validIssues.get(i).getTitle()
+                        );
+                    }
+
+                    final AlertDialog.Builder scBuilder = new AlertDialog.Builder(CardEditor.this);
+                    scBuilder.setTitle(R.string.title_choose_issue);
+                    scBuilder.setSingleChoiceItems(issues, 0,
+                            (dialogInterface, i) -> selectedIssuePosition = i
+                    );
+                    scBuilder.setPositiveButton(R.string.action_ok, ((dialogInterface, i) -> {
+                        mCard.setFromIssue(validIssues.get(selectedIssuePosition));
+                        mEditor.setFilters(new InputFilter[] {}); //Remove the length filter
+                        mEditorWrapper.setCounterEnabled(false); //Remove the counter
+                        bindIssue(mCard.getIssue());
+                        mEditor.setFocusable(false);
+                        mClearButton.setVisibility(View.VISIBLE); //Enable clearing
+                    }));
+                    scBuilder.setNegativeButton(R.string.action_cancel,
+                            (dialogInterface, i) -> dialogInterface.dismiss()
+                    );
+                    scBuilder.create().show();
+                }
+
+                @Override
+                public void listLoadError(APIHandler.APIError error) {
+                    if(isClosing()) return;
+                    pd.dismiss();
+                    Toast.makeText(CardEditor.this, error.resId, Toast.LENGTH_SHORT).show();
+                }
+            }, fullRepoName);
+        });
+
+        mClearButton.setOnClickListener((v) -> {
+            mEditor.setText(null);
+            mEditor.setFilters(
+                    new InputFilter[] {new InputFilter.LengthFilter(250)}); //Re-enable filter
+            mEditorWrapper.setCounterEnabled(true);
+            mCard = new Card();
+            mClearButton.setVisibility(View.GONE);
+        });
+    }
+
+    @Override
+    void imageLoadComplete(String url) {
+        Util.insertString(mEditor, url);
+    }
+
+    @Override
+    void imageLoadException(IOException ioe) {
+        //TODO Explain error
+    }
+
+    @OnClick(R.id.markdown_editor_done)
+    void onDone() {
+        final Intent done = new Intent();
+        mCard.setNote(mEditor.getInputText().toString());
+        done.putExtra(getString(R.string.parcel_card), mCard);
+        setResult(RESULT_OK, done);
+        mHasBeenEdited = false;
+        finish();
+    }
+
+    @OnClick(R.id.markdown_editor_discard)
+    void onDiscard() {
+        onBackPressed();
+    }
+
+    @Override
+    protected void emojiChosen(String emoji) {
+        Util.insertString(mEditor, String.format(":%1$s:", emoji));
+    }
+
+    @Override
+    protected void insertString(String c) {
+        Util.insertString(mEditor, c);
+    }
+
+    @Override
+    public void finish() {
+        if(mHasBeenEdited && !mEditor.getText().toString().isEmpty()) {
+            final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle(R.string.title_discard_changes);
+            builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                mDoneButton.postDelayed(super::finish, 150);
+            });
+            builder.setNegativeButton(R.string.action_no, null);
+            final Dialog deleteDialog = builder.create();
+            deleteDialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+            deleteDialog.show();
+        } else {
+            if(mKeyBoardChecker.isKeyboardOpen()) {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                mDoneButton.postDelayed(super::finish, 150);
+            } else {
+                super.finish();
+            }
+        }
+    }
+}
+
+```
+
+
+#### CommentEditor
+
+**CommentEditor.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.app.Dialog;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v7.app.AlertDialog;
+import android.view.ViewStub;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.LinearLayout;
+
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownEditText;
+import com.tpb.projects.R;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.Util;
+import com.tpb.projects.util.input.KeyBoardVisibilityChecker;
+import com.tpb.projects.util.input.SimpleTextChangeWatcher;
+
+import java.io.IOException;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+
+/**
+ * Created by theo on 14/02/17.
+ */
+
+public class CommentEditor extends EditorActivity {
+    private static final String TAG = CommentEditor.class.getSimpleName();
+
+    public static final int REQUEST_CODE_NEW_COMMENT = 1799;
+    public static final int REQUEST_CODE_EDIT_COMMENT = 5734;
+    public static final int REQUEST_CODE_COMMENT_FOR_STATE = 1400;
+
+    @BindView(R.id.comment_body_edit) MarkdownEditText mEditor;
+    @BindView(R.id.markdown_edit_buttons) LinearLayout mEditButtons;
+    @BindView(R.id.markdown_editor_discard) Button mDiscardButton;
+    @BindView(R.id.markdown_editor_done) Button mDoneButton;
+    private KeyBoardVisibilityChecker mKeyBoardChecker;
+
+    private boolean mHasBeenEdited;
+
+    private Comment mComment;
+    private Issue mIssue;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        setContentView(R.layout.activity_markdown_editor);
+
+        final ViewStub stub = (ViewStub) findViewById(R.id.editor_stub);
+
+        stub.setLayoutResource(R.layout.stub_comment_editor);
+        stub.inflate();
+
+        //Bind after inflating the stub
+        ButterKnife.bind(this);
+
+        final Intent launchIntent = getIntent();
+
+        if(launchIntent.hasExtra(getString(R.string.parcel_comment))) {
+            mComment = launchIntent.getParcelableExtra(getString(R.string.parcel_comment));
+            mEditor.setText(mComment.getBody());
+        }
+        if(launchIntent.hasExtra(getString(R.string.parcel_issue))) {
+            mIssue = launchIntent.getParcelableExtra(getString(R.string.parcel_issue));
+        }
+        mEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
+            @Override
+            public void textChanged() {
+                mHasBeenEdited = mHasBeenEdited || mEditor.isEditing();
+            }
+        });
+
+        new MarkdownButtonAdapter(this, mEditButtons,
+                new MarkdownButtonAdapter.MarkdownButtonListener() {
+                    @Override
+                    public void snippetEntered(String snippet, int relativePosition) {
+                        if(mEditor.hasFocus() && mEditor.isEnabled() && mEditor.isEditing()) {
+                            Util.insertString(mEditor, snippet, relativePosition);
+                        }
+                    }
+
+                    @Override
+                    public String getText() {
+                        return mEditor.getInputText().toString();
+                    }
+
+                    @Override
+                    public void previewCalled() {
+                        if(mEditor.isEditing()) {
+                            mEditor.saveText();
+                            String repo = null;
+                            if(mIssue != null) repo = mIssue.getRepoFullName();
+                            mEditor.disableEditing();
+                            mEditor.setMarkdown(
+                                    Markdown.formatMD(mEditor.getInputText().toString(), repo),
+                                    new HttpImageGetter(mEditor)
+                            );
+                        } else {
+                            mEditor.restoreText();
+                            mEditor.enableEditing();
+                        }
+                    }
+                }
+        );
+        mKeyBoardChecker = new KeyBoardVisibilityChecker(findViewById(android.R.id.content));
+
+    }
+
+    @Override
+    protected void emojiChosen(String emoji) {
+        Util.insertString(mEditor, String.format(":%1$s:", emoji));
+    }
+
+    @Override
+    protected void insertString(String c) {
+        Util.insertString(mEditor, c);
+    }
+
+    @OnClick(R.id.markdown_editor_done)
+    void onDone() {
+        final Intent done = new Intent();
+        if(mComment == null) mComment = new Comment();
+        mComment.setBody(mEditor.getInputText().toString());
+        done.putExtra(getString(R.string.parcel_comment), mComment);
+        if(mIssue != null) done.putExtra(getString(R.string.parcel_issue), mIssue);
+        setResult(RESULT_OK, done);
+        mHasBeenEdited = false;
+        finish();
+    }
+
+    @OnClick(R.id.markdown_editor_discard)
+    void onDiscard() {
+        onBackPressed();
+    }
+
+    @Override
+    void imageLoadComplete(String url) {
+        Util.insertString(mEditor, url);
+    }
+
+    @Override
+    void imageLoadException(IOException ioe) {
+
+    }
+
+    @Override
+    public void finish() {
+        if(mHasBeenEdited && !mEditor.getText().toString().isEmpty()) {
+            final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle(R.string.title_discard_changes);
+            builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                mDoneButton.postDelayed(super::finish, 150);
+            });
+            builder.setNegativeButton(R.string.action_no, null);
+            final Dialog deleteDialog = builder.create();
+            deleteDialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+            deleteDialog.show();
+        } else {
+            if(mKeyBoardChecker.isKeyboardOpen()) {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                mDoneButton.postDelayed(super::finish, 150);
+            } else {
+                super.finish();
+            }
+        }
+    }
+
+}
+
+```
+
+#### IssueEditor
+
+**IssueEditor.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.app.Dialog;
+import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v7.app.AlertDialog;
+import android.view.View;
+import android.view.ViewStub;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Card;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Label;
+import com.tpb.github.data.models.User;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownEditText;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.util.Logger;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.Util;
+import com.tpb.projects.util.input.KeyBoardVisibilityChecker;
+import com.tpb.projects.util.input.SimpleTextChangeWatcher;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+
+/**
+ * Created by theo on 07/02/17.
+ */
+
+public class IssueEditor extends EditorActivity {
+    private static final String TAG = IssueEditor.class.getSimpleName();
+
+    public static final int REQUEST_CODE_NEW_ISSUE = 3025;
+    public static final int REQUEST_CODE_EDIT_ISSUE = 1188;
+    public static final int REQUEST_CODE_ISSUE_FROM_CARD = 9836;
+
+    @BindView(R.id.issue_title_edit) EditText mTitleEdit;
+    @BindView(R.id.issue_body_edit) MarkdownEditText mBodyEdit;
+    @BindView(R.id.markdown_editor_discard) Button mDiscardButton;
+    @BindView(R.id.markdown_editor_done) Button mDoneButton;
+    @BindView(R.id.issue_labels_text) MarkdownTextView mLabelsText;
+    @BindView(R.id.issue_assignees_text) MarkdownTextView mAssigneesText;
+    @BindView(R.id.issue_information_layout) View mInfoLayout;
+    @BindView(R.id.markdown_edit_buttons) LinearLayout mEditButtons;
+    private KeyBoardVisibilityChecker mKeyBoardChecker;
+
+    private final ArrayList<String> mAssignees = new ArrayList<>();
+    private final ArrayList<String> mSelectedLabels = new ArrayList<>();
+
+    private Card mLaunchCard;
+    private Issue mLaunchIssue;
+
+    private String mRepo;
+
+    private boolean mHasBeenEdited = false;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        setContentView(R.layout.activity_markdown_editor);
+
+        final ViewStub stub = (ViewStub) findViewById(R.id.editor_stub);
+
+        stub.setLayoutResource(R.layout.stub_issue_editor);
+        stub.inflate();
+        ButterKnife.bind(this);
+
+        final Intent launchIntent = getIntent();
+        mRepo = launchIntent.getStringExtra(getString(R.string.intent_repo));
+        if(launchIntent.hasExtra(getString(R.string.parcel_issue))) {
+            mLaunchIssue = launchIntent.getParcelableExtra(getString(R.string.parcel_issue));
+            mLaunchCard = launchIntent.getParcelableExtra(getString(R.string.parcel_card));
+            mTitleEdit.setText(mLaunchIssue.getTitle());
+            mBodyEdit.setText(mLaunchIssue.getBody());
+
+            if(mLaunchIssue.getAssignees() != null) {
+                for(User u : mLaunchIssue.getAssignees()) mAssignees.add(u.getLogin());
+                setAssigneesText();
+            }
+
+            if(mLaunchIssue.getLabels() != null && mLaunchIssue.getLabels().length > 0) {
+                final ArrayList<String> labels = new ArrayList<>();
+                final ArrayList<Integer> colours = new ArrayList<>();
+                for(Label l : mLaunchIssue.getLabels()) {
+                    labels.add(l.getName());
+                    colours.add(l.getColor());
+                }
+                setLabelsText(labels, colours);
+            }
+
+        } else if(launchIntent.hasExtra(getString(R.string.parcel_card))) {
+            mLaunchCard = launchIntent.getParcelableExtra(getString(R.string.parcel_card));
+            //Split the first line of the card to use as a title
+            final String[] text = mLaunchCard.getNote().split("\n", 2);
+            //If the title is too long we ellipsize it
+            if(text[0].length() > 140) {
+                text[1] = "..." + text[0].substring(137) + text[1];
+                text[0] = text[0].substring(0, 137) + "...";
+            }
+            mTitleEdit.setText(text[0]);
+            if(text.length > 1) {
+                mBodyEdit.setText(text[1]);
+            }
+        }
+
+        final SimpleTextChangeWatcher editWatcher = new SimpleTextChangeWatcher() {
+            @Override
+            public void textChanged() {
+
+                mHasBeenEdited = mHasBeenEdited || mBodyEdit.isEditing();
+            }
+        };
+
+        mTitleEdit.addTextChangedListener(editWatcher);
+        mBodyEdit.addTextChangedListener(editWatcher);
+
+        final View content = findViewById(android.R.id.content);
+
+        mKeyBoardChecker = new KeyBoardVisibilityChecker(content,
+                new KeyBoardVisibilityChecker.KeyBoardVisibilityListener() {
+                    @Override
+                    public void keyboardShown() {
+                        mInfoLayout.setVisibility(View.GONE);
+                    }
+
+                    @Override
+                    public void keyboardHidden() {
+                        if(mBodyEdit.isEditing()) {
+                            mInfoLayout.postDelayed(() -> mInfoLayout.setVisibility(View.VISIBLE),
+                                    100
+                            );
+                        }
+                    }
+                }
+        );
+
+        new MarkdownButtonAdapter(this, mEditButtons,
+                new MarkdownButtonAdapter.MarkdownButtonListener() {
+                    @Override
+                    public void snippetEntered(String snippet, int relativePosition) {
+                        mHasBeenEdited = true;
+                        //Check which EditText has focus and insert into the correct one
+                        if(mTitleEdit.hasFocus()) {
+                            final int start = Math.max(mTitleEdit.getSelectionStart(), 0);
+                            mTitleEdit.getText().insert(start, snippet);
+                            mTitleEdit.setSelection(start + relativePosition);
+                        } else if(mBodyEdit.hasFocus() && mBodyEdit.isEditing()) {
+                            final int start = Math.max(mBodyEdit.getSelectionStart(), 0);
+                            mBodyEdit.getText().insert(start, snippet);
+                            Logger.i(TAG,
+                                    "snippetEntered: Setting selection " + (start + relativePosition)
+                            );
+                            mBodyEdit.setSelection(start + relativePosition);
+                        }
+                    }
+
+                    @Override
+                    public String getText() {
+                        return mBodyEdit.getInputText().toString();
+                    }
+
+                    @Override
+                    public void previewCalled() {
+                        if(mBodyEdit.isEditing()) {
+                            mBodyEdit.saveText();
+                            String repo = null;
+                            if(mLaunchIssue != null) repo = mLaunchIssue.getRepoFullName();
+                            mBodyEdit.disableEditing();
+                            mBodyEdit.setMarkdown(
+                                    Markdown.formatMD(mBodyEdit.getInputText().toString(), repo),
+                                    new HttpImageGetter(mBodyEdit)
+                            );
+                            mInfoLayout.setVisibility(View.GONE);
+                        } else {
+                            mBodyEdit.restoreText();
+                            mBodyEdit.enableEditing();
+                            if(!mKeyBoardChecker.isKeyboardOpen()) {
+                                mInfoLayout.setVisibility(View.VISIBLE);
+                            }
+                        }
+                    }
+                }
+        );
+
+    }
+
+    @OnClick(R.id.issue_add_assignees_button)
+    public void showAssigneesDialog() {
+        final ProgressDialog pd = new ProgressDialog(this);
+        pd.setTitle(R.string.text_loading_collaborators);
+        pd.setCancelable(false);
+        pd.show();
+        Loader.getLoader(this).loadCollaborators(new Loader.ListLoader<User>() {
+            @Override
+            public void listLoadComplete(List<User> collaborators) {
+                final MultiChoiceDialog mcd = new MultiChoiceDialog();
+                final Bundle b = new Bundle();
+                b.putInt(getString(R.string.intent_title_res), R.string.title_choose_assignees);
+                mcd.setArguments(b);
+
+                final String[] names = new String[collaborators.size()];
+                final boolean[] checked = new boolean[names.length];
+                for(int i = 0; i < names.length; i++) {
+                    names[i] = collaborators.get(i).getLogin();
+                    if(mAssignees.indexOf(names[i]) != -1) {
+                        checked[i] = true;
+                    }
+                }
+                mcd.setChoices(names, checked);
+                mcd.setListener(new MultiChoiceDialog.MultiChoiceDialogListener() {
+                    @Override
+                    public void choicesComplete(String[] choices, boolean[] checked) {
+                        mAssignees.clear();
+                        for(int i = 0; i < choices.length; i++) {
+                            if(checked[i]) mAssignees.add(choices[i]);
+                        }
+                        setAssigneesText();
+                        mHasBeenEdited = true;
+                    }
+
+                    @Override
+                    public void choicesCancelled() {
+
+                    }
+                });
+                if(isClosing()) return; //Activity has been closed
+                pd.dismiss();
+                mcd.show(getSupportFragmentManager(), TAG);
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                if(isClosing()) return;
+                pd.dismiss();
+                Toast.makeText(IssueEditor.this, error.resId, Toast.LENGTH_SHORT).show();
+            }
+        }, mRepo);
+    }
+
+    @OnClick(R.id.issue_add_labels_button)
+    public void showLabelsDialog() {
+        final ProgressDialog pd = new ProgressDialog(this);
+        pd.setTitle(R.string.text_loading_labels);
+        pd.setCancelable(false);
+        pd.show();
+        Loader.getLoader(this).loadLabels(new Loader.ListLoader<Label>() {
+            @Override
+            public void listLoadComplete(List<Label> labels) {
+                Logger.i(TAG, "listLoadComplete: " + labels.toString());
+                final MultiChoiceDialog mcd = new MultiChoiceDialog();
+
+                final Bundle b = new Bundle();
+                b.putInt(getString(R.string.intent_title_res), R.string.title_choose_labels);
+                mcd.setArguments(b);
+
+                final String[] labelTexts = new String[labels.size()];
+                final int[] colors = new int[labels.size()];
+                final boolean[] choices = new boolean[labels.size()];
+                for(int i = 0; i < labels.size(); i++) {
+                    labelTexts[i] = labels.get(i).getName();
+                    colors[i] = labels.get(i).getColor();
+                    choices[i] = mSelectedLabels.indexOf(labels.get(i).getName()) != -1;
+                }
+
+                mcd.setChoices(labelTexts, choices);
+                mcd.setBackgroundColors(colors);
+                mcd.setListener(new MultiChoiceDialog.MultiChoiceDialogListener() {
+                    @Override
+                    public void choicesComplete(String[] choices, boolean[] checked) {
+                        mSelectedLabels.clear();
+                        final ArrayList<String> labels = new ArrayList<>();
+                        final ArrayList<Integer> colours = new ArrayList<>();
+                        for(int i = 0; i < choices.length; i++) {
+                            if(checked[i]) {
+                                mSelectedLabels.add(choices[i]);
+                                labels.add(choices[i]);
+                                colours.add(colors[i]);
+                            }
+                        }
+                        setLabelsText(labels, colours);
+                        mHasBeenEdited = true;
+                    }
+
+                    @Override
+                    public void choicesCancelled() {
+
+                    }
+                });
+                if(isClosing()) return;
+                pd.dismiss();
+                mcd.show(getSupportFragmentManager(), TAG);
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                if(isClosing()) return;
+                pd.dismiss();
+                Toast.makeText(IssueEditor.this, error.resId, Toast.LENGTH_SHORT).show();
+            }
+        }, mRepo);
+    }
+
+    private void setAssigneesText() {
+        final StringBuilder builder = new StringBuilder();
+        for(String a : mAssignees) {
+            builder.append(
+                    String.format(getString(R.string.text_href), "https://github.com/" + a, a));
+            builder.append("<br>");
+        }
+        if(builder.length() > 0) {
+            mAssigneesText.setVisibility(View.VISIBLE);
+            mAssigneesText.setMarkdown(builder.toString());
+        } else {
+            mAssigneesText.setVisibility(View.GONE);
+        }
+    }
+
+    private void setLabelsText(ArrayList<String> names, ArrayList<Integer> colors) {
+        final StringBuilder builder = new StringBuilder();
+        mSelectedLabels.clear();
+        builder.append("<ul bulleted=\"false\">");
+        for(int i = 0; i < names.size(); i++) {
+            mSelectedLabels.add(names.get(i));
+            builder.append("<li>");
+            builder.append(Formatter.getLabelString(names.get(i), colors.get(i)));
+            builder.append("</li>");
+        }
+        builder.append("</ul>");
+        if(builder.length() > 0) {
+            mLabelsText.setVisibility(View.VISIBLE);
+            mLabelsText.setMarkdown(builder.toString());
+        } else {
+            mLabelsText.setVisibility(View.GONE);
+        }
+
+    }
+
+    @Override
+    void imageLoadComplete(String url) {
+        Util.insertString(mBodyEdit, url);
+    }
+
+    @Override
+    void imageLoadException(IOException ioe) {
+
+    }
+
+    @Override
+    protected void emojiChosen(String emoji) {
+        Util.insertString(mBodyEdit, String.format(":%1$s:", emoji));
+    }
+
+    @Override
+    protected void insertString(String c) {
+        Util.insertString(mBodyEdit, c);
+    }
+
+    @OnClick(R.id.markdown_editor_done)
+    void onDone() {
+        final Intent done = new Intent();
+        if(mLaunchIssue == null) {
+            mLaunchIssue = new Issue();
+        }
+        mLaunchIssue.setTitle(mTitleEdit.getText().toString());
+        mLaunchIssue.setBody(mBodyEdit.getInputText().toString());
+        done.putExtra(getString(R.string.parcel_issue), mLaunchIssue);
+        if(mLaunchCard != null) done.putExtra(getString(R.string.parcel_card), mLaunchCard);
+        if(mSelectedLabels.size() > 0)
+            done.putExtra(getString(R.string.intent_issue_labels),
+                    mSelectedLabels.toArray(new String[0])
+            );
+        if(mAssignees.size() > 0)
+            done.putExtra(getString(R.string.intent_issue_assignees),
+                    mAssignees.toArray(new String[0])
+            );
+
+        setResult(RESULT_OK, done);
+        mHasBeenEdited = false;
+        finish();
+    }
+
+    @OnClick(R.id.markdown_editor_discard)
+    void onDiscard() {
+        onBackPressed();
+    }
+
+    @Override
+    public void onBackPressed() {
+        super.onBackPressed();
+    }
+
+    @Override
+    public void finish() {
+        if(mHasBeenEdited && !mBodyEdit.getText().toString().isEmpty() && !mTitleEdit.getText()
+                                                                                     .toString()
+                                                                                     .isEmpty()) {
+            final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle(R.string.title_discard_changes);
+            builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                mDoneButton.postDelayed(super::finish, 150);
+            });
+            builder.setNegativeButton(R.string.action_no, null);
+            final Dialog deleteDialog = builder.create();
+            deleteDialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+            deleteDialog.show();
+        } else {
+            if(mKeyBoardChecker.isKeyboardOpen()) {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                mDoneButton.postDelayed(super::finish, 150);
+            } else {
+                super.finish();
+            }
+        }
+    }
+}
+
+```
+
+#### ProjectEditor
+
+**ProjectEditor.java**
+``` java
+package com.tpb.projects.editors;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.view.View;
+import android.view.ViewStub;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+
+import com.tpb.github.data.models.Project;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownEditText;
+import com.tpb.projects.R;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+import com.tpb.projects.util.Util;
+import com.tpb.projects.util.input.SimpleTextChangeWatcher;
+
+import java.io.IOException;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class ProjectEditor extends EditorActivity {
+
+    public static final int REQUEST_CODE_NEW_PROJECT = 4591;
+    public static final int REQUEST_CODE_EDIT_PROJECT = 1932;
+
+    @BindView(R.id.markdown_edit_buttons) LinearLayout mEditButtons;
+    @BindView(R.id.project_description_edit) MarkdownEditText mDescriptionEditor;
+    @BindView(R.id.project_name_edit) EditText mNameEditor;
+
+    private int mProjectNumber = -1;
+    private boolean mHasBeenEdited = false;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(
+                prefs.isDarkThemeEnabled() ? R.style.AppTheme_Transparent_Dark : R.style.AppTheme_Transparent);
+        setContentView(R.layout.activity_markdown_editor);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        final ViewStub stub = (ViewStub) findViewById(R.id.editor_stub);
+
+        stub.setLayoutResource(R.layout.stub_project_editor);
+        stub.inflate();
+        ButterKnife.bind(this);
+
+
+        new MarkdownButtonAdapter(this, mEditButtons,
+                new MarkdownButtonAdapter.MarkdownButtonListener() {
+                    @Override
+                    public void snippetEntered(String snippet, int relativePosition) {
+                        if(mNameEditor.hasFocus()) {
+                            final int start = Math.max(mNameEditor.getSelectionStart(), 0);
+                            mNameEditor.getText().insert(start, snippet);
+                            mNameEditor.setSelection(start + relativePosition);
+                        }
+                    }
+
+                    @Override
+                    public String getText() {
+                        if(mNameEditor.isFocused()) return mNameEditor.getText().toString();
+                        if(mDescriptionEditor.isFocused())
+                            return mDescriptionEditor.getInputText().toString();
+                        return "";
+                    }
+
+                    @Override
+                    public void previewCalled() {
+                        if(mDescriptionEditor.isEditing()) {
+                            mDescriptionEditor.saveText();
+                            mDescriptionEditor.setMarkdown(
+                                    Markdown.formatMD(mDescriptionEditor.getText().toString(),
+                                            null
+                                    ),
+                                    new HttpImageGetter(mDescriptionEditor)
+                            );
+                            mDescriptionEditor.disableEditing();
+                        } else {
+                            mDescriptionEditor.restoreText();
+                            mDescriptionEditor.enableEditing();
+                        }
+                    }
+                }
+        );
+
+        final View content = findViewById(android.R.id.content);
+        content.setVisibility(View.VISIBLE);
+
+
+        mNameEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
+            @Override
+            public void textChanged() {
+                mHasBeenEdited = mHasBeenEdited || mDescriptionEditor.isEditing();
+            }
+        });
+        mDescriptionEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
+            @Override
+            public void textChanged() {
+                mHasBeenEdited = true;
+            }
+        });
+
+        if(getIntent().hasExtra(getString(R.string.parcel_project))) {
+            final Project project = getIntent()
+                    .getParcelableExtra(getString(R.string.parcel_project));
+            mProjectNumber = project.getId();
+            mNameEditor.setText(project.getName());
+            mDescriptionEditor.setText(project.getBody());
+        }
+    }
+
+    @OnClick(R.id.markdown_editor_done)
+    void onDone() {
+        final Intent data = new Intent();
+        if(mProjectNumber != -1) {
+            data.putExtra(getString(R.string.intent_project_number), mProjectNumber);
+        }
+        data.putExtra(getString(R.string.intent_name), mNameEditor.getText().toString());
+        data.putExtra(getString(R.string.intent_markdown), mDescriptionEditor.getText().toString());
+        setResult(RESULT_OK, data);
+        finish();
+    }
+
+    @OnClick(R.id.markdown_editor_discard)
+    void onDiscard() {
+        finish();
+    }
+
+    @Override
+    void imageLoadComplete(String url) {
+        Util.insertString(mDescriptionEditor, url);
+    }
+
+    @Override
+    void imageLoadException(IOException ioe) {
+
+    }
+
+    @Override
+    protected void emojiChosen(String emoji) {
+        Util.insertString(mDescriptionEditor, String.format(":%1$s", emoji));
+    }
+
+    @Override
+    protected void insertString(String c) {
+        Util.insertString(mDescriptionEditor, c);
+    }
+}
+
+```
 <div style="page-break-after: always;"></div>
 
 ## User Activity

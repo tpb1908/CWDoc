@@ -3929,7 +3929,7 @@ The class variables are assigned, and ```initViews``` is called.
 1. The first button is for displaying the markdown in its formatted state, and calls ```previewCalled``` on the listener.
 2. The second button calls ```showInsertLinkDialog```
 This creates a new ```LinearLayout``` with standard 16dp padding, inflates two ```EditTexts``` inside the ```LinearLayout```, and then builds an ```AlertDialog``` with the layout.
-When the positive button is clicked, the ```snippetEntered method is called on the listener, inserting the formatted URL.
+When the positive button is clicked, the ```snippetEntered``` method is called on the listener, inserting the formatted URL.
 3. The third button calls ```showImageUploadDialog``` on the ```EditorActivity``` parent
 4. The fourth button inserts the the quadruple asterisks for bold text, and positions the cursor between the two pairs of asterisks.
 5. The fifth button inserts the double asterisks for italic text, and positions the cursor between the two.
@@ -3939,7 +3939,7 @@ When the positive button is clicked, the ```snippetEntered method is called on t
 9. The ninth button inserts the triple hypens for a thematic break between two newlines, and positions the cursor after them.
 10. The tenth button inserts a spaced asterisk for a bullet point list item, and positions the cursor after it.
 11. The eleventh button inserts the first item in a numbered list, and positions the cursor after it.
-12. The twelvth button inserts the right chevron and positions the cursor after it.
+12. The twelfth button inserts the right chevron and positions the cursor after it.
 13. The thirteenth button inserts the two sets of triple backticks for a code block, separated by two newlines, and positions the cursor between the two sets.
 14. The fourteenth button launches the ```EmojiActivity``` from the parent ```Activity```.
 15. The fifteenth button launches the ```CharacterActivity``` from the parent ```Activity```.
@@ -4128,9 +4128,9 @@ This executes an ```AsyncTask``` to search the characters for their query.
 First, mWorkingPositions is re-created.
 Next, there are three possibilities for the search:
 
--1. The query is empty, in which case all of the positions are added to mWorkingPositions
--2. The query starts with the last query, meaning that the user has types another character. In this case the method iterates through the currently filtered positions and only searches the characters at these positions in mCharacters for the new query, as if the other characters did not contain the shorter query, they will not contain this one.
--3. Otherwise, the entire mCharacters list is searched, and the matching positions are added to mWorkingPositions.
+1. The query is empty, in which case all of the positions are added to mWorkingPositions
+2. The query starts with the last query, meaning that the user has types another character. In this case the method iterates through the currently filtered positions and only searches the characters at these positions in mCharacters for the new query, as if the other characters did not contain the shorter query, they will not contain this one.
+3. Otherwise, the entire mCharacters list is searched, and the matching positions are added to mWorkingPositions.
 
 Once mWorkingPositions has been built, the last query is updated, and a new runnable is posted to the UI thread to update the filtered positions.
 This swaps mFilteredPositions, updates the size, and notifies that the dataset has been changed.
@@ -4177,6 +4177,30 @@ Next, the new emoji alias is added to common, and the common string is written t
 
 Finally, the result ```Intent``` is created, the emoji alias is added as an extra, the result is set, and the ```EmojiActivity``` finishes.
 
+### Implementations of EditorActivity
+
+The ```EditorActivity``` is used across multiple objectives.
+
+3.v.f, 3.v.g, 4.ii.b, 4.ii.c, 4.iii, 5.iii.b, 5.iii.c, 6.v, 6.vi, 6.vii, and 6.viii. 
+
+The ```EditorActivity``` is used for editing cards, comments, issues, and projects.
+
+#### CardEditor
+
+#import "app/src/main/java/com/tpb/projects/editors/CardEditor.java"
+
+
+#### CommentEditor
+
+#import "app/src/main/java/com/tpb/projects/editors/CommentEditor.java"
+
+#### IssueEditor
+
+#import "app/src/main/java/com/tpb/projects/editors/IssueEditor.java"
+
+#### ProjectEditor
+
+#import "app/src/main/java/com/tpb/projects/editors/ProjectEditor.java"
 #page
 
 ## User Activity
