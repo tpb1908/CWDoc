@@ -13519,6 +13519,9 @@ The ```RepoHolder``` sets ```OnClickListeners``` on its elements, and if the mIs
 
 ### UserStarsFragment
 
+The ```UserStarsFragment``` is very simple as all of the view logic is handled in the ```RepositoriesAdapter```.
+The ```Fragment``` is only responsible for creating the layout, handling its own lifecycle, and notifying the adapter of scroll changes in the ```RecyclerView```.
+
 **UserStarsFragment.java**
 ``` java
 package com.tpb.projects.user.fragments;
