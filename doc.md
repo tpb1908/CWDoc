@@ -4315,6 +4315,9 @@ The ```onDone``` method follows the save pattern as the other ```onDone``` metho
 
 #### ProjectEditor
 
+The ```ProjectEditor``` is relatively simple, as it only deals with the project title and description.
+When it is launched, the ```Intent``` is checked for a ```Project``` extra which is used to set the name and description, as well as storing the ```Project``` id for returning to the launching ```Activity```.
+
 #import "app/src/main/java/com/tpb/projects/editors/ProjectEditor.java"
 #page
 
@@ -4643,3 +4646,144 @@ The ```RepositoriesAdapter``` is used in two places, displaying the repositories
 When displaying a user's repositories, the ```RepositoriesAdapter``` must also support pinning repositories (Objective 2.b.vi).
 
 #import "app/src/main/java/com/tpb/projects/common/RepositoriesAdapter.java"
+
+
+### UserStarsFragment
+
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserStarsFragment.java"
+
+### UserGistsFragment
+
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserGistsFragment.java"
+
+### UserFollowingFragment
+
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserFollowingFragment.java"
+
+### UserFollowersFragment
+
+#import "app/src/main/java/com/tpb/projects/user/fragments/UserFollowersFragment.java"
+
+## Search
+
+#import "app/src/main/java/com/tpb/projects/util/search/FuzzyStringSearcher.java"
+
+#import "app/src/main/java/com/tpb/projects/util/search/ArrayFilter.java"
+
+## RepoActivity
+
+#import "app/src/main/java/com/tpb/projects/repo/RepoActivity.java"
+
+### RepoInfoFragment
+
+#import "app/src/main/java/com/tpb/projects/repo/fragments/RepoInfoFragment.java"
+
+### RepoReadmeFragment
+
+#import "app/src/main/java/com/tpb/projects/repo/fragments/RepoReadmeFragment.java"
+
+### RepoCommitsFragment
+
+#import "app/src/main/java/com/tpb/projects/repo/fragments/RepoCommitsFragment.java"
+
+#import "app/src/main/java/com/tpb/projects/repo/RepoCommitsAdapter.java"
+
+### RepoIssuesFragment
+
+#import "app/src/main/java/com/tpb/projects/repo/fragments/RepoIssuesFragment.java"
+
+#import "app/src/main/java/com/tpb/projects/repo/RepoIssuesAdapter.java"
+
+### RepoProjectsFragment
+
+#import "app/src/main/java/com/tpb/projects/repo/fragments/RepoProjectsFragment.java"
+
+#import "app/src/main/java/com/tpb/projects/repo/RepoProjectsAdapter.java"
+
+## ContentActivity
+
+#import "app/src/main/java/com/tpb/projects/repo/content/ContentActivity.java"
+
+### ContentAdapter
+
+#import "app/src/main/java/com/tpb/projects/repo/content/ContentAdapter.java"
+
+### FileActivity
+
+#import "app/src/main/java/com/tpb/projects/repo/content/FileActivity.java"
+
+## ProjectActivity
+
+#import "app/src/main/java/com/tpb/projects/project/ProjectActivity.java"
+
+### ColumnFragment
+
+#import "app/src/main/java/com/tpb/projects/project/ColumnFragment.java"
+
+#### CardAdapter
+
+#import "app/src/main/java/com/tpb/projects/project/CardAdapter.java"
+
+#### CardDragListener
+
+#import "app/src/main/java/com/tpb/projects/project/CardDragListener.java.java"
+
+#### ProjectSearchAdapter
+
+#import "app/src/main/java/com/tpb/projects/project/ProjectSearchAdapter.java"
+
+## CommitActivity
+
+#import "app/src/main/java/com/tpb/projects/commit/CommitActivity.java"
+
+### CommitInfoFragment
+
+#import "app/src/main/java/com/tpb/projects/commit/fragments/CommitInfoFragment.java"
+
+#### CommitDiffAdapter
+
+#import "app/src/main/java/com/tpb/projects/commit/CommitDiffAdapter.java"
+
+### CommitCommentsFragment
+
+#import "app/src/main/java/com/tpb/projects/commit/fragments/CommitCommentsFragment.java"
+
+#### CommitCommentsAdapter
+
+#import "app/src/main/java/com/tpb/projects/commit/CommitCommentsAdapter.java"
+
+## IssueActivity
+
+#import "app/src/main/java/com/tpb/projects/issues/IssueActivity.java"
+
+### IssueInfoFragment
+
+#import "app/src/main/java/com/tpb/projects/issues/fragments/IssueInfoFragment.java"
+
+#### IssueEventsAdapter
+
+#import "app/src/main/java/com/tpb/projects/issues/IssueEventsAdapter.java"
+
+### IssueCommentsFragment
+
+#import "app/src/main/java/com/tpb/projects/issues/fragments/IssueCommentsFragment.java"
+
+#### IssueCommentsAdapter
+
+#import "app/src/main/java/com/tpb/projects/issues/IssueCommentsAdapter.java"
+
+## Notifications
+
+### NotificationServiceStarterReceiver
+
+#import "app/src/main/java/com/tpb/projects/notifications/receivers/NotificationServiceStarterReceiver.java"
+
+### NotificationEventReceiver
+
+#import "app/src/main/java/com/tpb/projects/notifications/receivers/NotificationEventReceiver.java"
+
+### NotificationIntentService
+
+#import "app/src/main/java/com/tpb/projects/notifications/NotificationIntentService.java"
+
+# Testing

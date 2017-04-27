@@ -11232,15 +11232,22 @@ The ```onDone``` method follows the save pattern as the other ```onDone``` metho
 
 #### ProjectEditor
 
+The ```ProjectEditor``` is relatively simple, as it only deals with the project title and description.
+When it is launched, the ```Intent``` is checked for a ```Project``` extra which is used to set the name and description, as well as storing the ```Project``` id for returning to the launching ```Activity```.
+
 **ProjectEditor.java**
 ``` java
 package com.tpb.projects.editors;
 
+import android.app.Dialog;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
+import android.support.v7.app.AlertDialog;
 import android.view.View;
 import android.view.ViewStub;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 
@@ -11296,19 +11303,12 @@ public class ProjectEditor extends EditorActivity {
                 new MarkdownButtonAdapter.MarkdownButtonListener() {
                     @Override
                     public void snippetEntered(String snippet, int relativePosition) {
-                        if(mNameEditor.hasFocus()) {
-                            final int start = Math.max(mNameEditor.getSelectionStart(), 0);
-                            mNameEditor.getText().insert(start, snippet);
-                            mNameEditor.setSelection(start + relativePosition);
-                        }
+                        Util.insertString(mDescriptionEditor, snippet, relativePosition);
                     }
 
                     @Override
                     public String getText() {
-                        if(mNameEditor.isFocused()) return mNameEditor.getText().toString();
-                        if(mDescriptionEditor.isFocused())
-                            return mDescriptionEditor.getInputText().toString();
-                        return "";
+                        return mDescriptionEditor.getInputText().toString();
                     }
 
                     @Override
@@ -11337,7 +11337,7 @@ public class ProjectEditor extends EditorActivity {
         mNameEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
             @Override
             public void textChanged() {
-                mHasBeenEdited = mHasBeenEdited || mDescriptionEditor.isEditing();
+                mHasBeenEdited |= mDescriptionEditor.isEditing();
             }
         });
         mDescriptionEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
@@ -11353,6 +11353,8 @@ public class ProjectEditor extends EditorActivity {
             mProjectNumber = project.getId();
             mNameEditor.setText(project.getName());
             mDescriptionEditor.setText(project.getBody());
+        } else {
+            finish();
         }
     }
 
@@ -11365,6 +11367,7 @@ public class ProjectEditor extends EditorActivity {
         data.putExtra(getString(R.string.intent_name), mNameEditor.getText().toString());
         data.putExtra(getString(R.string.intent_markdown), mDescriptionEditor.getText().toString());
         setResult(RESULT_OK, data);
+        mHasBeenEdited = false;
         finish();
     }
 
@@ -11391,6 +11394,27 @@ public class ProjectEditor extends EditorActivity {
     @Override
     protected void insertString(String c) {
         Util.insertString(mDescriptionEditor, c);
+    }
+
+    @Override
+    public void finish() {
+        if(mHasBeenEdited && !mDescriptionEditor.getText().toString().isEmpty() && !mNameEditor.getText()
+                                                                                     .toString()
+                                                                                     .isEmpty()) {
+            final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setTitle(R.string.title_discard_changes);
+            builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
+                final InputMethodManager imm = (InputMethodManager) getSystemService(
+                        Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+            });
+            builder.setNegativeButton(R.string.action_no, null);
+            final Dialog deleteDialog = builder.create();
+            deleteDialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+            deleteDialog.show();
+        } else {
+            super.finish();
+        }
     }
 }
 
@@ -13448,3 +13472,8707 @@ public class RepositoriesAdapter extends RecyclerView.Adapter<RepositoriesAdapte
 }
 
 ```
+
+
+### UserStarsFragment
+
+**UserStarsFragment.java**
+``` java
+package com.tpb.projects.user.fragments;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.repo.RepoActivity;
+import com.tpb.projects.common.RepositoriesAdapter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 10/03/17.
+ */
+
+public class UserStarsFragment extends UserFragment implements RepositoriesAdapter.RepoOpener {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    private RepositoriesAdapter mAdapter;
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+
+        final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
+        mRecycler.setLayoutManager(manager);
+        mRecycler.enableLineDecoration();
+        mAdapter = new RepositoriesAdapter(getActivity(), this, mRefresher);
+        mRecycler.setAdapter(mAdapter);
+
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mAreViewsValid = true;
+        if(mUser != null) userLoaded(mUser);
+        return view;
+    }
+
+
+    @Override
+    public void userLoaded(User user) {
+        mUser = user;
+        if(!areViewsValid()) return;
+        mAdapter.setUser(user.getLogin(), true);
+    }
+
+    @Override
+    public void openRepo(Repository repo) {
+        final Intent i = new Intent(getContext(), RepoActivity.class);
+        i.putExtra(getString(R.string.intent_repo), repo);
+        Loader.getLoader(getContext()).loadProjects(null, repo.getFullName());
+        Loader.getLoader(getContext()).loadIssues(null, repo.getFullName(), State.OPEN, null, null, 0);
+        startActivity(i);
+        getActivity().overridePendingTransition(R.anim.slide_up, R.anim.none);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+### UserGistsFragment
+
+**UserGistsFragment.java**
+``` java
+package com.tpb.projects.user.fragments;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.models.Gist;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.repo.content.FileActivity;
+import com.tpb.projects.user.GistsAdapter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 10/03/17.
+ */
+
+public class UserGistsFragment extends UserFragment implements GistsAdapter.GistOpener {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
+
+    private GistsAdapter mAdapter;
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+
+        final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
+        mRecycler.setLayoutManager(manager);
+        mRecycler.enableLineDecoration();
+        mAdapter = new GistsAdapter(getContext(), this, mRefresher);
+        mRecycler.setAdapter(mAdapter);
+
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mAreViewsValid = true;
+        if(mUser != null) userLoaded(mUser);
+        return view;
+    }
+
+    @Override
+    public void userLoaded(User user) {
+        mUser = user;
+        if(!areViewsValid()) return;
+        mAdapter.setUser(user.getLogin(), false);
+    }
+
+    @Override
+    public void openGist(Gist gist, View view) {
+        final Intent i = new Intent(getContext(), FileActivity.class);
+        i.putExtra(getString(R.string.intent_gist_url), gist.getFiles().get(0).getRawUrl());
+        startActivity(i);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+### UserFollowingFragment
+
+**UserFollowingFragment.java**
+``` java
+package com.tpb.projects.user.fragments;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.user.UserAdapter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 19/03/17.
+ */
+
+public class UserFollowingFragment extends UserFragment {
+
+    private Unbinder unbinder;
+
+    private UserAdapter mAdapter;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
+        mRecycler.setLayoutManager(manager);
+        mAdapter = new UserAdapter(getActivity(), mRefresher);
+        mRecycler.enableLineDecoration();
+        mRecycler.setAdapter(mAdapter);
+
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mAreViewsValid = true;
+        if(mUser != null) userLoaded(mUser);
+        return view;
+    }
+
+    @Override
+    public void userLoaded(User user) {
+        mUser = user;
+        if(!areViewsValid()) return;
+        mAdapter.setUser(user.getLogin(), false);
+    }
+
+    @Override
+    public void onResume() {
+        mRecycler.getRecycledViewPool().clear();
+        super.onResume();
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+### UserFollowersFragment
+
+**UserFollowersFragment.java**
+``` java
+package com.tpb.projects.user.fragments;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.user.UserAdapter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 19/03/17.
+ */
+
+public class UserFollowersFragment extends UserFragment {
+
+    private Unbinder unbinder;
+
+    private UserAdapter mAdapter;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
+        mRecycler.setLayoutManager(manager);
+        mAdapter = new UserAdapter(getActivity(), mRefresher);
+        mRecycler.enableLineDecoration();
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mAreViewsValid = true;
+        if(mUser != null) userLoaded(mUser);
+        return view;
+    }
+
+    @Override
+    public void userLoaded(User user) {
+        mUser = user;
+        if(!areViewsValid()) return;
+        mAdapter.setUser(user.getLogin(), true);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+## Search
+
+**FuzzyStringSearcher.java**
+``` java
+package com.tpb.projects.util.search;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+
+/**
+ * Created by theo on 03/02/17.
+ * <p>
+ * Possible algorithms
+ * https://en.wikipedia.org/wiki/Bitap_algorithm
+ * Uses Levenshtein distance on substrings
+ * First computes a set of bitmasks containing one bit for each element of the pattern
+ * <p>
+ * Rabin-Karp algorithm
+ * https://en.wikipedia.org/wiki/Rabin%E2%80%93Karp_algorithm
+ * Uses hashing to find any one of a set of pattern strings in a atext
+ * <p>
+ * Knuth-Morris-Pratt algorithm
+ * https://en.wikipedia.org/wiki/Knuth%E2%80%93Morris%E2%80%93Pratt_algorithm
+ * <p>
+ * Boyer-Moore string search
+ * https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string_search_algorithm
+ */
+
+/*
+Bitap algorithm fuzzy search
+To perform fuzzy searching, we need a 2d bit array
+Instead of having a single array which changes over the length of the text, we have k arrays
+R_i holds a representation of the prefixes of pattern that match any suffix of the current string with i or fewer errors.
+An error may be insertion, deletion, or substitution
+ */
+
+public class FuzzyStringSearcher {
+    private static final String TAG = FuzzyStringSearcher.class.getSimpleName();
+
+    private ArrayList<String> items = new ArrayList<>();
+    private final int[] queryMask = new int[65536];
+
+    private static FuzzyStringSearcher instance;
+
+    public FuzzyStringSearcher() {
+
+    }
+
+    private FuzzyStringSearcher(ArrayList<String> items) {
+        this.items = items;
+    }
+
+    public static FuzzyStringSearcher getInstance(ArrayList<String> items) {
+        if(instance == null) {
+            instance = new FuzzyStringSearcher(items);
+        } else {
+            instance.setItems(items);
+        }
+        return instance;
+    }
+
+    public void setItems(ArrayList<String> items) {
+        this.items = items;
+    }
+
+    public ArrayList<Integer> search(String query) {
+        final ArrayList<Integer> positions = new ArrayList<>();
+        final ArrayList<Integer> ranks = new ArrayList<>();
+        int index, rank;
+        for(int i = 0; i < items.size(); i++) {
+            index = findIndex(items.get(i), query, 1);
+            if(index >= 0) {
+                rank = index; //TODO Other indexing
+                boolean added = false;
+                for(int j = 0; j < ranks.size(); j++) {
+                    if(rank > ranks.get(j)) {
+                        added = true;
+                        ranks.add(j, rank);
+                        positions.add(j, i);
+                        break;
+                    }
+                }
+                if(!added) {
+                    ranks.add(rank);
+                    positions.add(i);
+                }
+            }
+        }
+        return positions;
+    }
+
+    private int findIndex(String s, String query, int k) {
+        int result = -1;
+        int m = query.length();
+        int[] R;
+        int i, d;
+
+        if(query.isEmpty()) return 0;
+        if(m > 31) return -1;
+
+        R = new int[k + 1];
+        for(i = 0; i <= k; ++i) {
+            R[i] = ~1; //Bitwise complement of 1
+        }
+        Arrays.fill(queryMask, ~0);
+
+        for(i = 0; i < m; ++i) {
+            queryMask[query.charAt(i)] &= ~(1 << i);
+        }
+        for(i = 0; i < s.length(); ++i) {
+            int oldRd1 = R[0];
+            R[0] |= queryMask[s.charAt(i)];
+            R[0] <<= 1;
+
+            for(d = 1; d <= k; ++d) {
+                int tmp = R[d];
+
+                R[d] = (oldRd1 & (R[d] | queryMask[s.charAt(i)])) << 1;
+                oldRd1 = tmp;
+            }
+
+            if(0 == (R[k] & (1 << m))) {
+                result = (i - m) + 1;
+                break;
+            }
+        }
+        return result;
+    }
+
+
+}
+
+```
+
+**ArrayFilter.java**
+``` java
+package com.tpb.projects.util.search;
+
+import android.widget.ArrayAdapter;
+import android.widget.Filter;
+
+import java.util.ArrayList;
+
+/**
+ * Created by theo on 05/02/17.
+ */
+
+public class ArrayFilter<T> extends Filter {
+
+    private final ArrayAdapter<T> parent;
+    private final FuzzyStringSearcher searcher;
+    private final ArrayList<T> data;
+    private ArrayList<T> filtered;
+
+    public ArrayFilter(ArrayAdapter<T> parent, FuzzyStringSearcher searcher, ArrayList<T> data) {
+        this.parent = parent;
+        this.searcher = searcher;
+        this.data = data;
+        this.filtered = new ArrayList<>();
+    }
+
+    public ArrayList<T> getFiltered() {
+        return filtered;
+    }
+
+    @Override
+    protected FilterResults performFiltering(CharSequence charSequence) {
+        final FilterResults results = new FilterResults();
+        if(charSequence == null) {
+            results.values = new ArrayList<T>();
+            results.count = 0;
+        } else {
+            final ArrayList<Integer> positions = searcher.search(charSequence.toString());
+            final ArrayList<T> items = new ArrayList<>(positions.size());
+
+            for(int i : positions) {
+                items.add(data.get(i));
+            }
+            results.values = items;
+            results.count = items.size();
+        }
+        return results;
+    }
+
+    @Override
+    protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
+        filtered = (ArrayList<T>) filterResults.values;
+        if(filterResults.count > 0) {
+            parent.notifyDataSetChanged();
+        } else {
+            parent.notifyDataSetInvalidated();
+        }
+    }
+}
+
+```
+
+## RepoActivity
+
+**RepoActivity.java**
+``` java
+package com.tpb.projects.repo;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.view.ViewPager;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.BaseActivity;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.repo.fragments.RepoCommitsFragment;
+import com.tpb.projects.repo.fragments.RepoFragment;
+import com.tpb.projects.repo.fragments.RepoInfoFragment;
+import com.tpb.projects.repo.fragments.RepoIssuesFragment;
+import com.tpb.projects.repo.fragments.RepoProjectsFragment;
+import com.tpb.projects.repo.fragments.RepoReadmeFragment;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+import com.tpb.projects.util.Util;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class RepoActivity extends BaseActivity implements Loader.ItemLoader<Repository> {
+
+    public static final int PAGE_README = 1;
+    public static final int PAGE_COMMITS = 2;
+    public static final int PAGE_ISSUES = 3;
+    public static final int PAGE_PROJECTS = 4;
+    private int mLaunchPage = 0;
+    private boolean mLaunchPageAttached = false; //When fragments are attached during rotation
+
+    @BindView(R.id.title_repo) TextView mTitle;
+    @BindView(R.id.repo_fragment_tabs) TabLayout mTabs;
+    @BindView(R.id.repo_fragment_viewpager) ViewPager mPager;
+    @BindView(R.id.repo_fab) FloatingActionButton mFab;
+
+    private RepoFragmentAdapter mAdapter;
+    private Repository mRepo;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_repo);
+        ButterKnife.bind(this);
+
+        if(mAdapter == null) mAdapter = new RepoFragmentAdapter(getSupportFragmentManager());
+        mTabs.setupWithViewPager(mPager);
+        mPager.setAdapter(mAdapter);
+        mPager.setOffscreenPageLimit(5);
+        mPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
+            @Override
+            public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+
+            }
+
+            @Override
+            public void onPageSelected(int position) {
+                if(mAdapter.mFragments[position].areViewsValid()) {
+                    mAdapter.mFragments[position].handleFab(mFab);
+                }
+            }
+
+            @Override
+            public void onPageScrollStateChanged(int state) {
+
+            }
+        });
+        if(mLaunchPageAttached) mPager.setCurrentItem(mLaunchPage);
+
+        final Intent launchIntent = getIntent();
+        final Loader loader = Loader.getLoader(this);
+        if(launchIntent.getParcelableExtra(getString(R.string.intent_repo)) != null) {
+            mRepo = launchIntent.getParcelableExtra(getString(R.string.intent_repo));
+            if(mRepo.isFork()) {
+                loader.loadRepository(this, mRepo.getFullName());
+            } else {
+                loadComplete(launchIntent.getParcelableExtra(getString(R.string.intent_repo)));
+            }
+        } else {
+            if(launchIntent.hasExtra(getString(R.string.intent_pager_page))) {
+                mLaunchPage = launchIntent.getIntExtra(getString(R.string.intent_pager_page), 0);
+
+            }
+            loader.loadRepository(this,
+                    launchIntent.getStringExtra(getString(R.string.intent_repo))
+            );
+        }
+
+    }
+
+    @Override
+    public void loadComplete(Repository repo) {
+        mRepo = repo;
+        mAdapter.notifyRepoLoaded();
+        mTitle.setText(repo.getName());
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
+
+    }
+
+    @Override
+    public void onAttachFragment(Fragment fragment) {
+        super.onAttachFragment(fragment);
+        if(mAdapter == null) mAdapter = new RepoFragmentAdapter(getSupportFragmentManager());
+        if(fragment instanceof RepoFragment) mAdapter.ensureAttached((RepoFragment) fragment);
+        if(mAdapter.indexOf(fragment) == mLaunchPage) {
+            if(mPager == null) {
+                mLaunchPageAttached = true;
+            } else {
+                mPager.setCurrentItem(mLaunchPage);
+            }
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        mAdapter.notifyBackPressed();
+        super.onBackPressed();
+    }
+
+
+    private class RepoFragmentAdapter extends FragmentPagerAdapter {
+
+        private RepoFragment[] mFragments = new RepoFragment[5];
+
+        RepoFragmentAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public int getCount() {
+            return 5;
+        }
+
+        void ensureAttached(RepoFragment fragment) {
+            if(fragment instanceof RepoInfoFragment) mFragments[0] = fragment;
+            if(fragment instanceof RepoReadmeFragment) mFragments[1] = fragment;
+            if(fragment instanceof RepoCommitsFragment) mFragments[2] = fragment;
+            if(fragment instanceof RepoIssuesFragment) mFragments[3] = fragment;
+            if(fragment instanceof RepoProjectsFragment) mFragments[4] = fragment;
+        }
+
+        void notifyRepoLoaded() {
+            for(RepoFragment rf : mFragments) {
+                if(rf != null) rf.repoLoaded(mRepo);
+            }
+        }
+
+        void notifyBackPressed() {
+            for(RepoFragment rf : mFragments) {
+                if(rf != null) rf.notifyBackPressed();
+            }
+        }
+
+        int indexOf(Fragment rf) {
+            return Util.indexOf(mFragments, rf);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            switch(position) {
+                case 0:
+                    mFragments[0] = RepoInfoFragment.newInstance();
+                    break;
+                case 1:
+                    mFragments[1] = RepoReadmeFragment.newInstance();
+                    break;
+                case 2:
+                    mFragments[2] = RepoCommitsFragment.newInstance();
+                    break;
+                case 3:
+                    mFragments[3] = RepoIssuesFragment.newInstance();
+                    break;
+                case 4:
+                    mFragments[4] = RepoProjectsFragment.newInstance();
+                    break;
+            }
+            if(mRepo != null) mFragments[position].repoLoaded(mRepo);
+            return mFragments[position];
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            switch(position) {
+                case 0:
+                    return getString(R.string.title_repo_info);
+                case 1:
+                    return getString(R.string.title_repo_readme);
+                case 2:
+                    return getString(R.string.title_repo_commits);
+                case 3:
+                    return getString(R.string.title_repo_issues);
+                case 4:
+                    return getString(R.string.title_repo_projects);
+                default:
+                    return "";
+            }
+        }
+    }
+
+
+}
+
+```
+
+### RepoInfoFragment
+
+**RepoInfoFragment.java**
+``` java
+package com.tpb.projects.repo.fragments;
+
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityOptionsCompat;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Page;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.User;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.repo.content.ContentActivity;
+import com.tpb.projects.user.UserActivity;
+import com.tpb.projects.util.Logger;
+import com.tpb.projects.util.UI;
+import com.tpb.projects.util.Util;
+
+import java.util.List;
+import java.util.Locale;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class RepoInfoFragment extends RepoFragment {
+    private static final String TAG = RepoInfoFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    private Loader mLoader;
+
+    @BindView(R.id.repo_info_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.user_avatar) NetworkImageView mAvatar;
+    @BindView(R.id.user_name) TextView mUserName;
+    @BindView(R.id.repo_description) MarkdownTextView mDescription;
+    @BindView(R.id.repo_collaborators) LinearLayout mCollaborators;
+    @BindView(R.id.repo_contributors) LinearLayout mContributors;
+
+    @BindView(R.id.repo_size) TextView mSize;
+    @BindView(R.id.repo_stars) TextView mStars;
+    @BindView(R.id.repo_issues) TextView mIssues;
+    @BindView(R.id.repo_forks) TextView mForks;
+    @BindView(R.id.repo_license) TextView mLicense;
+
+    public static RepoInfoFragment newInstance() {
+        return new RepoInfoFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_repo_info, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mAreViewsValid = true;
+        mRefresher.setRefreshing(true);
+        mLoader = Loader.getLoader(getContext());
+        mRefresher.setOnRefreshListener(() -> {
+            Loader.getLoader(getContext()).loadRepository(new Loader.ItemLoader<Repository>() {
+                @Override
+                public void loadComplete(Repository data) {
+                    repoLoaded(data);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, mRepo.getFullName());
+        });
+        if(mRepo != null) repoLoaded(mRepo);
+        return view;
+    }
+
+    @Override
+    public void repoLoaded(Repository repo) {
+        mRepo = repo;
+        if(!areViewsValid()) return;
+        mRefresher.setRefreshing(false);
+        mAvatar.setImageUrl(repo.getUserAvatarUrl());
+        mUserName.setText(repo.getUserLogin());
+        mIssues.setText(String.valueOf(repo.getIssues()));
+        mForks.setText(String.valueOf(repo.getForks()));
+        mSize.setText(Util.formatKB(repo.getSize()));
+        mStars.setText(String.valueOf(repo.getStarGazers()));
+        if(Util.isNotNullOrEmpty(mRepo.getDescription())) {
+            mDescription.setVisibility(View.VISIBLE);
+            mDescription
+                    .setMarkdown(Markdown.formatMD(mRepo.getDescription(), mRepo.getFullName()));
+        } else {
+            mDescription.setVisibility(View.GONE);
+        }
+        if(mRepo.hasLicense()) {
+            mLicense.setText(repo.getLicenseShortName());
+        } else {
+            mLicense.setText(R.string.text_no_license);
+        }
+        Loader.getLoader(getContext()).loadPage(new Loader.ItemLoader<Page>() {
+            @Override
+            public void loadComplete(Page data) {
+                Logger.i(TAG, "loadComplete: " + data.toString());
+            }
+
+            @Override
+            public void loadError(APIHandler.APIError error) {
+                Logger.i(TAG, "loadError: " + error.toString());
+            }
+        }, mRepo.getFullName());
+        loadRelevantUsers();
+    }
+
+    @Override
+    public void handleFab(FloatingActionButton fab) {
+        fab.hide(true);
+    }
+
+    private void loadRelevantUsers() {
+        mLoader.loadCollaborators(new Loader.ListLoader<User>() {
+            @Override
+            public void listLoadComplete(List<User> collaborators) {
+                displayCollaborators(collaborators);
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                mCollaborators.setVisibility(View.GONE);
+                ButterKnife.findById(getActivity(), R.id.repo_collaborators_text)
+                           .setVisibility(View.GONE);
+            }
+        }, mRepo.getFullName());
+        mLoader.loadContributors(new Loader.ListLoader<User>() {
+            @Override
+            public void listLoadComplete(List<User> contributors) {
+                displayContributors(contributors);
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                mContributors.setVisibility(View.GONE);
+                ButterKnife.findById(getActivity(), R.id.repo_contributors_text)
+                           .setVisibility(View.GONE);
+            }
+        }, mRepo.getFullName());
+    }
+
+    private void displayCollaborators(List<User> collaborators) {
+        mCollaborators.removeAllViews();
+        if(collaborators.size() > 1) {
+            mCollaborators.setVisibility(View.VISIBLE);
+            ButterKnife.findById(getActivity(), R.id.repo_collaborators_text)
+                       .setVisibility(View.VISIBLE);
+            for(final User u : collaborators) mCollaborators.addView(getUserView(u));
+        } else {
+            mCollaborators.setVisibility(View.GONE);
+            ButterKnife.findById(getActivity(), R.id.repo_collaborators_text)
+                       .setVisibility(View.GONE);
+        }
+    }
+
+    private void displayContributors(List<User> contributors) {
+        if(!areViewsValid()) return;
+        mContributors.removeAllViews();
+        if(contributors.size() > 1) {
+            mContributors.setVisibility(View.VISIBLE);
+            ButterKnife.findById(getActivity(), R.id.repo_contributors_text)
+                       .setVisibility(View.VISIBLE);
+            for(final User u : contributors) mContributors.addView(getUserView(u));
+        } else {
+            mContributors.setVisibility(View.GONE);
+            ButterKnife.findById(getActivity(), R.id.repo_contributors_text)
+                       .setVisibility(View.GONE);
+        }
+    }
+
+    private View getUserView(User u) {
+        final LinearLayout layout = (LinearLayout)
+                getActivity()
+                        .getLayoutInflater()
+                        .inflate(R.layout.shard_user, mCollaborators, false);
+        layout.setId(View.generateViewId());
+        final NetworkImageView avatar = ButterKnife.findById(layout, R.id.user_avatar);
+        avatar.setId(View.generateViewId());
+        avatar.setImageUrl(u.getAvatarUrl());
+        avatar.setScaleType(ImageView.ScaleType.FIT_XY);
+        final TextView login = ButterKnife.findById(layout, R.id.user_login);
+        login.setId(View.generateViewId());
+        if(u.getContributions() > 0) {
+            login.setText(String.format(Locale.getDefault(), "%1$s\n%2$d", u.getLogin(),
+                    u.getContributions()
+            ));
+        } else {
+            login.setText(u.getLogin());
+        }
+        layout.setOnClickListener((v) -> {
+            final Intent us = new Intent(getActivity(), UserActivity.class);
+            us.putExtra(getString(R.string.intent_username), u.getLogin());
+            UI.setDrawableForIntent(avatar, us);
+            getActivity().startActivity(us,
+                    ActivityOptionsCompat.makeSceneTransitionAnimation(
+                            getActivity(),
+                            Pair.create(login, getString(R.string.transition_username)),
+                            Pair.create(avatar,
+                                    getString(R.string.transition_user_image)
+                            )
+                    ).toBundle()
+            );
+        });
+        return layout;
+    }
+
+    @OnClick({R.id.repo_license, R.id.repo_license_drawable, R.id.repo_license_text})
+    void showLicense() {
+        if(mRepo.hasLicense()) {
+            final ProgressDialog pd = new ProgressDialog(getContext());
+            pd.setTitle(R.string.title_loading_license);
+            pd.setMessage(mRepo.getLicenseName());
+            pd.show();
+            mLoader.loadLicenseBody(new Loader.ItemLoader<String>() {
+                @Override
+                public void loadComplete(String data) {
+                    pd.dismiss();
+                    new AlertDialog.Builder(getContext())
+                            .setTitle(mRepo.getLicenseName())
+                            .setMessage(data)
+                            .setPositiveButton(R.string.action_ok, null)
+                            .create()
+                            .show();
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+                    pd.dismiss();
+                    Toast.makeText(getContext(), R.string.error_loading_license, Toast.LENGTH_SHORT)
+                         .show();
+                }
+            }, mRepo.getLicenseUrl());
+        }
+    }
+
+    @OnClick({R.id.user_avatar, R.id.user_name})
+    void openUser() {
+        if(mRepo != null) {
+            final Intent i = new Intent(getContext(), UserActivity.class);
+            i.putExtra(getString(R.string.intent_username), mRepo.getUserLogin());
+            UI.setDrawableForIntent(mAvatar, i);
+            startActivity(i,
+                    ActivityOptionsCompat.makeSceneTransitionAnimation(
+                            getActivity(),
+                            Pair.create(mUserName, getString(R.string.transition_username)),
+                            Pair.create(mAvatar, getString(R.string.transition_user_image))
+                    ).toBundle()
+            );
+        }
+    }
+
+    @OnClick(R.id.repo_show_files)
+    void showFiles() {
+        if(mRepo != null) {
+            final Intent i = new Intent(getContext(), ContentActivity.class);
+            i.putExtra(getString(R.string.intent_repo), mRepo.getFullName());
+            startActivity(i);
+        }
+
+    }
+
+    @Override
+    public void notifyBackPressed() {
+
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+### RepoReadmeFragment
+
+**RepoReadmeFragment.java**
+``` java
+package com.tpb.projects.repo.fragments;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Repository;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.webview.MarkdownWebView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.util.Logger;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 26/03/17.
+ */
+
+public class RepoReadmeFragment extends RepoFragment {
+
+    private Unbinder unbinder;
+
+    private Loader mLoader;
+
+    @BindView(R.id.repo_readme_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.repo_readme) MarkdownWebView mReadme;
+
+    public static RepoReadmeFragment newInstance() {
+        return new RepoReadmeFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_repo_readme, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mAreViewsValid = true;
+        mRefresher.setRefreshing(true);
+        mLoader = Loader.getLoader(getContext());
+        mRefresher.setOnRefreshListener(() -> {
+            Loader.getLoader(getContext()).loadRepository(new Loader.ItemLoader<Repository>() {
+                @Override
+                public void loadComplete(Repository data) {
+                    repoLoaded(data);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, mRepo.getFullName());
+        });
+        if(mRepo != null) repoLoaded(mRepo);
+        mReadme.enableDarkTheme();
+        return view;
+    }
+
+    @Override
+    public void repoLoaded(Repository repo) {
+        mRepo = repo;
+        if(!areViewsValid()) return;
+        mLoader.loadReadMe(new Loader.ItemLoader<String>() {
+            @Override
+            public void loadComplete(String data) {
+                mLoader.renderMarkDown(new Loader.ItemLoader<String>() {
+                    @Override
+                    public void loadComplete(String data) {
+                        if(!areViewsValid()) return;
+                        mRefresher.setRefreshing(false);
+                        mReadme.setVisibility(View.VISIBLE);
+                        mReadme.setMarkdown(Markdown.fixRelativeImageSrcs(data, mRepo.getFullName()));
+                        mReadme.reload();
+                    }
+
+                    @Override
+                    public void loadError(APIHandler.APIError error) {
+                        Toast.makeText(getContext(), R.string.error_rendering_readme,
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
+                }, data, mRepo.getDescription());
+            }
+
+            @Override
+            public void loadError(APIHandler.APIError error) {
+                if(!areViewsValid()) return;
+                mRefresher.setRefreshing(false);
+                if(error == APIHandler.APIError.NOT_FOUND) {
+                    Toast.makeText(getContext(), R.string.error_readme_not_found,
+                            Toast.LENGTH_SHORT
+                    ).show();
+                } else {
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                }
+            }
+        }, mRepo.getFullName());
+    }
+
+    @Override
+    public void handleFab(FloatingActionButton fab) {
+        fab.hide(true);
+    }
+
+    @Override
+    public void notifyBackPressed() {
+        mReadme.setVisibility(View.GONE);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+### RepoCommitsFragment
+
+**RepoCommitsFragment.java**
+``` java
+package com.tpb.projects.repo.fragments;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.repo.RepoCommitsAdapter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 29/03/17.
+ */
+
+public class RepoCommitsFragment extends RepoFragment implements Loader.ListLoader<Pair<String, String>> {
+    private static final String TAG = RepoCommitsFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.repo_commits_branch_spinner) Spinner mBranchSpinner;
+    @BindView(R.id.repo_commits_recycler) AnimatingRecyclerView mRecyclerView;
+    @BindView(R.id.repo_commits_refresher) SwipeRefreshLayout mRefresher;
+
+    private RepoCommitsAdapter mAdapter;
+    private List<Pair<String, String>> mBranches;
+    private boolean mIsLoadingBranches = false;
+    private String mLatestSHA;
+
+    public static RepoCommitsFragment newInstance() {
+        return new RepoCommitsFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_repo_commits, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mRefresher.setRefreshing(true);
+        mAdapter = new RepoCommitsAdapter(this, mRefresher);
+        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        mRecyclerView.enableLineDecoration();
+        mRecyclerView.setLayoutManager(manager);
+        mRecyclerView.setAdapter(mAdapter);
+        mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mAreViewsValid = true;
+        if(mRepo != null) repoLoaded(mRepo);
+        if(mBranches != null) listLoadComplete(mBranches);
+        return view;
+    }
+
+    @Override
+    public void repoLoaded(Repository repo) {
+        mRepo = repo;
+        Loader.getLoader(getContext()).loadBranches(this, mRepo.getFullName());
+        mIsLoadingBranches = true;
+        if(!areViewsValid()) return;
+        mAdapter.setRepo(mRepo);
+    }
+
+    @Override
+    public void listLoadComplete(List<Pair<String, String>> branches) {
+        mIsLoadingBranches = false;
+        mBranches = branches;
+        if(!areViewsValid()) return;
+        if(mLatestSHA != null) bindBranches();
+    }
+
+    public void setLatestSHA(String sha) {
+        if(mLatestSHA == null) {
+            mLatestSHA = sha;
+            if(mBranches != null && !mBranches.isEmpty()) {
+                bindBranches();
+            } else if(!mIsLoadingBranches) {
+                Loader.getLoader(getContext()).loadBranches(this, mRepo.getFullName());
+            }
+        }
+    }
+
+    public void bindBranches() {
+        final List<String> branchNames = new ArrayList<>(mBranches.size());
+        for(Pair<String, String> p : mBranches) {
+            if(mLatestSHA.equals(p.second)) {
+                branchNames.add(0, p.first);
+            } else {
+                branchNames.add(p.first);
+            }
+        }
+        final ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
+                android.R.layout.simple_spinner_item, branchNames
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mBranchSpinner.setAdapter(adapter);
+        if(mBranchSpinner.getOnItemSelectedListener() == null) {
+            mBranchSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    mAdapter.setBranch(branchNames.get(position));
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+
+                }
+            });
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mIsLoadingBranches = false;
+    }
+
+    @Override
+    public void handleFab(FloatingActionButton fab) {
+        fab.hide(true);
+    }
+
+    @Override
+    public void notifyBackPressed() {
+
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+**RepoCommitsAdapter.java**
+``` java
+package com.tpb.projects.repo;
+
+import android.content.res.Resources;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Commit;
+import com.tpb.github.data.models.Repository;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.repo.fragments.RepoCommitsFragment;
+import com.tpb.projects.util.Util;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 29/03/17.
+ */
+
+public class RepoCommitsAdapter extends RecyclerView.Adapter<RepoCommitsAdapter.CommitViewHolder> implements Loader.ListLoader<Commit> {
+    private static final String TAG = RepoCommitsAdapter.class.getSimpleName();
+
+    private RepoCommitsFragment mParent;
+    private Repository mRepo;
+    private String mBranch;
+    private ArrayList<Pair<Commit, SpannableString>> mCommits = new ArrayList<>();
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public RepoCommitsAdapter(RepoCommitsFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mRefresher = refresher;
+        mLoader = Loader.getLoader(parent.getContext());
+        mRefresher.setOnRefreshListener(() -> {
+            final int oldSize = mCommits.size();
+            mCommits.clear();
+            notifyItemRangeRemoved(0, oldSize);
+            loadCommits(true);
+        });
+    }
+
+    public void setRepo(Repository repo) {
+        mRepo = repo;
+        final int oldSize = mCommits.size();
+        mCommits.clear();
+        notifyItemRangeRemoved(0, oldSize);
+        loadCommits(true);
+    }
+
+    public void setBranch(String branch) {
+        if(!branch.equals(mBranch)) {
+            if(mBranch != null) {
+                mBranch = branch;
+                mCommits.clear();
+                notifyDataSetChanged();
+                loadCommits(true);
+            } else {
+                mBranch = branch;
+            }
+
+        }
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadCommits(false);
+        }
+    }
+
+    private void loadCommits(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadCommits(this, mRepo.getFullName(), mBranch, mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<Commit> commits) {
+        if(!mParent.areViewsValid()) return;
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(commits.size() > 0) {
+            final int oldLength = mCommits.size();
+            if(mPage == 1) {
+                mParent.setLatestSHA(commits.get(0).getSha());
+            }
+            for(Commit c : commits) {
+                mCommits.add(Pair.create(c, null));
+            }
+            notifyItemRangeInserted(oldLength, mCommits.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mRefresher.setRefreshing(false);
+    }
+
+    @Override
+    public CommitViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new CommitViewHolder(LayoutInflater.from(parent.getContext())
+                                                  .inflate(R.layout.viewholder_commit, parent,
+                                                          false
+                                                  ));
+    }
+
+    @Override
+    public void onBindViewHolder(CommitViewHolder holder, int position) {
+        final Commit c = mCommits.get(position).first;
+        if(c.getCommitter() != null) {
+            holder.mAvatar.setImageUrl(c.getCommitter().getAvatarUrl());
+        }
+        holder.mTitle.setMarkdown(Markdown.formatMD(c.getMessage(), mRepo.getFullName()));
+        final String userName;
+        final String userUrl;
+
+        if(c.getCommitter() != null) {
+            userName = c.getCommitter().getLogin();
+            userUrl = c.getCommitter().getHtmlUrl();
+        } else {
+            userName = c.getCommitterName();
+            userUrl = IntentHandler.getUserUrl(userName);
+
+        }
+        if(mCommits.get(position).second == null) {
+            final StringBuilder builder = new StringBuilder();
+            final Resources res = holder.itemView.getResources();
+
+            builder.append(
+                    String.format(
+                            res.getString(R.string.text_committed_by_with_has),
+                            String.format(
+                                    res.getString(R.string.text_md_link),
+                                    userName,
+                                    userUrl
+                            ),
+                            String.format(
+                                    res.getString(R.string.text_md_link),
+                                    com.tpb.github.data.Util.shortenSha(c.getSha()),
+                                    c.getHtmlUrl()
+                            ),
+                            Util.formatDateLocally(holder.itemView.getContext(),
+                                    new Date(c.getCreatedAt())
+                            )
+                    )
+            );
+            holder.mInfo
+                    .setMarkdown(Markdown.formatMD(builder.toString(), mRepo.getFullName()), null,
+                            text -> mCommits.set(position, Pair.create(c, text))
+                    );
+        } else {
+            holder.mInfo.setText(mCommits.get(position).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mAvatar, userName);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mTitle, c);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mInfo, c);
+    }
+
+    @Override
+    public int getItemCount() {
+        return mCommits.size();
+    }
+
+    static class CommitViewHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.commit_user_avatar) NetworkImageView mAvatar;
+        @BindView(R.id.commit_title) MarkdownTextView mTitle;
+        @BindView(R.id.commit_info) MarkdownTextView mInfo;
+
+        CommitViewHolder(View itemView) {
+            super(itemView);
+            ButterKnife.bind(this, itemView);
+        }
+    }
+
+}
+
+```
+
+### RepoIssuesFragment
+
+**RepoIssuesFragment.java**
+``` java
+package com.tpb.projects.repo.fragments;
+
+import android.app.ProgressDialog;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.SearchView;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.PopupMenu;
+import android.widget.Toast;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Label;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.github.data.models.User;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.fab.FabHideScrollListener;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.editors.IssueEditor;
+import com.tpb.projects.editors.MultiChoiceDialog;
+import com.tpb.projects.repo.RepoIssuesAdapter;
+import com.tpb.projects.util.UI;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
+
+import static android.content.ContentValues.TAG;
+import static com.tpb.github.data.models.State.ALL;
+import static com.tpb.github.data.models.State.CLOSED;
+import static com.tpb.github.data.models.State.OPEN;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class RepoIssuesFragment extends RepoFragment {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.repo_issues_recycler) AnimatingRecyclerView mRecyclerView;
+    private FabHideScrollListener mFabHideScrollListener;
+    @BindView(R.id.repo_issues_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.issues_search_view) SearchView mSearchView;
+    private RepoIssuesAdapter mAdapter;
+
+    private State mFilter = State.OPEN;
+    private String mAssigneeFilter;
+    private final ArrayList<String> mLabelsFilter = new ArrayList<>();
+
+    private Editor mEditor;
+
+    public static RepoIssuesFragment newInstance() {
+        return new RepoIssuesFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_repo_issues, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mEditor = Editor.getEditor(getContext());
+        mAdapter = new RepoIssuesAdapter(this, mRefresher);
+        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        mRecyclerView.enableLineDecoration();
+        mRecyclerView.setLayoutManager(manager);
+        mRecyclerView.setAdapter(mAdapter);
+        mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mSearchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                return false;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                mAdapter.search(newText);
+                return false;
+            }
+        });
+        mSearchView.setOnCloseListener(() -> {
+            mAdapter.closeSearch();
+            return false;
+        });
+        mAreViewsValid = true;
+        if(mRepo != null) repoLoaded(mRepo);
+        return view;
+    }
+
+    @Override
+    public void repoLoaded(Repository repo) {
+        mRepo = repo;
+        if(!areViewsValid()) return;
+        mAdapter.setRepo(repo);
+    }
+
+    @Override
+    public void handleFab(FloatingActionButton fab) {
+        fab.show(true);
+        fab.setOnClickListener(v -> {
+            final Intent intent = new Intent(getContext(), IssueEditor.class);
+            intent.putExtra(getString(R.string.intent_repo), mRepo.getFullName());
+            UI.setViewPositionForIntent(intent, fab);
+            startActivityForResult(intent, IssueEditor.REQUEST_CODE_NEW_ISSUE);
+        });
+
+        if(mFabHideScrollListener == null) {
+            mFabHideScrollListener = new FabHideScrollListener(fab);
+            mRecyclerView.addOnScrollListener(mFabHideScrollListener);
+        }
+    }
+
+    @OnClick(R.id.issues_filter_button)
+    void filter(View v) {
+        final PopupMenu menu = new PopupMenu(getContext(), v);
+        menu.inflate(R.menu.menu_issues_filter);
+        switch(mFilter) {
+            case ALL:
+                menu.getMenu().getItem(2).setChecked(true);
+                break;
+            case OPEN:
+                menu.getMenu().getItem(0).setChecked(true);
+                break;
+            case CLOSED:
+                menu.getMenu().getItem(1).setChecked(true);
+                break;
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+
+                case R.id.menu_filter_assignees:
+                    showAssigneesDialog();
+                    break;
+                case R.id.menu_filter_labels:
+                    showLabelsDialog();
+                    break;
+                case R.id.menu_filter_all:
+                    mFilter = ALL;
+                    refresh();
+                    break;
+                case R.id.menu_filter_closed:
+                    mFilter = CLOSED;
+                    refresh();
+                    break;
+                case R.id.menu_filter_open:
+                    mFilter = OPEN;
+                    refresh();
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    private void refresh() {
+        mAdapter.applyFilter(mFilter, mAssigneeFilter, mLabelsFilter);
+    }
+
+    private void showLabelsDialog() {
+        final ProgressDialog pd = new ProgressDialog(getContext());
+        pd.setTitle(R.string.text_loading_labels);
+        pd.setCancelable(false);
+        pd.show();
+        Loader.getLoader(getContext()).loadLabels(new Loader.ListLoader<Label>() {
+            @Override
+            public void listLoadComplete(List<Label> labels) {
+                final MultiChoiceDialog mcd = new MultiChoiceDialog();
+
+                final Bundle b = new Bundle();
+                b.putInt(getString(R.string.intent_title_res), R.string.title_choose_labels);
+                mcd.setArguments(b);
+
+                final String[] labelTexts = new String[labels.size()];
+                final int[] colors = new int[labels.size()];
+                final boolean[] choices = new boolean[labels.size()];
+                for(int i = 0; i < labels.size(); i++) {
+                    labelTexts[i] = labels.get(i).getName();
+                    colors[i] = labels.get(i).getColor();
+                    choices[i] = mLabelsFilter.indexOf(labels.get(i).getName()) != -1;
+                }
+
+
+                mcd.setChoices(labelTexts, choices);
+                mcd.setBackgroundColors(colors);
+                mcd.setListener(new MultiChoiceDialog.MultiChoiceDialogListener() {
+                    @Override
+                    public void choicesComplete(String[] choices, boolean[] checked) {
+                        mLabelsFilter.clear();
+                        for(int i = 0; i < choices.length; i++) {
+                            if(checked[i]) {
+                                mLabelsFilter.add(choices[i]);
+                            }
+                        }
+                        refresh();
+                    }
+
+                    @Override
+                    public void choicesCancelled() {
+
+                    }
+                });
+                pd.dismiss();
+
+                mcd.show(getActivity().getSupportFragmentManager(), TAG);
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+            }
+        }, mRepo.getFullName());
+
+    }
+
+    private void showAssigneesDialog() {
+        final ProgressDialog pd = new ProgressDialog(getContext());
+        pd.setTitle(R.string.text_loading_collaborators);
+        pd.setCancelable(false);
+        pd.show();
+        Loader.getLoader(getContext()).loadCollaborators(new Loader.ListLoader<User>() {
+            @Override
+            public void listLoadComplete(List<User> collaborators) {
+                final String[] collabNames = new String[collaborators.size() + 2];
+                collabNames[0] = getString(R.string.text_assignee_all);
+                collabNames[1] = getString(R.string.text_assignee_none);
+                int pos = 0;
+                for(int i = 2; i < collabNames.length; i++) {
+                    collabNames[i] = collaborators.get(i - 2).getLogin();
+                    if(collabNames[i].equals(mAssigneeFilter)) {
+                        pos = i;
+                    }
+                }
+
+                final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                builder.setTitle(R.string.title_choose_assignee);
+                builder.setSingleChoiceItems(collabNames, pos,
+                        (dialogInterface, i) -> mAssigneeFilter = collabNames[i]
+                );
+                builder.setPositiveButton(R.string.action_ok, (dialogInterface, i) -> refresh());
+                builder.setNegativeButton(R.string.action_cancel, null);
+                builder.create().show();
+                pd.dismiss();
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+            }
+        }, mRepo.getFullName());
+    }
+
+    public void openMenu(View view, final Issue issue) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_issue);
+        menu.getMenu().add(0, R.id.menu_toggle_issue_state, Menu.NONE,
+                issue.isClosed() ? R.string.menu_reopen_issue : R.string.menu_close_issue
+        );
+        menu.getMenu().add(0, R.id.menu_edit_issue, Menu.NONE, getString(R.string.menu_edit_issue));
+
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case R.id.menu_toggle_issue_state:
+                    toggleIssueState(issue);
+                    break;
+                case R.id.menu_edit_issue:
+                    editIssue(view, issue);
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    private void editIssue(View view, Issue issue) {
+        final Intent intent = new Intent(getContext(), IssueEditor.class);
+        intent.putExtra(getString(R.string.intent_repo), mRepo.getFullName());
+        intent.putExtra(getString(R.string.parcel_issue), issue);
+        final Loader loader = Loader.getLoader(getContext());
+        loader.loadLabels(null, issue.getRepoFullName());
+        loader.loadCollaborators(null, issue.getRepoFullName());
+        if(view instanceof MarkdownTextView) {
+            UI.setClickPositionForIntent(getActivity(), intent,
+                    ((MarkdownTextView) view).getLastClickPosition()
+            );
+        } else {
+            UI.setViewPositionForIntent(intent, view);
+        }
+        startActivityForResult(intent, IssueEditor.REQUEST_CODE_EDIT_ISSUE);
+
+    }
+
+    private void toggleIssueState(Issue issue) {
+        final Editor.UpdateListener<Issue> listener = new Editor.UpdateListener<Issue>() {
+            @Override
+            public void updated(Issue toggled) {
+                mAdapter.updateIssue(toggled);
+                mRefresher.setRefreshing(false);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                }
+            }
+        };
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle(R.string.title_state_change_comment);
+        builder.setPositiveButton(R.string.action_ok, (dialog, which) -> {
+            mRefresher.setRefreshing(true);
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            i.putExtra(getString(R.string.parcel_issue), issue);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE);
+            if(issue.isClosed()) {
+                mEditor.openIssue(listener, issue.getRepoFullName(), issue.getNumber());
+            } else {
+                mEditor.closeIssue(listener, issue.getRepoFullName(), issue.getNumber());
+            }
+
+        });
+        builder.setNegativeButton(R.string.action_no, (dialog, which) -> {
+            mRefresher.setRefreshing(true);
+            if(issue.isClosed()) {
+                mEditor.openIssue(listener, issue.getRepoFullName(), issue.getNumber());
+            } else {
+                mEditor.closeIssue(listener, issue.getRepoFullName(), issue.getNumber());
+            }
+        });
+        builder.setNeutralButton(R.string.action_cancel, null);
+        builder.create().show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == IssueEditor.RESULT_OK) {
+            final String[] assignees;
+            final String[] labels;
+            if(data.hasExtra(getString(R.string.intent_issue_assignees))) {
+                assignees = data.getStringArrayExtra(getString(R.string.intent_issue_assignees));
+            } else {
+                assignees = null;
+            }
+            if(data.hasExtra(getString(R.string.intent_issue_labels))) {
+                labels = data.getStringArrayExtra(getString(R.string.intent_issue_labels));
+            } else {
+                labels = null;
+            }
+            final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
+            if(requestCode == IssueEditor.REQUEST_CODE_NEW_ISSUE) {
+
+                mRefresher.setRefreshing(true);
+                mEditor.createIssue(new Editor.CreationListener<Issue>() {
+                    @Override
+                    public void created(Issue issue) {
+                        mRefresher.setRefreshing(false);
+                        mAdapter.addIssue(issue);
+                        mRecyclerView.scrollToPosition(0);
+                    }
+
+                    @Override
+                    public void creationError(APIHandler.APIError error) {
+                        mRefresher.setRefreshing(false);
+                    }
+                }, mRepo.getFullName(), issue.getTitle(), issue.getBody(), assignees, labels);
+            } else if(requestCode == IssueEditor.REQUEST_CODE_EDIT_ISSUE) {
+                mRefresher.setRefreshing(true);
+                mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
+                    int issueCreationAttempts = 0;
+
+                    @Override
+                    public void updated(Issue issue) {
+                        mAdapter.updateIssue(issue);
+                        mRefresher.setRefreshing(false);
+                    }
+
+                    @Override
+                    public void updateError(APIHandler.APIError error) {
+                        if(error == APIHandler.APIError.NO_CONNECTION) {
+                            mRefresher.setRefreshing(false);
+                            Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        } else {
+                            if(issueCreationAttempts < 5) {
+                                issueCreationAttempts++;
+                                mEditor.updateIssue(this, mRepo.getFullName(), issue, assignees,
+                                        labels
+                                );
+                            } else {
+                                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT)
+                                     .show();
+                                mRefresher.setRefreshing(false);
+                            }
+                        }
+                    }
+                }, mRepo.getFullName(), issue, assignees, labels);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
+                final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
+                mEditor.createIssueComment(new Editor.CreationListener<Comment>() {
+                    @Override
+                    public void created(Comment comment) {
+                        mRefresher.setRefreshing(false);
+                    }
+
+                    @Override
+                    public void creationError(APIHandler.APIError error) {
+                        mRefresher.setRefreshing(false);
+                        if(error == APIHandler.APIError.NO_CONNECTION) {
+                            Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }, issue.getRepoFullName(), issue.getNumber(), comment.getBody());
+            }
+        }
+    }
+
+    @Override
+    public void notifyBackPressed() {
+
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+
+}
+
+```
+
+**RepoIssuesAdapter.java**
+``` java
+package com.tpb.projects.repo;
+
+import android.content.Intent;
+import android.support.v4.app.ActivityOptionsCompat;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Label;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.IssueActivity;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.repo.fragments.RepoIssuesFragment;
+import com.tpb.projects.util.UI;
+import com.tpb.projects.util.Util;
+import com.tpb.projects.util.search.FuzzyStringSearcher;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.IssueHolder> implements Loader.ListLoader<Issue> {
+
+    private final RepoIssuesFragment mParent;
+    private final SwipeRefreshLayout mRefresher;
+    private final ArrayList<Pair<Issue, SpannableString>> mIssues = new ArrayList<>();
+    private FuzzyStringSearcher mSearcher = new FuzzyStringSearcher();
+    private boolean mIsSearching = false;
+    private ArrayList<Integer> mSearchFilter = new ArrayList<>();
+
+    private Loader mLoader;
+    private Repository mRepo;
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private State mFilter = State.OPEN;
+    private String mAssigneeFilter;
+    private final ArrayList<String> mLabelsFilter = new ArrayList<>();
+
+    public RepoIssuesAdapter(RepoIssuesFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mLoader = Loader.getLoader(mParent.getContext());
+        mRefresher = refresher;
+        mRefresher.setOnRefreshListener(() -> {
+            final int oldSize = mIssues.size();
+            mIssues.clear();
+            mIsSearching = false;
+            notifyItemRangeRemoved(0, oldSize);
+            loadIssues(true);
+        });
+    }
+
+    public void setRepo(Repository repo) {
+        mRepo = repo;
+        mIssues.clear();
+        loadIssues(true);
+    }
+
+    public void search(String query) {
+        if(mIsLoading) return;
+        mIsSearching = true;
+        final ArrayList<String> issues = new ArrayList<>();
+        String s;
+        for(Pair<Issue, SpannableString> p : mIssues) {
+            s = "#" + p.first.getNumber();
+            if(p.first.getLabels() != null) {
+                for(Label l : p.first.getLabels()) s += "\n" + l.getName();
+            }
+            s += p.first.getTitle() + "\n" + p.first.getBody();
+            issues.add(s);
+        }
+        mSearcher.setItems(issues);
+        mSearchFilter = mSearcher.search(query);
+        notifyDataSetChanged();
+    }
+
+    public void closeSearch() {
+        mIsSearching = false;
+        mSearchFilter.clear();
+    }
+
+    public void applyFilter(State state, String assignee, ArrayList<String> labels) {
+        mIsSearching = false;
+        mSearchFilter.clear();
+        mFilter = state;
+        mAssigneeFilter = assignee;
+        mLabelsFilter.clear();
+        mLabelsFilter.addAll(labels);
+        final int oldSize = mIssues.size();
+        mIssues.clear();
+        notifyItemRangeRemoved(0, oldSize);
+        loadIssues(true);
+    }
+
+    @Override
+    public void listLoadComplete(List<Issue> issues) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(issues.size() > 0) {
+            final int oldLength = mIssues.size();
+            for(Issue i : issues) {
+                mIssues.add(Pair.create(i, null));
+            }
+            notifyItemRangeInserted(oldLength, mIssues.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadIssues(false);
+        }
+    }
+
+    private void loadIssues(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadIssues(this, mRepo.getFullName(), mFilter, mAssigneeFilter, mLabelsFilter,
+                mPage
+        );
+    }
+
+    public void addIssue(Issue issue) {
+        mIssues.add(0, Pair.create(issue, null));
+        notifyItemInserted(0);
+    }
+
+    public void updateIssue(Issue issue) {
+        int index = Util.indexOf(mIssues, issue);
+        if(index != -1) {
+            mIssues.set(index, Pair.create(issue, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    @Override
+    public IssueHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new IssueHolder(LayoutInflater.from(parent.getContext())
+                                             .inflate(R.layout.viewholder_issue, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(IssueHolder holder, int position) {
+        final int pos;
+        if(mIsSearching) {
+            pos = mSearchFilter.get(position);
+        } else {
+            pos = holder.getAdapterPosition();
+        }
+        final Issue issue = mIssues.get(pos).first;
+        holder.mTitle.setMarkdown(Formatter.bold(issue.getTitle()));
+        holder.mIssueIcon.setImageResource(
+                issue.isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open);
+        holder.mUserAvatar.setImageUrl(issue.getOpenedBy().getAvatarUrl());
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mUserAvatar,
+                issue.getOpenedBy().getLogin()
+        );
+        IntentHandler
+                .addOnClickHandler(mParent.getActivity(), holder.mContent, holder.mUserAvatar, null,
+                        issue
+                );
+        if(mIssues.get(pos).second == null) {
+            holder.mContent.setMarkdown(Markdown.formatMD(
+                    Formatter.buildCombinedIssueSpan(holder.itemView.getContext(), issue).toString(),
+                    issue.getRepoFullName()
+                    ),
+                    null,
+                    text -> mIssues.set(pos, Pair.create(issue, text))
+            );
+
+        } else {
+            holder.mContent.setText(mIssues.get(pos).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mContent, issue);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mTitle, issue);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.itemView, issue);
+    }
+
+    @Override
+    public int getItemCount() {
+        return mIsSearching ? mSearchFilter.size() : mIssues.size();
+    }
+
+    private void openIssue(IssueHolder holder, int pos) {
+        final Intent i = new Intent(mParent.getContext(), IssueActivity.class);
+        i.putExtra(mParent.getString(R.string.transition_card), "");
+        i.putExtra(mParent.getString(R.string.parcel_issue), mIssues.get(pos).first);
+        UI.setDrawableForIntent(holder.mUserAvatar, i);
+        //We have to add the nav bar as ViewOverlay is above it
+        mParent.startActivity(i, ActivityOptionsCompat.makeSceneTransitionAnimation(
+                mParent.getActivity(),
+                Pair.create(holder.itemView, mParent.getString(R.string.transition_card)),
+                UI.getSafeNavigationBarTransitionPair(mParent.getActivity())
+                ).toBundle()
+        );
+    }
+
+    class IssueHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.issue_title) MarkdownTextView mTitle;
+        @BindView(R.id.issue_content_markdown) MarkdownTextView mContent;
+        @BindView(R.id.issue_menu_button) ImageButton mMenuButton;
+        @BindView(R.id.issue_state_drawable) ImageView mIssueIcon;
+        @BindView(R.id.issue_user_avatar) NetworkImageView mUserAvatar;
+
+        IssueHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            mMenuButton.setOnClickListener(
+                    (v) -> mParent.openMenu(v, mIssues.get(getAdapterPosition()).first));
+        }
+    }
+}
+
+```
+
+### RepoProjectsFragment
+
+**RepoProjectsFragment.java**
+``` java
+package com.tpb.projects.repo.fragments;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.LinearLayoutManager;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.PopupMenu;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.models.Project;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.projects.R;
+import com.tpb.projects.common.fab.FabHideScrollListener;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.ProjectEditor;
+import com.tpb.projects.repo.RepoProjectsAdapter;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class RepoProjectsFragment extends RepoFragment {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
+    private FabHideScrollListener mFabHideScrollListener;
+    private RepoProjectsAdapter mAdapter;
+
+    public static RepoProjectsFragment newInstance() {
+        return new RepoProjectsFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mAdapter = new RepoProjectsAdapter(this, mRefresher);
+        mRecycler.enableLineDecoration();
+        mRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        mRecycler.setAdapter(mAdapter);
+        mRefresher.setOnRefreshListener(() -> mAdapter.reload());
+        mAreViewsValid = true;
+        if(mRepo != null) repoLoaded(mRepo);
+        return view;
+    }
+
+    @Override
+    public void repoLoaded(Repository repo) {
+        mRepo = repo;
+        if(!areViewsValid()) return;
+        mAdapter.setRepository(repo);
+
+    }
+
+    @Override
+    public void handleFab(FloatingActionButton fab) {
+        fab.show(true);
+        if(mFabHideScrollListener == null) {
+            mFabHideScrollListener = new FabHideScrollListener(fab);
+            mRecycler.addOnScrollListener(mFabHideScrollListener);
+        }
+        fab.setOnClickListener(v -> {
+            final Intent i = new Intent(getContext(), ProjectEditor.class);
+            UI.setViewPositionForIntent(i, fab);
+            startActivityForResult(i, ProjectEditor.REQUEST_CODE_NEW_PROJECT);
+        });
+    }
+
+    private void toggleProjectState(Project project) {
+        mRefresher.setRefreshing(true);
+        final Editor.UpdateListener<Project> listener = new Editor.UpdateListener<Project>() {
+            @Override
+            public void updated(Project updated) {
+                mRefresher.setRefreshing(false);
+                mAdapter.updateProject(updated);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        };
+        if(project.getState() == State.OPEN) {
+            Editor.getEditor(getContext()).closeProject(listener, project.getId());
+        } else {
+            Editor.getEditor(getContext()).openProject(listener, project.getId());
+        }
+    }
+
+    private void deleteProject(Project project) {
+        new AlertDialog.Builder(getContext())
+                .setTitle(R.string.title_delete_project)
+                .setMessage(R.string.text_delete_project_warning)
+                .setPositiveButton(R.string.action_ok, (dialog, which) -> {
+                    mRefresher.setRefreshing(true);
+                    Editor.getEditor(getContext()).deleteProject(
+                            new Editor.DeletionListener<Project>() {
+                                @Override
+                                public void deleted(Project project1) {
+                                    mRefresher.setRefreshing(false);
+                                    mAdapter.removeProject(project1);
+                                }
+
+                                @Override
+                                public void deletionError(APIHandler.APIError error) {
+                                    mRefresher.setRefreshing(false);
+                                }
+                            }, project);
+                })
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
+    }
+
+    private void editProject(Project project, View view) {
+        final Intent i = new Intent(getContext(), ProjectEditor.class);
+        i.putExtra(getString(R.string.parcel_project), project);
+        UI.setViewPositionForIntent(i, view);
+        startActivityForResult(i, ProjectEditor.REQUEST_CODE_EDIT_PROJECT);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == Activity.RESULT_OK) {
+
+            if(requestCode == ProjectEditor.REQUEST_CODE_NEW_PROJECT) {
+                final String name = data.getStringExtra(getString(R.string.intent_name));
+                final String body = data.getStringExtra(getString(R.string.intent_markdown));
+                mRefresher.setRefreshing(true);
+                Editor.getEditor(getContext()).createProject(
+                        new Editor.CreationListener<Project>() {
+                            @Override
+                            public void created(Project project) {
+                                mRefresher.setRefreshing(false);
+                                mAdapter.addProject(project);
+                            }
+
+                            @Override
+                            public void creationError(APIHandler.APIError error) {
+                                mRefresher.setRefreshing(false);
+                            }
+                        }, name, body, mRepo.getFullName());
+            } else if(requestCode == ProjectEditor.REQUEST_CODE_EDIT_PROJECT) {
+                mRefresher.setRefreshing(true);
+                final int id = data.getIntExtra(getString(R.string.intent_project_number), -1);
+                final String name = data.getStringExtra(getString(R.string.intent_name));
+                final String body = data.getStringExtra(getString(R.string.intent_markdown));
+                Editor.getEditor(getContext()).updateProject(
+                        new Editor.UpdateListener<Project>() {
+                            @Override
+                            public void updated(Project project) {
+                                mRefresher.setRefreshing(false);
+                                mAdapter.updateProject(project);
+                            }
+
+                            @Override
+                            public void updateError(APIHandler.APIError error) {
+                                mRefresher.setRefreshing(false);
+                            }
+                        }, name, body, id);
+            }
+        }
+    }
+
+    public void showMenu(View view, Project project) {
+        final PopupMenu pm = new PopupMenu(getContext(), view);
+        pm.inflate(R.menu.menu_project);
+        if(project.getState() == State.OPEN) {
+            pm.getMenu().add(0, R.id.menu_toggle_project_state, 0, R.string.menu_close_project);
+        } else {
+            pm.getMenu().add(0, R.id.menu_toggle_project_state, 0, R.string.menu_reopen_project);
+        }
+        pm.setOnMenuItemClickListener(item -> {
+            switch(item.getItemId()) {
+                case R.id.menu_toggle_project_state:
+                    toggleProjectState(project);
+                    break;
+                case R.id.menu_edit_project:
+                    editProject(project, view);
+                    break;
+                case R.id.menu_delete_project:
+                    deleteProject(project);
+                    break;
+            }
+            return true;
+        });
+        pm.show();
+    }
+
+    @Override
+    public void notifyBackPressed() {
+
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+**RepoProjectsAdapter.java**
+``` java
+package com.tpb.projects.repo;
+
+import android.content.Intent;
+import android.support.v4.app.ActivityOptionsCompat;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Project;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.project.ProjectActivity;
+import com.tpb.projects.repo.fragments.RepoProjectsFragment;
+import com.tpb.projects.util.Util;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public class RepoProjectsAdapter extends RecyclerView.Adapter<RepoProjectsAdapter.ProjectViewHolder> implements Loader.ListLoader<Project> {
+
+    private ArrayList<Project> mProjects = new ArrayList<>();
+    private Loader mLoader;
+    private Repository mRepo;
+    private RepoProjectsFragment mParent;
+    private SwipeRefreshLayout mRefresher;
+
+    public RepoProjectsAdapter(RepoProjectsFragment parent, SwipeRefreshLayout refresher) {
+        mLoader = Loader.getLoader(parent.getContext());
+        mParent = parent;
+        mRefresher = refresher;
+    }
+
+    public void setRepository(Repository repo) {
+        mRefresher.setRefreshing(true);
+        mLoader.loadProjects(this, repo.getFullName());
+        mRepo = repo;
+    }
+
+    public void reload() {
+        final int oldSize = mProjects.size();
+        mProjects.clear();
+        notifyItemRangeRemoved(0, oldSize);
+        mLoader.loadProjects(this, mRepo.getFullName());
+    }
+
+    @Override
+    public void listLoadComplete(List<Project> projects) {
+        mProjects.clear();
+        mProjects.addAll(projects);
+        notifyItemRangeChanged(0, mProjects.size());
+        mRefresher.setRefreshing(false);
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    public void updateProject(Project project) {
+        final int index = mProjects.indexOf(project);
+        if(index != -1) {
+            mProjects.set(index, project);
+            notifyItemChanged(index);
+        }
+    }
+
+    public void addProject(Project project) {
+        mProjects.add(0, project);
+        notifyItemInserted(0);
+    }
+
+    public void removeProject(Project project) {
+        final int index = mProjects.indexOf(project);
+        if(index != -1) {
+            mProjects.remove(index);
+            notifyItemRemoved(index);
+        }
+    }
+
+    @Override
+    public ProjectViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new ProjectViewHolder(LayoutInflater.from(parent.getContext())
+                                                   .inflate(R.layout.viewholder_project, parent,
+                                                           false
+                                                   ));
+    }
+
+    @Override
+    public void onBindViewHolder(ProjectViewHolder holder, int position) {
+        final Project p = mProjects.get(position);
+        holder.mName.setText(p.getName());
+        holder.mName.setCompoundDrawablesWithIntrinsicBounds(
+                p.getState() == State.OPEN ? R.drawable.ic_state_open : R.drawable.ic_state_closed,
+                0, 0, 0
+        );
+        holder.mLastUpdate.setText(
+                String.format(
+                        holder.itemView.getContext().getString(R.string.text_last_updated),
+                        DateUtils.getRelativeTimeSpanString(p.getUpdatedAt())
+                )
+        );
+        if(Util.isNotNullOrEmpty(p.getBody())) {
+            holder.mBody.setVisibility(View.VISIBLE);
+            holder.mBody.setMarkdown(
+                    p.getBody(),
+                    new HttpImageGetter(holder.mBody),
+                    null
+            );
+        }
+        holder.itemView.setOnClickListener(v -> {
+            final Intent i = new Intent(mParent.getContext(), ProjectActivity.class);
+            i.putExtra(mParent.getString(R.string.parcel_project), p);
+            mParent.startActivity(i,
+                    ActivityOptionsCompat.makeSceneTransitionAnimation(
+                            mParent.getActivity(),
+                            holder.mName,
+                            mParent.getString(R.string.transition_title)
+                    ).toBundle()
+            );
+            i.putExtra(mParent.getString(R.string.intent_project_number), p.getNumber());
+        });
+        holder.mMenu.setOnClickListener(v -> mParent.showMenu(holder.mMenu, p));
+
+    }
+
+    @Override
+    public int getItemCount() {
+        return mProjects.size();
+    }
+
+    static class ProjectViewHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.project_name) TextView mName;
+        @BindView(R.id.project_last_updated) TextView mLastUpdate;
+        @BindView(R.id.project_body) MarkdownTextView mBody;
+        @BindView(R.id.project_menu_button) ImageButton mMenu;
+
+        ProjectViewHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+        }
+
+    }
+}
+
+```
+
+## ContentActivity
+
+**ContentActivity.java**
+``` java
+package com.tpb.projects.repo.content;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.LinearLayoutManager;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
+import android.widget.TextView;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.FileLoader;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.content.Node;
+import com.tpb.projects.R;
+import com.tpb.projects.common.BaseActivity;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 17/02/17.
+ */
+
+public class ContentActivity extends BaseActivity implements Loader.ListLoader<Pair<String, String>> {
+    private static final String TAG = ContentActivity.class.getSimpleName();
+
+    @BindView(R.id.content_title) TextView mTitle;
+    @BindView(R.id.content_ribbon_scrollview) HorizontalScrollView mRibbonScrollView;
+    @BindView(R.id.content_file_ribbon) LinearLayout mRibbon;
+    @BindView(R.id.content_recycler) AnimatingRecyclerView mRecycler;
+    @BindView(R.id.content_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.content_branch_spinner) Spinner mBranchSpinner;
+
+    public static Node mLaunchNode;
+
+    private ContentAdapter mAdapter;
+    private List<Pair<String, String>> mBranches;
+    private String mDefaultRef;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_content);
+        ButterKnife.bind(this);
+
+        initRibbon();
+
+        final Intent launchIntent = getIntent();
+        final String repo = launchIntent.getStringExtra(getString(R.string.intent_repo));
+        mTitle.setText(repo.substring(repo.indexOf('/') + 1));
+
+        mAdapter = new ContentAdapter(new FileLoader(this), this, repo, null);
+        mRecycler.enableLineDecoration();
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setLayoutManager(new LinearLayoutManager(this));
+        mRefresher.setOnRefreshListener(() -> mAdapter.reload());
+        Loader.getLoader(this).loadBranches(this, repo);
+    }
+
+    @Override
+    public void listLoadComplete(List<Pair<String, String>> branches) {
+        mBranches = branches;
+        if(mDefaultRef != null) bindBranches();
+    }
+
+    public void setDefaultRef(String ref) {
+        if(mDefaultRef == null) {
+            mDefaultRef = ref;
+            if(mBranches != null && !mBranches.isEmpty()) {
+                bindBranches();
+            }
+        }
+    }
+
+    public void bindBranches() {
+        final List<String> branchNames = new ArrayList<>(mBranches.size());
+        for(Pair<String, String> p : mBranches) {
+            if(mDefaultRef.equals(p.first)) {
+                branchNames.add(0, p.first);
+            } else {
+                branchNames.add(p.first);
+            }
+        }
+        final ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, branchNames
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mBranchSpinner.setAdapter(adapter);
+        if(mBranchSpinner.getOnItemSelectedListener() == null) {
+            mBranchSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    mAdapter.setRef(branchNames.get(position));
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+
+                }
+            });
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    private void initRibbon() {
+        final TextView view = (TextView) getLayoutInflater()
+                .inflate(R.layout.shard_ribbon_item, mRibbon, false);
+        view.setText(R.string.text_ribbon_root);
+        view.setOnClickListener((v) -> {
+            mRibbon.removeAllViews();
+            mRibbon.addView(view);
+            mAdapter.moveToStart();
+        });
+        mRibbon.addView(view);
+    }
+
+    void addRibbonItem(final Node node) {
+        final TextView view = (TextView) getLayoutInflater()
+                .inflate(R.layout.shard_ribbon_item, mRibbon, false);
+        view.setText(node.getName());
+        view.setFocusable(false);
+        view.setOnClickListener(v -> {
+            final ArrayList<View> views = new ArrayList<>();
+            for(int i = 0; i <= mRibbon.indexOfChild(view); i++) {
+                views.add(mRibbon.getChildAt(i));
+            }
+
+            mRibbon.removeAllViews();
+            for(View item : views) mRibbon.addView(item);
+            mAdapter.moveTo(node);
+        });
+
+
+        mRibbon.addView(view);
+        mRibbon.post(() -> mRibbonScrollView.fullScroll(View.FOCUS_RIGHT));
+
+    }
+
+
+    @Override
+    public void onBackPressed() {
+        if(mRibbon.getChildCount() > 1) {
+            final ArrayList<View> views = new ArrayList<>();
+            for(int i = 0; i < mRibbon.getChildCount() - 1; i++) {
+                views.add(mRibbon.getChildAt(i));
+            }
+            mRibbon.removeAllViews();
+            for(View v : views) mRibbon.addView(v);
+            mAdapter.moveBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    public void onToolbarBackPressed(View view) {
+        super.onBackPressed();
+    }
+}
+
+```
+
+### ContentAdapter
+
+**ContentAdapter.java**
+``` java
+package com.tpb.projects.repo.content;
+
+import android.content.Intent;
+import android.support.annotation.Nullable;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.FileLoader;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.content.Node;
+import com.tpb.projects.R;
+import com.tpb.projects.repo.RepoActivity;
+import com.tpb.projects.util.Util;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Stack;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 17/02/17.
+ */
+
+public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeViewHolder> implements Loader.ListLoader<Node> {
+    private static final String TAG = ContentAdapter.class.getSimpleName();
+
+    private List<Node> mRootNodes = new ArrayList<>();
+    private List<Node> mCurrentNodes = new ArrayList<>();
+    private Node mPreviousNode;
+
+    private final ContentActivity mParent;
+    private final String mRepo;
+    private final FileLoader mLoader;
+    private boolean mIsLoading = false;
+    private String mRef;
+
+    ContentAdapter(FileLoader loader, ContentActivity parent, String repo, @Nullable String path) {
+        mLoader = loader;
+        mParent = parent;
+        mRepo = repo;
+        mParent.mRefresher.setRefreshing(true);
+        mIsLoading = true;
+        mLoader.loadDirectory(this, repo, path, null, mRef);
+    }
+
+    @Override
+    public NodeViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new NodeViewHolder(LayoutInflater.from(parent.getContext())
+                                                .inflate(R.layout.viewholder_node, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(NodeViewHolder holder, int position) {
+        if(mCurrentNodes.get(position).getType() == Node.NodeType.SYMLINK) {
+            holder.mText.setText(mCurrentNodes.get(position).getPath());
+        } else {
+            holder.mText.setText(mCurrentNodes.get(position).getName());
+        }
+        if(mCurrentNodes.get(position).getType() == Node.NodeType.FILE) {
+            holder.mText
+                    .setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_file, 0, 0, 0);
+            holder.mSize.setText(Util.formatBytes(mCurrentNodes.get(position).getSize()));
+        } else {
+            holder.mText
+                    .setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_folder, 0, 0, 0);
+            holder.mSize.setText("");
+        }
+
+    }
+
+    void setRef(String ref) {
+        if(mRef == null) {
+            mRef = ref;
+        } else {
+            mRef = ref;
+            mPreviousNode = null;
+            reload();
+        }
+
+
+    }
+
+    void reload() {
+        mCurrentNodes.clear();
+        notifyDataSetChanged();
+        if(mPreviousNode == null) {
+            mLoader.loadDirectory(this, mRepo, null, null, mRef);
+        } else {
+            mLoader.loadDirectory(this, mRepo, mPreviousNode.getPath(), mPreviousNode, mRef);
+        }
+    }
+
+    void moveToStart() {
+        mCurrentNodes = mRootNodes;
+        mPreviousNode = null;
+        notifyDataSetChanged();
+    }
+
+    void moveTo(Node node) {
+        mPreviousNode = node;
+        mCurrentNodes = node.getChildren();
+        notifyDataSetChanged();
+    }
+
+    void moveBack() {
+        /*
+        If we are at the root, mPreviousNode is null
+        If we are one layer down, mPreviousNode is non null, but its parent is null
+        If we are further down, both mPreviousNode and its parent are non null
+         */
+        if(mPreviousNode != null) {
+            if(mPreviousNode.getParent() == null) {
+                mPreviousNode = mPreviousNode.getParent();
+                mCurrentNodes = mRootNodes;
+                notifyDataSetChanged();
+            } else {
+                mCurrentNodes = mPreviousNode.getParent().getChildren();
+                mPreviousNode = mPreviousNode.getParent();
+                notifyDataSetChanged();
+            }
+        }
+
+    }
+
+    private void loadNode(int pos) {
+        if(mIsLoading) return;
+        final Node node = mCurrentNodes.get(pos);
+        if(node.getType() == Node.NodeType.FILE) {
+            ContentActivity.mLaunchNode = node;
+            final Intent file = new Intent(mParent, FileActivity.class);
+            mParent.startActivity(file);
+        } else if(node.getType() == Node.NodeType.SUBMODULE) {
+            final Intent i = new Intent(mParent, RepoActivity.class);
+            String path = node.getHtmlUrl();
+            path = path.substring(path.indexOf("com/") + 4, path.indexOf("/tree"));
+            i.putExtra(mParent.getString(R.string.intent_repo), path);
+            mParent.startActivity(i);
+        } else {
+            mParent.addRibbonItem(node);
+            mPreviousNode = node;
+            mParent.mRefresher.setRefreshing(true);
+            mIsLoading = true;
+            if(node.getChildren().size() == 0) {
+                mLoader.loadDirectory(this, mRepo, node.getPath(), node, mRef);
+            } else {
+                mParent.mRefresher.setRefreshing(true);
+                listLoadComplete(node.getChildren());
+            }
+        }
+    }
+
+    private Loader.ListLoader<Node> backgroundLoader = new Loader.ListLoader<Node>() {
+        @Override
+        public void listLoadComplete(List<Node> directory) {
+            if(directory.size() == 0) return;
+            final Node parent = directory.get(0).getParent();
+            for(Node n : mCurrentNodes) { //Most likely here
+                if(parent.equals(n)) {
+                    n.setChildren(directory);
+                    return;
+                }
+            }
+
+            final Stack<Node> stack = new Stack<>();
+            Node current;
+            for(Node n : mRootNodes) {
+                stack.push(n);
+                while(!stack.isEmpty()) {
+                    current = stack.pop();
+                    for(Node child : current.getChildren()) {
+                        if(parent.equals(child)) {
+                            parent.setChildren(directory);
+                            return;
+                        }
+                        stack.push(child);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void listLoadError(APIHandler.APIError error) {
+
+        }
+    };
+
+    @Override
+    public void listLoadComplete(List<Node> directory) {
+        if(mPreviousNode == null) { //We are at the root
+            mRootNodes = directory;
+            mCurrentNodes = directory;
+            mPreviousNode = null;
+            notifyItemRangeInserted(0, mCurrentNodes.size());
+            if(mCurrentNodes.size() > 0) mParent.setDefaultRef(mCurrentNodes.get(0).getRef());
+        } else {
+            mPreviousNode.setChildren(directory);
+            mCurrentNodes = directory;
+            notifyDataSetChanged();
+        }
+        mIsLoading = false;
+        mParent.mRefresher.setRefreshing(false);
+        for(Node n : directory) {
+            if(n.getType() == Node.NodeType.DIRECTORY && n.getChildren().size() == 0) {
+                mLoader.loadDirectory(backgroundLoader, mRepo, n.getPath(), n, mRef);
+            }
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mIsLoading = false;
+        mParent.mRefresher.setRefreshing(false);
+    }
+
+    @Override
+    public int getItemCount() {
+        return mCurrentNodes.size();
+    }
+
+    class NodeViewHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.node_text) TextView mText;
+        @BindView(R.id.node_size) TextView mSize;
+
+        NodeViewHolder(View itemView) {
+            super(itemView);
+            ButterKnife.bind(this, itemView);
+            itemView.setOnClickListener((v) -> loadNode(getAdapterPosition()));
+        }
+    }
+
+}
+
+```
+
+### FileActivity
+
+**FileActivity.java**
+``` java
+package com.tpb.projects.repo.content;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v7.app.AppCompatActivity;
+import android.view.View;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+
+import com.androidnetworking.error.ANError;
+import com.androidnetworking.interfaces.StringRequestListener;
+import com.pddstudio.highlightjs.HighlightJsView;
+import com.pddstudio.highlightjs.models.Language;
+import com.pddstudio.highlightjs.models.Theme;
+import com.tpb.github.data.FileLoader;
+import com.tpb.github.data.models.content.Node;
+import com.tpb.projects.R;
+import com.tpb.projects.util.SettingsActivity;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 19/02/17.
+ */
+
+public class FileActivity extends AppCompatActivity {
+    private static final String TAG = FileActivity.class.getSimpleName();
+
+    @BindView(R.id.file_name) TextView mName;
+    @BindView(R.id.file_webview) HighlightJsView mWebView;
+    @BindView(R.id.file_loading_spinner) ProgressBar mSpinner;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        setContentView(R.layout.activity_file);
+        ButterKnife.bind(this);
+
+        if(prefs.isDarkThemeEnabled()) {
+            mWebView.setTheme(Theme.ANDROID_STUDIO);
+        }
+        mWebView.setZoomSupportEnabled(true);
+        mWebView.setShowLineNumbers(true);
+        mWebView.getSettings().setLoadWithOverviewMode(true);
+        mWebView.setOnContentChangedListener(() -> {
+            mSpinner.setVisibility(View.GONE);
+            mWebView.setVisibility(View.VISIBLE);
+        });
+        final StringRequestListener fileLoadListener = new StringRequestListener() {
+            @Override
+            public void onResponse(String response) {
+                mWebView.setSource(response.replace("&#", "&#38;&#35;"));
+            }
+
+            @Override
+            public void onError(ANError anError) {
+                mSpinner.setVisibility(View.GONE);
+            }
+        };
+        if(getIntent().hasExtra(getString(R.string.intent_blob_path))) {
+            final String repo = getIntent().getStringExtra(getString(R.string.intent_repo));
+            final String blob = getIntent().getStringExtra(getString(R.string.intent_blob_path));
+            final int nameStart = blob.lastIndexOf('/') + 1;
+            if(nameStart < blob.length()) {
+                mName.setText(blob.substring(nameStart));
+            }
+            mWebView.setHighlightLanguage(getLanguage(getFileType(blob)));
+            new FileLoader(this).loadRawFile(fileLoadListener,
+                    "https://raw.githubusercontent.com/" + repo + blob
+            );
+        } else if(getIntent().hasExtra(getString(R.string.intent_gist_url))) {
+            final String url = getIntent().getStringExtra(getString(R.string.intent_gist_url));
+            mWebView.setHighlightLanguage(getLanguage(getFileType(url)));
+            new FileLoader(this).loadRawFile(fileLoadListener, url);
+        } else if(ContentActivity.mLaunchNode != null) {
+            final Node node = ContentActivity.mLaunchNode;
+            mName.setText(node.getName());
+            mWebView.setHighlightLanguage(getLanguage(getFileType(node.getUrl())));
+            new FileLoader(this).loadRawFile(fileLoadListener, node.getDownloadUrl());
+        } else {
+            finish();
+        }
+    }
+
+    private static String getFileType(String path) {
+        final int qIndex = path.lastIndexOf('?');
+        return path.substring(path.lastIndexOf('.') + 1, qIndex > 0 ? qIndex : path.length());
+    }
+
+    private static Language getLanguage(String lang) {
+        for(Language l : Language.values()) {
+            if(l.toString().equalsIgnoreCase(lang)) return l;
+        }
+        return Language.AUTO_DETECT;
+    }
+
+    public void onToolbarBackPressed(View view) {
+        onBackPressed();
+    }
+
+}
+
+```
+
+## ProjectActivity
+
+**ProjectActivity.java**
+``` java
+package com.tpb.projects.project;
+
+import android.app.Dialog;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Rect;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Parcel;
+import android.support.annotation.Nullable;
+import android.support.design.widget.Snackbar;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.view.ViewPager;
+import android.support.v4.widget.NestedScrollView;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.SearchView;
+import android.support.v7.widget.Toolbar;
+import android.util.DisplayMetrics;
+import android.view.DragEvent;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.commonsware.cwac.pager.PageDescriptor;
+import com.commonsware.cwac.pager.v4.ArrayPagerAdapter;
+import com.google.firebase.analytics.FirebaseAnalytics;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Card;
+import com.tpb.github.data.models.Column;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Project;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.projects.R;
+import com.tpb.projects.common.BaseActivity;
+import com.tpb.projects.common.ShortcutDialog;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.common.fab.FloatingActionMenu;
+import com.tpb.projects.editors.CardEditor;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.editors.IssueEditor;
+import com.tpb.projects.util.Analytics;
+import com.tpb.projects.util.Logger;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+
+
+/**
+ * Created by theo on 19/12/16.
+ */
+
+public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<Project> {
+    private static final String TAG = ProjectActivity.class.getSimpleName();
+    private static final String URL = "https://github.com/tpb1908/AndroidProjectsClient/blob/master/app/src/main/java/com/tpb/projects/project/ProjectActivity.java";
+
+    private FirebaseAnalytics mAnalytics;
+
+    @BindView(R.id.project_toolbar) Toolbar mToolbar;
+    @BindView(R.id.project_name) TextView mName;
+    @BindView(R.id.project_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.project_column_pager) ViewPager mColumnPager;
+    @BindView(R.id.project_fab_menu) FloatingActionMenu mMenu;
+    @BindView(R.id.project_add_card) FloatingActionButton mAddCard;
+    @BindView(R.id.project_add_column) FloatingActionButton mAddColumn;
+    @BindView(R.id.project_add_issue) FloatingActionButton mAddIssue;
+    private SearchView mSearchView;
+    private MenuItem mSearchItem;
+
+    private ColumnPagerAdapter mAdapter;
+    private int mCurrentPosition = -1;
+    private Loader mLoader;
+    Project mProject;
+    private Editor mEditor;
+    private NavigationDragListener mNavListener;
+    private Repository.AccessLevel mAccessLevel = Repository.AccessLevel.ADMIN;
+    private int mLaunchCardId = -1;
+    private int mLoadCount;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_project);
+        ButterKnife.bind(this);
+        mAnalytics = FirebaseAnalytics.getInstance(this);
+        mAnalytics.setAnalyticsCollectionEnabled(prefs.areAnalyticsEnabled());
+
+        final Intent launchIntent = getIntent();
+        mLoader = Loader.getLoader(this);
+        mEditor = Editor.getEditor(this);
+
+        setSupportActionBar(mToolbar);
+        getSupportActionBar().setDisplayShowTitleEnabled(false);
+
+        if(launchIntent.hasExtra(getString(R.string.parcel_project))) {
+            loadComplete(launchIntent.getParcelableExtra(getString(R.string.parcel_project)));
+            if(launchIntent.hasExtra(getString(R.string.intent_access_level))) {
+                mAccessLevel = (Repository.AccessLevel) launchIntent
+                        .getSerializableExtra(getString(R.string.intent_access_level));
+                if(mAccessLevel == Repository.AccessLevel.ADMIN || mAccessLevel == Repository.AccessLevel.WRITE) {
+                    new Handler().postDelayed(() -> mMenu.showMenuButton(true), 400);
+                }
+            } else {
+                checkAccess(mProject);
+            }
+        } else {
+            final String repo = launchIntent.getStringExtra(getString(R.string.intent_repo));
+            final int number = launchIntent
+                    .getIntExtra(getString(R.string.intent_project_number), 1);
+            if(launchIntent.hasExtra(getString(R.string.intent_card_id))) {
+                mLaunchCardId = launchIntent.getIntExtra(getString(R.string.intent_card_id), -1);
+            }
+            loadFromId(repo, number);
+        }
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
+        mAdapter = new ColumnPagerAdapter(getSupportFragmentManager(), new ArrayList<>());
+        mColumnPager.setAdapter(mAdapter);
+        mColumnPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
+            @Override
+            public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+
+            }
+
+            @Override
+            public void onPageSelected(int position) {
+                mCurrentPosition = position;
+                if(mAccessLevel == Repository.AccessLevel.ADMIN || mAccessLevel == Repository.AccessLevel.WRITE) {
+                    showFab();
+                }
+            }
+
+            @Override
+            public void onPageScrollStateChanged(int state) {
+                if(state == ViewPager.SCROLL_STATE_DRAGGING) {
+                    mRefresher.setEnabled(false);
+                } else if(state == ViewPager.SCROLL_STATE_IDLE) {
+                    mRefresher.setEnabled(true);
+                }
+            }
+        });
+        mRefresher.setRefreshing(true);
+        mMenu.hideMenuButton(false); //Hide the button so that we can show it later
+        mMenu.setClosedOnTouchOutside(true);
+        mRefresher.setOnRefreshListener(() -> {
+            if(mProject != null) {
+                mLoader.loadProject(ProjectActivity.this, mProject.getId());
+            } else {
+                final String repo = launchIntent.getStringExtra(getString(R.string.intent_repo));
+                final int number = launchIntent
+                        .getIntExtra(getString(R.string.intent_project_number), 1);
+                loadFromId(repo, number);
+            }
+        });
+        mRefresher.setOnChildScrollUpCallback((parent, child) -> {
+            mAdapter.getCurrentFragment().notifyScroll();
+            return false;
+        });
+        mNavListener = new NavigationDragListener();
+        mRefresher.setOnDragListener(mNavListener);
+    }
+
+    private void loadFromId(String repo, int number) {
+        //We have to load all of the projects to get the id that we want
+        mLoader.loadProjects(new Loader.ListLoader<Project>() {
+            int projectLoadAttempts = 0;
+
+            @Override
+            public void listLoadComplete(List<Project> projects) {
+                for(Project p : projects) {
+                    if(number == p.getNumber()) {
+                        ProjectActivity.this.loadComplete(p);
+                        checkAccess(p);
+                        return;
+                    }
+                }
+                Toast.makeText(ProjectActivity.this, R.string.error_project_not_found,
+                        Toast.LENGTH_LONG
+                ).show();
+                finish();
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT).show();
+
+                } else {
+                    if(projectLoadAttempts < 5) {
+                        projectLoadAttempts++;
+                        mLoader.loadProjects(this, repo);
+                    } else {
+                        Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
+                             .show();
+                        mRefresher.setRefreshing(false);
+                    }
+                }
+            }
+        }, repo);
+    }
+
+    private void checkAccess(Project project) {
+        mLoader.checkAccessToRepository(new Loader.ItemLoader<Repository.AccessLevel>() {
+            int accessCheckAttempts = 0;
+
+            @Override
+            public void loadComplete(Repository.AccessLevel data) {
+                mAccessLevel = data;
+                if(mAccessLevel == Repository.AccessLevel.ADMIN || mAccessLevel == Repository.AccessLevel.WRITE) {
+                    mMenu.showMenuButton(true);
+                } else {
+                    mMenu.hideMenuButton(false);
+                }
+                for(int i = 0; i < mAdapter.getCount(); i++) {
+                    if(mAdapter.getExistingFragment(i) != null) {
+                        mAdapter.getExistingFragment(i).setAccessLevel(mAccessLevel);
+                    }
+                }
+            }
+
+            @Override
+            public void loadError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT).show();
+
+                } else {
+                    if(accessCheckAttempts < 5) {
+                        accessCheckAttempts++;
+                        mLoader.checkAccessToRepository(this,
+                                GitHubSession.getSession(ProjectActivity.this).getUserLogin(),
+                                project.getRepoPath()
+                        );
+                    } else {
+                        Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
+                             .show();
+                        mRefresher.setRefreshing(false);
+                    }
+                }
+            }
+        }, GitHubSession.getSession(this).getUserLogin(), project.getRepoPath());
+    }
+
+    void showFab() {
+        mMenu.showMenuButton(true);
+    }
+
+    void hideFab() {
+        mMenu.hideMenuButton(true);
+    }
+
+    @Override
+    public void loadComplete(Project project) {
+        mProject = project;
+        mLoader.loadLabels(null, mProject.getRepoPath());
+        mName.setText(mProject.getName());
+        mName.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                project.getState() == State.OPEN ? R.drawable.ic_state_open : R.drawable.ic_state_closed,
+                0, 0, 0
+        );
+
+        final Bundle bundle = new Bundle();
+        bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_SUCCESS);
+        mAnalytics.logEvent(Analytics.TAG_PROJECT_LOADED, bundle);
+        mLoadCount = 0;
+        mLoader.loadColumns(new Loader.ListLoader<Column>() {
+            @Override
+            public void listLoadComplete(List<Column> columns) {
+                if(columns.size() > 0) {
+                    mAddCard.setVisibility(View.INVISIBLE);
+                    mAddIssue.setVisibility(View.INVISIBLE);
+
+                    int id = 0;
+                    if(mCurrentPosition != -1) {
+                        id = mAdapter.getCurrentFragment().mColumn.getId();
+                    }
+                    mCurrentPosition = 0;
+                    mAdapter.columns = new ArrayList<>(columns);
+                    if(mAdapter.getCount() != 0) {
+                        for(int i = mAdapter.getCount() - 1; i >= 0; i--) mAdapter.remove(i);
+                    }
+                    for(int i = 0; i < columns.size(); i++) {
+                        mAdapter.add(new ColumnPageDescriptor(columns.get(i)));
+                        if(columns.get(i).getId() == id) {
+                            mCurrentPosition = i;
+                        }
+                    }
+                    mColumnPager.setOffscreenPageLimit(mAdapter.getCount());
+                    if(mCurrentPosition >= mAdapter.getCount()) {
+                        mCurrentPosition = mAdapter.getCount() - 1;
+                        //If the end column has been deleted
+                    }
+                    mColumnPager.setCurrentItem(mCurrentPosition, true);
+                    mColumnPager.postDelayed(() -> mColumnPager.setVisibility(View.VISIBLE), 300);
+                } else {
+                    mRefresher.setRefreshing(false);
+                    mAddCard.setVisibility(View.GONE);
+                    mAddIssue.setVisibility(View.GONE);
+                }
+
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_SUCCESS);
+                bundle.putInt(Analytics.KEY_COLUMN_COUNT, columns.size() + 1);
+                mAnalytics.logEvent(Analytics.TAG_COLUMNS_LOADED, bundle);
+            }
+
+            @Override
+            public void listLoadError(APIHandler.APIError error) {
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_COLUMNS_LOADED, bundle);
+            }
+        }, mProject.getId());
+
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
+        final Bundle bundle = new Bundle();
+        bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_FAILURE);
+        mAnalytics.logEvent(Analytics.TAG_PROJECT_LOADED, bundle);
+    }
+
+    void loadIssue(Loader.ItemLoader<Issue> loader, int issueId, Column column) {
+        mLoader.loadIssue(loader, mProject.getRepoPath(), issueId,
+                mAdapter.indexOf(column.getId()) == mCurrentPosition
+        );
+    }
+
+    @OnClick(R.id.project_add_column)
+    void addColumn() {
+        mMenu.close(true);
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(R.layout.dialog_new_column)
+                .setTitle(R.string.title_new_column)
+                .setNegativeButton(R.string.action_cancel, null)
+                .create();
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, getString(R.string.action_ok), (di, w) -> {
+        }); //Null is ambiguous so we pass empty lambda
+        dialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+        dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            final EditText editor = (EditText) dialog.findViewById(R.id.project_new_column);
+            final String text = editor.getText().toString();
+            final InputMethodManager imm = (InputMethodManager) getSystemService(
+                    Context.INPUT_METHOD_SERVICE);
+            if(imm.isActive()) {
+                imm.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0);
+            }
+            if(!text.isEmpty()) {
+                mRefresher.setRefreshing(true);
+                mEditor.addColumn(new Editor.CreationListener<Column>() {
+                    int addColumnAttempts = 0;
+
+                    @Override
+                    public void created(Column column) {
+                        mAddCard.setVisibility(View.INVISIBLE);
+                        mAddIssue.setVisibility(View.INVISIBLE);
+                        mAdapter.columns.add(column);
+                        if(mAdapter.columns.size() == 0) {
+                            mAdapter.notifyDataSetChanged();
+                        } else {
+                            mAdapter.add(new ColumnPageDescriptor(column));
+                            mColumnPager.setCurrentItem(mAdapter.getCount(), true);
+                        }
+                        mRefresher.setRefreshing(false);
+                        final Bundle bundle = new Bundle();
+                        bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                        mAnalytics.logEvent(Analytics.TAG_COLUMN_ADD, bundle);
+                    }
+
+                    @Override
+                    public void creationError(APIHandler.APIError error) {
+                        if(error == APIHandler.APIError.NO_CONNECTION) {
+                            mRefresher.setRefreshing(false);
+                            Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
+                                 .show();
+
+                        } else {
+                            if(addColumnAttempts < 5) {
+                                addColumnAttempts++;
+                                mEditor.addColumn(this, mProject.getId(), text);
+                            } else {
+                                Toast.makeText(ProjectActivity.this, error.resId,
+                                        Toast.LENGTH_SHORT
+                                ).show();
+                                mRefresher.setRefreshing(false);
+                            }
+                        }
+                        final Bundle bundle = new Bundle();
+                        bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                        mAnalytics.logEvent(Analytics.TAG_COLUMN_ADD, bundle);
+                    }
+                }, mProject.getId(), text);
+                dialog.dismiss();
+            } else {
+                Toast.makeText(this, R.string.error_no_column_title, Toast.LENGTH_SHORT).show();
+            }
+        });
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
+            final InputMethodManager imm = (InputMethodManager) getSystemService(
+                    Context.INPUT_METHOD_SERVICE);
+            if(imm.isActive()) {
+                imm.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0);
+            }
+            dialog.dismiss();
+        });
+        final InputMethodManager imm = (InputMethodManager) getSystemService(
+                Context.INPUT_METHOD_SERVICE);
+        imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
+    }
+
+    @OnClick(R.id.project_add_issue)
+    void addIssue() {
+        final Intent intent = new Intent(ProjectActivity.this, IssueEditor.class);
+        intent.putExtra(getString(R.string.intent_repo), mProject.getRepoPath());
+        UI.setViewPositionForIntent(intent, mAddIssue);
+        startActivityForResult(intent, IssueEditor.REQUEST_CODE_NEW_ISSUE);
+    }
+
+    @OnClick(R.id.project_add_card)
+    void addCard() {
+        final Intent intent = new Intent(this, CardEditor.class);
+
+        final ArrayList<Integer> ids = new ArrayList<>();
+        for(int i = 0; i < mAdapter.getCount(); i++) {
+            for(Card c : mAdapter.getExistingFragment(i).getCards()) {
+                if(c.hasIssue()) ids.add(c.getIssue().getId());
+            }
+        }
+        UI.setViewPositionForIntent(intent, mAddCard);
+        intent.putExtra(getString(R.string.intent_repo), mProject.getRepoPath());
+        intent.putIntegerArrayListExtra(getString(R.string.intent_int_arraylist), ids);
+        startActivityForResult(intent, CardEditor.REQUEST_CODE_NEW_CARD);
+    }
+
+    void deleteColumn(Column column) {
+        new AlertDialog.Builder(this, R.style.DialogAnimation)
+                .setTitle(R.string.title_delete_column)
+                .setMessage(R.string.text_delete_column_warning)
+                .setNegativeButton(R.string.action_cancel, null)
+                .setPositiveButton(R.string.action_ok, (dialogInterface, i) -> {
+                    mRefresher.setRefreshing(true);
+                    mEditor.deleteColumn(new Editor.DeletionListener<Integer>() {
+                        int deleteColumnAttempts = 0;
+
+                        @Override
+                        public void deleted(Integer integer) {
+                            mAdapter.remove(mCurrentPosition);
+                            mAdapter.columns.remove(mCurrentPosition);
+                            mRefresher.setRefreshing(false);
+                            if(mAdapter.columns.size() == 0) {
+                                mAddCard.setVisibility(View.GONE);
+                                mAddIssue.setVisibility(View.GONE);
+                            }
+                            final Bundle bundle = new Bundle();
+                            bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                            mAnalytics.logEvent(Analytics.TAG_COLUMN_DELETE, bundle);
+                        }
+
+                        @Override
+                        public void deletionError(APIHandler.APIError error) {
+                            if(error == APIHandler.APIError.NO_CONNECTION) {
+                                mRefresher.setRefreshing(false);
+                                Toast.makeText(ProjectActivity.this, error.resId,
+                                        Toast.LENGTH_SHORT
+                                ).show();
+
+                            } else {
+                                if(deleteColumnAttempts < 5) {
+                                    deleteColumnAttempts++;
+                                    mEditor.deleteColumn(this, column.getId());
+                                } else {
+                                    Toast.makeText(ProjectActivity.this, error.resId,
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+                                    mRefresher.setRefreshing(false);
+                                }
+                            }
+                            final Bundle bundle = new Bundle();
+                            bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                            mAnalytics.logEvent(Analytics.TAG_COLUMN_DELETE, bundle);
+                        }
+                    }, column.getId());
+                }).show();
+
+    }
+
+    /**
+     * @param tag       id of the column being moved
+     * @param dropTag   id of the column being dropped onto
+     * @param direction side of the drop column to drop to true=left false=right
+     */
+    void moveColumn(int tag, int dropTag, boolean direction) {
+        final int from = mAdapter.indexOf(tag);
+        final int to;
+        if(direction) {
+            to = Math.max(0, mAdapter.indexOf(dropTag) - 1);
+        } else {
+            to = Math.min(mAdapter.getCount() - 1, mAdapter.indexOf(dropTag) + 1);
+        }
+        Logger.i(TAG, "moveColumn: From " + from + ", to " + to);
+        mAdapter.move(from, to);
+        mAdapter.columns.add(to, mAdapter.columns.remove(from));
+        mColumnPager.setCurrentItem(to, true);
+        mEditor.moveColumn(new Editor.UpdateListener<Integer>() {
+            @Override
+            public void updated(Integer integer) {
+
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+
+            }
+        }, tag, dropTag, to);
+    }
+
+    void deleteCard(Card card, boolean showWarning) {
+        final Editor.DeletionListener<Card> listener = new Editor.DeletionListener<Card>() {
+            @Override
+            public void deleted(Card card) {
+                mRefresher.setRefreshing(false);
+                mAdapter.getCurrentFragment().removeCard(card);
+                Snackbar.make(findViewById(R.id.project_coordinator),
+                        getString(R.string.text_note_deleted), Snackbar.LENGTH_LONG
+                )
+                        .setAction(getString(R.string.action_undo),
+                                view -> mAdapter.getCurrentFragment().recreateCard(card)
+                        )
+                        .show();
+            }
+
+            @Override
+            public void deletionError(APIHandler.APIError error) {
+
+            }
+        };
+        if(showWarning) {
+            final Dialog dialog = new AlertDialog.Builder(this)
+                    .setTitle(R.string.title_delete_card)
+                    .setMessage(R.string.text_delete_note_warning)
+                    .setNegativeButton(R.string.action_cancel, null)
+                    .setPositiveButton(R.string.action_ok, (dialogInterface, i) -> {
+                        mRefresher.setRefreshing(true);
+                        mEditor.deleteCard(listener, card);
+                    }).create();
+            dialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+            dialog.show();
+        } else {
+            mRefresher.setRefreshing(true);
+            mEditor.deleteCard(listener, card);
+        }
+    }
+
+    private void dragLeft() {
+        if(mCurrentPosition > 0) {
+            mColumnPager.setCurrentItem(mCurrentPosition - 1, true);
+        }
+    }
+
+    private void dragRight() {
+        if(mCurrentPosition < mAdapter.getCount()) {
+            mColumnPager.setCurrentItem(mCurrentPosition + 1, true);
+        }
+    }
+
+    private void dragUp() {
+        mAdapter.getCurrentFragment().scrollUp();
+    }
+
+    private void dragDown() {
+        mAdapter.getCurrentFragment().scrollDown();
+    }
+
+    void notifyFragmentLoaded() {
+        mLoadCount++;
+        if(mLoadCount == mAdapter.getCount()) {
+            mRefresher.setRefreshing(false);
+            if(mLaunchCardId != -1) {
+                new Handler().postDelayed(() -> mAdapter.moveTo(mLaunchCardId), 500);
+            }
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if(mMenu.isOpened()) {
+            mMenu.close(true);
+        } else {
+            /*
+            This seems to fix the problem with RecyclerView view detaching
+            Quick and dirty way of removing the com.tpb.mdtext.views
+             */
+            mColumnPager.setAdapter(null);
+            mMenu.hideMenuButton(true);
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_activity_search, menu);
+        mSearchItem = menu.findItem(R.id.menu_action_search);
+
+        if(mSearchItem != null) {
+            mSearchView = (SearchView) mSearchItem.getActionView();
+        }
+
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch(item.getItemId()) {
+            case R.id.menu_settings:
+                startActivity(new Intent(ProjectActivity.this, SettingsActivity.class));
+                break;
+            case R.id.menu_source:
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
+                break;
+            case R.id.menu_share:
+                final Intent share = new Intent();
+                share.setAction(Intent.ACTION_SEND);
+                share.putExtra(Intent.EXTRA_TEXT, "https://github.com/" +
+                        mProject.getRepoPath() +
+                        "/projects/" +
+                        Integer.toString(mProject.getNumber()));
+                share.setType("text/plain");
+                startActivity(share);
+                break;
+            case R.id.menu_save_to_homescreen:
+                final ShortcutDialog dialog = new ShortcutDialog();
+                final Bundle args = new Bundle();
+                args.putInt(getString(R.string.intent_title_res),
+                        R.string.title_save_project_shortcut
+                );
+                args.putString(getString(R.string.intent_name), mProject.getName());
+
+                dialog.setArguments(args);
+                dialog.setListener((name, iconFlag) -> {
+                    final Intent i = new Intent(getApplicationContext(), ProjectActivity.class);
+                    i.putExtra(getString(R.string.intent_repo), mProject.getRepoPath());
+                    i.putExtra(getString(R.string.intent_project_number), mProject.getNumber());
+
+                    final Intent add = new Intent();
+                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
+                    add.putExtra("duplicate", false);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource
+                            .fromContext(getApplicationContext(), R.mipmap.ic_launcher));
+                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
+                    getApplicationContext().sendBroadcast(add);
+                });
+                dialog.show(getSupportFragmentManager(), TAG);
+                break;
+            case R.id.menu_action_search:
+                if(mAdapter.getCount() > 0) {
+                    final SearchView.SearchAutoComplete searchSrc = (SearchView.SearchAutoComplete) mSearchView
+                            .findViewById(android.support.v7.appcompat.R.id.search_src_text);
+                    searchSrc.setThreshold(1);
+                    final ProjectSearchAdapter searchAdapter = new ProjectSearchAdapter(this,
+                            mAdapter.getAllCards()
+                    );
+                    searchSrc.setAdapter(searchAdapter);
+                    searchSrc.setOnItemClickListener((adapterView, view, i, l) -> {
+                        mSearchItem.collapseActionView();
+                        mAdapter.moveTo(searchAdapter.getItem(i).getId());
+                    });
+                }
+        }
+
+
+        return true;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        mMenu.close(true);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            mRefresher.setRefreshing(true);
+            if(requestCode == IssueEditor.REQUEST_CODE_NEW_ISSUE) {
+                String[] assignees = null;
+                String[] labels = null;
+                if(data.hasExtra(getString(R.string.intent_issue_assignees))) {
+                    assignees = data
+                            .getStringArrayExtra(getString(R.string.intent_issue_assignees));
+                }
+                if(data.hasExtra(getString(R.string.intent_issue_labels))) {
+                    labels = data.getStringArrayExtra(getString(R.string.intent_issue_labels));
+                }
+                final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
+                mEditor.createIssue(new Editor.CreationListener<Issue>() {
+                    @Override
+                    public void created(Issue issue) {
+                        mAdapter.getCurrentFragment().createIssueCard(issue);
+                        final Bundle bundle = new Bundle();
+                        bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                        mAnalytics.logEvent(Analytics.TAG_ISSUE_CREATED, bundle);
+                        mRefresher.setRefreshing(false);
+                    }
+
+                    @Override
+                    public void creationError(APIHandler.APIError error) {
+                        final Bundle bundle = new Bundle();
+                        bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                        mAnalytics.logEvent(Analytics.TAG_ISSUE_CREATED, bundle);
+                        mRefresher.setRefreshing(false);
+                    }
+                }, mProject.getRepoPath(), issue.getTitle(), issue.getBody(), assignees, labels);
+
+            } else if(requestCode == CardEditor.REQUEST_CODE_NEW_CARD) {
+                final Card card = data.getParcelableExtra(getString(R.string.parcel_card));
+                if(card.hasIssue()) {
+                    mAdapter.getCurrentFragment().createIssueCard(card.getIssue());
+                } else {
+                    mAdapter.getCurrentFragment().newCard(card);
+                }
+            } else if(requestCode == CardEditor.REQUEST_CODE_EDIT_CARD) {
+                mAdapter.getCurrentFragment()
+                        .editCard(data.getParcelableExtra(getString(R.string.parcel_card)));
+            } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
+                final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
+                final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
+                mEditor.createIssueComment(new Editor.CreationListener<Comment>() {
+                    @Override
+                    public void created(Comment comment) {
+                        Toast.makeText(ProjectActivity.this, R.string.text_comment_created,
+                                Toast.LENGTH_SHORT
+                        ).show();
+                        mRefresher.setRefreshing(false);
+                    }
+
+                    @Override
+                    public void creationError(APIHandler.APIError error) {
+                        mRefresher.setRefreshing(false);
+                    }
+                }, issue.getRepoFullName(), issue.getNumber(), comment.getBody());
+            } else if(requestCode == IssueEditor.REQUEST_CODE_EDIT_ISSUE) {
+                mAdapter.getCurrentFragment().onActivityResult(requestCode, resultCode, data);
+            }
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mAnalytics.setAnalyticsCollectionEnabled(
+                SettingsActivity.Preferences.getPreferences(this).areAnalyticsEnabled());
+    }
+
+    class NavigationDragListener implements View.OnDragListener {
+
+        private long mLastPageChange = 0;
+
+        @Override
+        public boolean onDrag(View view, DragEvent event) {
+            final DisplayMetrics metrics = getResources().getDisplayMetrics();
+            if(event.getAction() == DragEvent.ACTION_DRAG_ENTERED && view
+                    .getId() == R.id.viewholder_card) {
+                final RecyclerView rv = (RecyclerView) view.getParent();
+                final CardAdapter ca = (CardAdapter) rv.getAdapter();
+                final Rect r = new Rect();
+                ((NestedScrollView) rv.getParent().getParent()).getHitRect(r);
+                int first = -1;
+                int last = -1;
+                for(int i = 0; i < rv.getAdapter().getItemCount(); i++) {
+                    if(rv.getChildAt(i).getLocalVisibleRect(r)) {
+                        if(first == -1) {
+                            first = i;
+                        } else if(i == rv.getAdapter().getItemCount() - 1) {
+                            last = i;
+                        }
+                    } else if(first != -1) {
+                        last = i - 1;
+                        break;
+                    }
+                }
+                final int tp = ca.indexOf((int) view.getTag());
+                final float relativePos = event.getY() - view.getY();
+                final int[] pos = new int[2];
+                if(tp == first) {
+                    rv.getChildAt(first).getLocationOnScreen(pos);
+                    if(pos[1] + relativePos < 0.1 * metrics.heightPixels) {
+                        dragUp();
+                    }
+                    Logger.i(TAG, "onDrag: At the first position- We should scroll up");
+
+                } else if(tp == last) {
+                    Logger.i(TAG, "onDrag: At the last position- We should scroll down");
+                    rv.getChildAt(last).getLocationOnScreen(pos);
+                    if(pos[1] + relativePos > 0.9 * metrics.heightPixels) {
+                        dragDown();
+                    }
+
+                }
+
+            } else if(event.getAction() == DragEvent.ACTION_DRAG_LOCATION) {
+                if(event.getX() / metrics.widthPixels > 0.85f && System
+                        .nanoTime() - mLastPageChange > 5E8) {
+                    dragRight();
+                    mLastPageChange = System.nanoTime();
+                } else if(event.getX() / metrics.widthPixels < 0.15f && System
+                        .nanoTime() - mLastPageChange > 5E8) {
+                    dragLeft();
+                    mLastPageChange = System.nanoTime();
+                }
+            }
+            return true;
+        }
+
+    }
+
+    private class ColumnPagerAdapter extends ArrayPagerAdapter<ColumnFragment> {
+        private ArrayList<Column> columns = new ArrayList<>();
+
+        ColumnPagerAdapter(FragmentManager manager, List<PageDescriptor> descriptors) {
+            super(manager, descriptors);
+        }
+
+        int indexOf(int id) {
+            for(int i = 0; i < columns.size(); i++) {
+                if(columns.get(i).getId() == id) return i;
+            }
+            return -1;
+        }
+
+        ArrayList<Card> getAllCards() {
+            final ArrayList<Card> cards = new ArrayList<>();
+            for(int i = 0; i < getCount(); i++) {
+                cards.addAll(getExistingFragment(i).getCards());
+            }
+            return cards;
+        }
+
+        void moveTo(int cardId) {
+            for(int i = 0; i < getCount(); i++) {
+                if(getExistingFragment(i).attemptMoveTo(cardId)) {
+                    mColumnPager.setCurrentItem(i, true);
+                    break;
+                }
+            }
+        }
+
+        @Override
+        protected ColumnFragment createFragment(PageDescriptor pageDescriptor) {
+            return ColumnFragment.getInstance(
+                    ((ColumnPageDescriptor) pageDescriptor).mColumn,
+                    mNavListener,
+                    mAccessLevel
+            );
+        }
+
+    }
+
+    private static class ColumnPageDescriptor implements PageDescriptor {
+        private final Column mColumn;
+
+        ColumnPageDescriptor(Column column) {
+            mColumn = column;
+        }
+
+        @Override
+        public String getFragmentTag() {
+            return Integer.toString(mColumn.getId());
+        }
+
+        @Override
+        public String getTitle() {
+            return mColumn.getName();
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeParcelable(mColumn, flags);
+        }
+
+        ColumnPageDescriptor(Parcel in) {
+            this.mColumn = in.readParcelable(Column.class.getClassLoader());
+        }
+
+        public static final Creator<ColumnPageDescriptor> CREATOR = new Creator<ColumnPageDescriptor>() {
+            @Override
+            public ColumnPageDescriptor createFromParcel(Parcel source) {
+                return new ColumnPageDescriptor(source);
+            }
+
+            @Override
+            public ColumnPageDescriptor[] newArray(int size) {
+                return new ColumnPageDescriptor[size];
+            }
+        };
+    }
+}
+
+```
+
+### ColumnFragment
+
+**ColumnFragment.java**
+``` java
+package com.tpb.projects.project;
+
+import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.NestedScrollView;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.CardView;
+import android.support.v7.widget.LinearLayoutManager;
+import android.text.format.DateUtils;
+import android.view.DragEvent;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.firebase.analytics.FirebaseAnalytics;
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Card;
+import com.tpb.github.data.models.Column;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Repository;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.ViewSafeFragment;
+import com.tpb.projects.editors.CardEditor;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.editors.IssueEditor;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.util.Analytics;
+import com.tpb.projects.util.Logger;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import java.util.ArrayList;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
+
+import static com.tpb.projects.util.SettingsActivity.Preferences.CardAction.COPY;
+
+/**
+ * Created by theo on 19/12/16.
+ */
+
+public class ColumnFragment extends ViewSafeFragment {
+    private static final String TAG = ColumnFragment.class.getSimpleName();
+
+    FirebaseAnalytics mAnalytics;
+
+    private Unbinder unbinder;
+
+    Column mColumn;
+
+    @BindView(R.id.column_card) CardView mCard;
+    @BindView(R.id.column_name) EditText mName;
+    @BindView(R.id.column_last_updated) TextView mLastUpdate;
+    @BindView(R.id.column_card_count) TextView mCardCount;
+    @BindView(R.id.column_scrollview) NestedScrollView mNestedScroller;
+    @BindView(R.id.column_recycler) AnimatingRecyclerView mRecycler;
+
+    ProjectActivity mParent;
+    private ProjectActivity.NavigationDragListener mNavListener;
+    private Editor mEditor;
+    private Repository.AccessLevel mAccessLevel;
+
+    private CardAdapter mAdapter;
+
+    public static ColumnFragment getInstance(Column column, ProjectActivity.NavigationDragListener navListener, Repository.AccessLevel accessLevel) {
+        final ColumnFragment cf = new ColumnFragment();
+        cf.mColumn = column;
+        cf.mNavListener = navListener;
+        cf.mAccessLevel = accessLevel;
+        return cf;
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_column, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        if(mColumn == null && savedInstanceState != null) {
+            mColumn = savedInstanceState.getParcelable(getString(R.string.parcel_column));
+        }
+        mName.setText(mColumn.getName());
+
+        mAdapter = new CardAdapter(this, mNavListener, mAccessLevel, mParent.mRefresher);
+        mAdapter.setColumn(mColumn.getId());
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        mAreViewsValid = true;
+        if(mAccessLevel == Repository.AccessLevel.ADMIN || mAccessLevel == Repository.AccessLevel.WRITE) {
+            enableAccess(view);
+        } else {
+            disableAccess(view);
+        }
+        mName.clearFocus();
+
+        displayLastUpdate();
+        return view;
+    }
+
+    @Override
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+
+        mAnalytics = FirebaseAnalytics.getInstance(getContext());
+
+        mEditor = Editor.getEditor(getContext());
+        mName.setOnEditorActionListener((textView, i, keyEvent) -> {
+            if(i == EditorInfo.IME_ACTION_DONE) {
+                if(mName.getText().toString().isEmpty()) {
+                    Toast.makeText(getContext(), R.string.error_no_column_title, Toast.LENGTH_SHORT)
+                         .show();
+                    mName.setText(mColumn.getName());
+                } else {
+                    mEditor.updateColumnName(new Editor.UpdateListener<Column>() {
+                        int loadCount = 0;
+
+                        @Override
+                        public void updated(Column column) {
+                            if(mAreViewsValid) {
+                                mColumn.setName(mName.getText().toString());
+                                resetLastUpdate();
+                            }
+                            final Bundle bundle = new Bundle();
+                            bundle.putString(Analytics.TAG_PROJECT_EDIT, Analytics.VALUE_SUCCESS);
+                            mAnalytics.logEvent(Analytics.TAG_COLUMN_NAME_CHANGE, bundle);
+                        }
+
+                        @Override
+                        public void updateError(APIHandler.APIError error) {
+                            if(error != APIHandler.APIError.NO_CONNECTION) {
+                                if(loadCount < 5) {
+                                    loadCount++;
+                                    mEditor.updateColumnName(this, mColumn.getId(),
+                                            mName.getText().toString()
+                                    );
+                                } else {
+                                    Toast.makeText(getContext(), R.string.error_title_change_failed,
+                                            Toast.LENGTH_SHORT
+                                    ).show();
+                                    mName.setText(mColumn.getName());
+                                    final Bundle bundle = new Bundle();
+                                    bundle.putString(Analytics.TAG_PROJECT_EDIT,
+                                            Analytics.VALUE_FAILURE
+                                    );
+                                    mAnalytics.logEvent(Analytics.TAG_COLUMN_NAME_CHANGE, bundle);
+                                }
+                            }
+                        }
+                    }, mColumn.getId(), mName.getText().toString());
+                }
+                return false;
+            }
+            return false;
+        });
+
+    }
+
+    void setAccessLevel(Repository.AccessLevel accessLevel) {
+        mAccessLevel = accessLevel;
+        if(mAccessLevel == Repository.AccessLevel.ADMIN || mAccessLevel == Repository.AccessLevel.WRITE) {
+            enableAccess(getView());
+        } else {
+            disableAccess(getView());
+        }
+        mAdapter.setAccessLevel(accessLevel);
+    }
+
+    private void enableAccess(View view) {
+        mRecycler.setOnDragListener(new CardDragListener(getContext(), mNavListener));
+        mCard.setTag(mColumn.getId());
+        mCard.setOnLongClickListener(v -> {
+            final ClipData data = ClipData.newPlainText("", "");
+            final View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(v);
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                v.startDragAndDrop(data, shadowBuilder, v, 0);
+            } else {
+                v.startDrag(data, shadowBuilder, v, 0);
+            }
+            // v.setVisibility(View.INVISIBLE);
+            return true;
+        });
+        final ColumnDragListener listener = new ColumnDragListener((int) mCard.getTag());
+        mName.setOnDragListener(listener);
+        mLastUpdate.setOnDragListener(listener);
+        mCard.setOnDragListener(listener);
+        ((NestedScrollView) view.findViewById(R.id.column_scrollview))
+                .setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
+                    @Override
+                    public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+                        if(scrollY - oldScrollY > 10) {
+                            mParent.hideFab();
+                        } else if(scrollY - oldScrollY < -10) {
+                            mParent.showFab();
+                        }
+                    }
+                });
+    }
+
+    private void disableAccess(View view) {
+        mName.setEnabled(false);
+        view.findViewById(R.id.column_delete).setVisibility(View.GONE);
+    }
+
+    private void resetLastUpdate() {
+        mColumn.setUpdatedAt(System.currentTimeMillis());
+        displayLastUpdate();
+    }
+
+    private void displayLastUpdate() {
+        mLastUpdate.setText(
+                String.format(
+                        getContext().getString(R.string.text_last_updated),
+                        DateUtils.getRelativeTimeSpanString(mColumn.getUpdatedAt())
+                )
+        );
+        mCardCount.setText(Integer.toString(mAdapter.getItemCount()));
+    }
+
+    @OnClick(R.id.column_delete)
+    void deleteColumn() {
+        //TODO Move this to an options menu for the column
+        mParent.deleteColumn(mColumn);
+    }
+
+    void loadIssue(Loader.ItemLoader<Issue> loader, int issueId) {
+        mParent.loadIssue(loader, issueId, mColumn);
+    }
+
+    private void addCard(Card card) {
+        mAdapter.addCard(card);
+        resetLastUpdate();
+    }
+
+    void removeCard(Card card) {
+        mAdapter.removeCard(card);
+        resetLastUpdate();
+    }
+
+    void recreateCard(Card card) {
+        mParent.mRefresher.setRefreshing(true);
+        mEditor.createCard(new Editor.CreationListener<Pair<Integer, Card>>() {
+            int createAttempts = 0;
+
+            @Override
+            public void created(Pair<Integer, Card> integerCardPair) {
+                addCard(card);
+                mParent.mRefresher.setRefreshing(false);
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+
+                } else {
+                    if(createAttempts < 5) {
+                        createAttempts++;
+                        mEditor.createCard(this, mColumn.getId(), card.getNote());
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_CARD_CREATION, bundle);
+            }
+        }, mColumn.getId(), card.getNote());
+    }
+
+    boolean attemptMoveTo(int cardId) {
+        final int index = mAdapter.indexOf(cardId);
+        if(index == -1) return false;
+
+        UI.flashViewBackground(
+                mRecycler.findViewHolderForAdapterPosition(index).itemView,
+                getResources().getColor(R.color.md_grey_800),
+                getResources().getColor(R.color.colorAccent)
+        );
+
+        //Initial height is the top cardview
+        int height = ((LinearLayout) mNestedScroller.getChildAt(0)).getChildAt(0).getHeight();
+        for(int i = 0; i < mRecycler.getChildCount() && i < index; i++) {
+            height += mRecycler.getChildAt(i).getHeight();
+        }
+        Logger.i(TAG, "attemptMoveTo: Height of " + height);
+        mNestedScroller.scrollTo(0, height);
+
+        return true;
+    }
+
+    ArrayList<Card> getCards() {
+        return mAdapter.getCards();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode != IssueEditor.RESULT_OK) return;
+        String[] assignees = null;
+        String[] labels = null;
+        if(data.hasExtra(getString(R.string.intent_issue_assignees))) {
+            assignees = data.getStringArrayExtra(getString(R.string.intent_issue_assignees));
+        }
+        if(data.hasExtra(getString(R.string.intent_issue_labels))) {
+            labels = data.getStringArrayExtra(getString(R.string.intent_issue_labels));
+        }
+        switch(requestCode) {
+            case IssueEditor.REQUEST_CODE_EDIT_ISSUE:
+                final Card card = data.getParcelableExtra(getString(R.string.parcel_card));
+                final Issue edited = data.getParcelableExtra(getString(R.string.parcel_issue));
+                editIssue(card, edited, assignees, labels);
+                break;
+            case IssueEditor.REQUEST_CODE_ISSUE_FROM_CARD:
+                final Card oldCard = data.getParcelableExtra(getString(R.string.parcel_card));
+                final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
+                mEditor.createIssue(new Editor.CreationListener<Issue>() {
+                                        @Override
+                                        public void created(Issue issue) {
+                                            convertCardToIssue(oldCard, issue);
+                                        }
+
+                                        @Override
+                                        public void creationError(APIHandler.APIError error) {
+
+                                        }
+                                    }, mParent.mProject.getRepoPath(), issue.getTitle(), issue.getBody(), assignees,
+                        labels
+                );
+                break;
+        }
+    }
+
+    void openMenu(View view, Card card) {
+        //We use the non AppCompat popup as the AppCompat version has a bug which scrolls the RecyclerView up
+        final android.widget.PopupMenu popup = new android.widget.PopupMenu(getContext(), view);
+        popup.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case R.id.menu_edit_note:
+                    final Intent i = new Intent(getContext(), CardEditor.class);
+                    i.putExtra(getString(R.string.parcel_card), card);
+                    UI.setViewPositionForIntent(i, view);
+                    getActivity().startActivityForResult(i, CardEditor.REQUEST_CODE_EDIT_CARD);
+                    break;
+                case R.id.menu_delete_note:
+                    mParent.deleteCard(card, true);
+                    break;
+                case R.id.menu_copy_card_note:
+                    copyToClipboard(card.getNote());
+                    break;
+                case R.id.menu_copy_card_url:
+                    copyToClipboard(String.format(mParent.getString(R.string.text_card_url),
+                            mParent.mProject.getRepoPath(),
+                            mParent.mProject.getNumber(),
+                            mCard.getId()
+                    ));
+                    break;
+                case R.id.menu_copy_issue_url:
+                    copyToClipboard(String.format(mParent.getString(R.string.text_issue_url),
+                            mParent.mProject.getRepoPath(),
+                            card.getIssue().getNumber()
+                    ));
+                    break;
+                case R.id.menu_fullscreen:
+                    showFullscreen(card);
+                    break;
+                case R.id.menu_convert_to_issue:
+                    final Intent intent = new Intent(getContext(), IssueEditor.class);
+                    intent.putExtra(getString(R.string.intent_repo),
+                            mParent.mProject.getRepoPath()
+                    );
+                    intent.putExtra(getString(R.string.parcel_card), card);
+                    UI.setViewPositionForIntent(intent, view);
+                    getActivity().startActivityForResult(intent,
+                            IssueEditor.REQUEST_CODE_ISSUE_FROM_CARD
+                    );
+                    break;
+                case R.id.menu_edit_issue:
+                    showIssueEditor(view, card);
+                    break;
+                case R.id.menu_delete_issue_card:
+                    if(!card.getIssue().isClosed()) {
+                        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                        builder.setTitle(R.string.title_close_issue);
+                        builder.setMessage(R.string.text_close_issue_on_delete);
+                        builder.setPositiveButton(R.string.action_yes, (dialogInterface, j) -> {
+                            mEditor.closeIssue(null, mParent.mProject.getRepoPath(),
+                                    card.getIssue().getNumber()
+                            );
+                            mParent.deleteCard(card, false);
+                        });
+                        builder.setNeutralButton(R.string.action_cancel, null);
+                        builder.setNegativeButton(R.string.action_no,
+                                (dialogInterface, j) -> mParent.deleteCard(card, false)
+                        );
+                        final Dialog deleteDialog = builder.create();
+                        deleteDialog.getWindow()
+                                    .getAttributes().windowAnimations = R.style.DialogAnimation;
+                        deleteDialog.show();
+                    } else {
+                        mParent.deleteCard(card, false);
+                    }
+                    break;
+                case 1:
+                    toggleIssueState(card);
+                    break;
+            }
+
+            return true;
+        });
+        if(card.hasIssue()) {
+            popup.inflate(R.menu.menu_card_issue);
+            popup.getMenu().add(0, 1, 0, card.getIssue()
+                                             .isClosed() ? R.string.menu_reopen_issue : R.string.menu_close_issue);
+        } else {
+            popup.inflate(R.menu.menu_card);
+        }
+
+        popup.show();
+    }
+
+    void newCard(Card card) {
+        mParent.mRefresher.setRefreshing(true);
+        mEditor.createCard(new Editor.CreationListener<Pair<Integer, Card>>() {
+            int createAttempts = 0;
+
+            @Override
+            public void created(Pair<Integer, Card> pair) {
+                addCard(pair.second);
+                mParent.mRefresher.setRefreshing(false);
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                mAnalytics.logEvent(Analytics.TAG_CARD_CREATION, bundle);
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+
+                } else {
+                    if(createAttempts < 5) {
+                        createAttempts++;
+                        mEditor.createCard(this, mColumn.getId(), card.getNote());
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_CARD_CREATION, bundle);
+            }
+        }, mColumn.getId(), card.getNote());
+    }
+
+    void editCard(Card card) {
+        Logger.i(TAG, "editCard: Updating card: " + card.toString());
+        mParent.mRefresher.setRefreshing(true);
+        mEditor.updateCard(new Editor.UpdateListener<Card>() {
+            int updateAttempts = 0;
+
+            @Override
+            public void updated(Card card) {
+                mAdapter.updateCard(card);
+                resetLastUpdate();
+                mParent.mRefresher.setRefreshing(false);
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                mAnalytics.logEvent(Analytics.TAG_CARD_EDIT, bundle);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(updateAttempts < 5) {
+                        updateAttempts++;
+                        mEditor.updateCard(this, card.getId(), card.getNote());
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_CARD_EDIT, bundle);
+            }
+        }, card.getId(), card.getNote());
+
+    }
+
+    private void toggleIssueState(Card card) {
+        final Editor.UpdateListener<Issue> listener = new Editor.UpdateListener<Issue>() {
+            int stateChangeAttempts = 0;
+
+            @Override
+            public void updated(Issue issue) {
+                card.setFromIssue(issue);
+                mAdapter.updateCard(card);
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                mAnalytics.logEvent(
+                        issue.isClosed() ? Analytics.TAG_ISSUE_CLOSED : Analytics.TAG_ISSUE_OPENED,
+                        bundle
+                );
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+
+                } else {
+                    if(stateChangeAttempts < 5) {
+                        if(card.getIssue().isClosed()) {
+                            stateChangeAttempts++;
+                            mEditor.openIssue(this, mParent.mProject.getRepoPath(),
+                                    card.getIssueId()
+                            );
+                        } else {
+                            mEditor.closeIssue(this, mParent.mProject.getRepoPath(),
+                                    card.getIssueId()
+                            );
+                        }
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_ISSUE_EDIT, bundle);
+            }
+        };
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle(R.string.title_state_change_comment);
+        builder.setPositiveButton(R.string.action_ok, (dialog, which) -> {
+            if(card.getIssue().isClosed()) {
+                mEditor.openIssue(listener, card.getIssue().getRepoFullName(),
+                        card.getIssue().getNumber()
+                );
+            } else {
+                mEditor.closeIssue(listener, card.getIssue().getRepoFullName(),
+                        card.getIssue().getNumber()
+                );
+            }
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            i.putExtra(getString(R.string.parcel_issue), card.getIssue());
+            getActivity().startActivityForResult(i, CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE);
+
+        });
+        builder.setNegativeButton(R.string.action_no, (dialog, which) -> {
+            if(card.getIssue().isClosed()) {
+                mEditor.openIssue(listener, card.getIssue().getRepoFullName(),
+                        card.getIssue().getNumber()
+                );
+            } else {
+                mEditor.closeIssue(listener, card.getIssue().getRepoFullName(),
+                        card.getIssue().getNumber()
+                );
+            }
+        });
+        builder.setNeutralButton(R.string.action_cancel, null);
+        builder.create().show();
+    }
+
+    private void showIssueEditor(View view, Card card) {
+        final Intent i = new Intent(getContext(), IssueEditor.class);
+        i.putExtra(getString(R.string.intent_repo), mParent.mProject.getRepoPath());
+        i.putExtra(getString(R.string.parcel_card), card);
+        i.putExtra(getString(R.string.parcel_issue), card.getIssue());
+        if(view instanceof MarkdownTextView) {
+            UI.setClickPositionForIntent(getContext(), i,
+                    ((MarkdownTextView) view).getLastClickPosition()
+            );
+        } else {
+            UI.setViewPositionForIntent(i, view);
+        }
+        getActivity().startActivityForResult(i, IssueEditor.REQUEST_CODE_EDIT_ISSUE);
+    }
+
+    public void editIssue(Card card, Issue issue, @Nullable String[] assignees, @Nullable String[] labels) {
+        mParent.mRefresher.setRefreshing(true);
+        mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
+            int issueCreationAttempts = 0;
+
+            @Override
+            public void updated(Issue issue) {
+                card.setFromIssue(issue);
+                mAdapter.updateCard(card);
+                mParent.mRefresher.setRefreshing(false);
+                resetLastUpdate();
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                mAnalytics.logEvent(Analytics.TAG_ISSUE_EDIT, bundle);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                Logger.i(TAG, "updateError: " + error.toString());
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(issueCreationAttempts < 5) {
+                        issueCreationAttempts++;
+                        mEditor.updateIssue(this, issue.getRepoFullName(), issue, assignees,
+                                labels
+                        );
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_ISSUE_EDIT, bundle);
+            }
+        }, card.getIssue().getRepoFullName(), issue, assignees, labels);
+    }
+
+    private void convertCardToIssue(Card oldCard, Issue issue) {
+        mEditor.deleteCard(new Editor.DeletionListener<Card>() {
+            int cardDeletionAttempts = 0;
+
+            @Override
+            public void deleted(Card card) {
+                createIssueCard(issue, oldCard.getId());
+                resetLastUpdate();
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                mAnalytics.logEvent(Analytics.TAG_CARD_DELETION, bundle);
+            }
+
+            @Override
+            public void deletionError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(cardDeletionAttempts < 5) {
+                        cardDeletionAttempts++;
+                        mEditor.deleteCard(this, oldCard);
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_CARD_DELETION, bundle);
+            }
+        }, oldCard);
+    }
+
+    void createIssueCard(Issue issue) {
+        createIssueCard(issue, -1);
+    }
+
+    private void createIssueCard(Issue issue, int oldCardId) {
+        mParent.mRefresher.setRefreshing(true);
+        mEditor.createCard(new Editor.CreationListener<Pair<Integer, Card>>() {
+            int issueCardCreationAttempts = 0;
+
+            @Override
+            public void created(Pair<Integer, Card> val) {
+                mParent.mRefresher.setRefreshing(false);
+                if(oldCardId == -1) {
+                    mAdapter.addCard(val.second);
+                } else {
+                    mAdapter.updateCard(val.second, oldCardId);
+                }
+                resetLastUpdate();
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
+                mAnalytics.logEvent(Analytics.TAG_CARD_TO_ISSUE, bundle);
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mParent.mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(issueCardCreationAttempts < 5) {
+                        issueCardCreationAttempts++;
+                        mEditor.createCard(this, mColumn.getId(), issue.getId());
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mParent.mRefresher.setRefreshing(false);
+                    }
+                }
+                final Bundle bundle = new Bundle();
+                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
+                mAnalytics.logEvent(Analytics.TAG_CARD_TO_ISSUE, bundle);
+            }
+        }, mColumn.getId(), issue.getId());
+    }
+
+    private void copyToClipboard(String text) {
+        final ClipboardManager cm = (ClipboardManager) getContext()
+                .getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("Card", text));
+        Toast.makeText(mParent, getString(R.string.text_copied_to_board), Toast.LENGTH_SHORT)
+             .show();
+    }
+
+    private void showFullscreen(Card card) {
+        IntentHandler.showFullScreen(getContext(), card.getNote(), mParent.mProject.getRepoPath(),
+                getFragmentManager()
+        );
+    }
+
+    void cardClick(View view, Card card) {
+        final SettingsActivity.Preferences.CardAction action;
+        if(mAccessLevel == Repository.AccessLevel.NONE || mAccessLevel == Repository.AccessLevel.READ) {
+            action = COPY;
+        } else {
+            action = SettingsActivity.Preferences.getPreferences(getContext()).getCardAction();
+        }
+        switch(action) {
+            case EDIT:
+                if(card.hasIssue()) {
+                    showIssueEditor(view, card);
+                } else {
+                    final Intent i = new Intent(getContext(), CardEditor.class);
+                    i.putExtra(getString(R.string.parcel_card), card);
+                    if(view instanceof MarkdownTextView) {
+                        UI.setClickPositionForIntent(getContext(), i,
+                                ((MarkdownTextView) view).getLastClickPosition()
+                        );
+                    } else {
+                        UI.setViewPositionForIntent(i, view);
+                    }
+                    getActivity().startActivityForResult(i, CardEditor.REQUEST_CODE_EDIT_CARD);
+                }
+                break;
+            case FULLSCREEN:
+                showFullscreen(card);
+                break;
+            case COPY:
+                copyToClipboard(card.getNote());
+                break;
+        }
+    }
+
+    void notifyScroll() {
+        mAdapter.notifyBottomReached();
+    }
+
+    void scrollUp() {
+        final LinearLayoutManager lm = (LinearLayoutManager) mRecycler.getLayoutManager();
+        final int pos = lm.findFirstVisibleItemPosition();
+        final int height = mRecycler.getChildAt(pos).getHeight();
+        mNestedScroller.smoothScrollBy(0, -height);
+    }
+
+    void scrollDown() {
+        final LinearLayoutManager lm = (LinearLayoutManager) mRecycler.getLayoutManager();
+        final int pos = lm.findLastVisibleItemPosition();
+        final int height = mRecycler.getChildAt(pos).getHeight();
+        mNestedScroller.smoothScrollBy(0, height);
+    }
+
+    @Override
+    public void onAttach(Context context) {
+        super.onAttach(context);
+        try {
+            mParent = (ProjectActivity) context;
+        } catch(ClassCastException cce) {
+            throw new IllegalArgumentException("Parent of ColumnFragment must be ProjectActivity");
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+        mAreViewsValid = false;
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putParcelable(getString(R.string.parcel_column), mColumn);
+    }
+
+    private class ColumnDragListener implements View.OnDragListener {
+        private int mTargetTag;
+
+        ColumnDragListener(int targetTag) {
+            mTargetTag = targetTag;
+        }
+
+        @Override
+        public boolean onDrag(View view, DragEvent event) {
+            if(event.getAction() == DragEvent.ACTION_DROP) {
+                final View sourceView = (View) event.getLocalState();
+                view.setVisibility(View.VISIBLE);
+
+                final int sourceTag = (int) sourceView.getTag();
+                if(sourceTag != mTargetTag && sourceView.getId() == R.id.column_card) {
+                    mParent.moveColumn(sourceTag, mTargetTag, event.getX() < view.getWidth() / 2);
+                }
+            }
+            return true;
+        }
+    }
+}
+
+```
+
+#### CardAdapter
+
+**CardAdapter.java**
+``` java
+package com.tpb.projects.project;
+
+import android.content.ClipData;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.CardView;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Card;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Repository;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.util.Analytics;
+import com.tpb.projects.util.Logger;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+
+/**
+ * Created by theo on 20/12/16.
+ */
+
+class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implements Loader.ListLoader<Card> {
+    private static final String TAG = CardAdapter.class.getSimpleName();
+
+    private final ArrayList<Pair<Card, SpannableString>> mCards = new ArrayList<>();
+
+    private final ColumnFragment mParent;
+    private int mColumn;
+    private final Editor mEditor;
+    private static final HandlerThread parseThread = new HandlerThread("card_parser");
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    static {
+        parseThread.start();
+    }
+
+    private static final Handler mParseHandler = new Handler(parseThread.getLooper());
+    private Repository.AccessLevel mAccessLevel;
+    private final ProjectActivity.NavigationDragListener mNavListener;
+
+    CardAdapter(ColumnFragment parent,
+                ProjectActivity.NavigationDragListener navListener,
+                Repository.AccessLevel accessLevel,
+                SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mEditor = Editor.getEditor(mParent.getContext());
+        mLoader = Loader.getLoader(parent.getContext());
+        mAccessLevel = accessLevel;
+        mNavListener = navListener;
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            notifyDataSetChanged();
+            loadCards(true);
+        });
+    }
+
+    void setColumn(int columnId) {
+        mColumn = columnId;
+        mCards.clear();
+        notifyDataSetChanged();
+        loadCards(true);
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadCards(false);
+        }
+    }
+
+    private void loadCards(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+            final int oldSize = mCards.size();
+            mCards.clear();
+            notifyItemRangeRemoved(0, oldSize);
+        }
+        mLoader.loadCards(this, mParent.mColumn.getId(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<Card> cards) {
+        if(!mParent.isAdded()) return;
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(cards.size() > 0) {
+            int oldLength = mCards.size();
+            if(mPage == 1) {
+                mParent.mParent.notifyFragmentLoaded();
+            }
+            for(Card c : cards) {
+                mCards.add(new Pair<>(c, null));
+            }
+            mParent.mCardCount.setText(String.valueOf(mCards.size()));
+            notifyItemRangeInserted(oldLength, mCards.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    void setAccessLevel(Repository.AccessLevel accessLevel) {
+        mAccessLevel = accessLevel;
+        notifyDataSetChanged();
+    }
+
+    void addCard(Card card) {
+        mCards.add(0, new Pair<>(card, null));
+        notifyItemInserted(0);
+    }
+
+    void addCardFromDrag(Card card) {
+        mCards.add(new Pair<>(card, null));
+        notifyItemInserted(mCards.size());
+        mEditor.moveCard(null, mColumn, card.getId(), -1);
+    }
+
+    void addCardFromDrag(int pos, Card card) {
+        Logger.i(TAG, "createCard: Card being added to " + pos);
+        mCards.add(pos, new Pair<>(card, null));
+        notifyItemInserted(pos);
+        final int id = pos == 0 ? -1 : mCards.get(pos - 1).first.getId();
+        mEditor.moveCard(null, mParent.mColumn.getId(), card.getId(), id);
+    }
+
+    void updateCard(Card card) {
+        final int index = indexOf(card.getId());
+        if(index != -1) {
+            mCards.set(index, new Pair<>(card, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    void updateCard(Card card, int oldId) {
+        final int index = indexOf(oldId);
+        if(index != -1) {
+            mCards.set(index, new Pair<>(card, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    void moveCardFromDrag(int oldPos, int newPos) {
+        final Pair<Card, SpannableString> card = mCards.get(oldPos);
+        mCards.remove(oldPos);
+        mCards.add(newPos, card);
+        notifyItemMoved(oldPos, newPos);
+        final int id = newPos == 0 ? -1 : mCards.get(newPos - 1).first.getId();
+        mEditor.moveCard(null, mParent.mColumn.getId(), card.first.getId(), id);
+    }
+
+    void removeCard(Card card) {
+        final int index = indexOf(card.getId());
+        if(index != -1) {
+            mCards.remove(index);
+            notifyItemRemoved(index);
+        }
+        //API call is handled in adapter to which card is added
+    }
+
+    int indexOf(int cardId) {
+        for(int i = 0; i < mCards.size(); i++) {
+            if(mCards.get(i).first.getId() == cardId) return i;
+        }
+        return -1;
+    }
+
+    ArrayList<Card> getCards() {
+        final ArrayList<Card> cards = new ArrayList<>();
+        for(Pair<Card, SpannableString> p : mCards) cards.add(p.first);
+        return cards;
+    }
+
+    private void openMenu(View view, int position) {
+        mParent.openMenu(view, mCards.get(position).first);
+    }
+
+    private void cardClick(CardHolder holder) {
+        mParent.cardClick(holder.mText, mCards.get(holder.getAdapterPosition()).first);
+    }
+
+    @Override
+    public CardHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new CardHolder(LayoutInflater.from(parent.getContext())
+                                            .inflate(R.layout.viewholder_card, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(CardHolder holder, int position) {
+        final int pos = holder.getAdapterPosition();
+        final Card card = mCards.get(pos).first;
+        if(mAccessLevel == Repository.AccessLevel.ADMIN || mAccessLevel == Repository.AccessLevel.WRITE) {
+            holder.mCardView.setTag(card.getId());
+            holder.mCardView.setOnLongClickListener(view -> {
+                final ClipData data = ClipData.newPlainText("", "");
+                final View.DragShadowBuilder shadowBuilder = new View.DragShadowBuilder(view);
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    view.startDragAndDrop(data, shadowBuilder, view, 0);
+                } else {
+                    view.startDrag(data, shadowBuilder, view, 0);
+                }
+                view.setVisibility(View.INVISIBLE);
+                return true;
+            });
+            holder.mCardView.setOnDragListener(
+                    new CardDragListener(mParent.getContext(), mNavListener)
+            );
+        } else {
+            holder.mMenuButton.setVisibility(View.GONE);
+        }
+
+        if(card.requiresLoadingFromIssue()) {
+            holder.mSpinner.setVisibility(View.VISIBLE);
+            mParent.loadIssue(new Loader.ItemLoader<Issue>() {
+                int loadCount = 0;
+
+                @Override
+                public void loadComplete(Issue data) {
+                    if(mParent.isAdded() && !mParent.isRemoving()) {
+                        /*
+                        If the Issue is loaded after the disposal of the Activity
+                        the Card may be different
+                         */
+                        mCards.get(pos).first.setFromIssue(data);
+                        bindIssueCard(holder, pos);
+                    }
+
+                    final Bundle bundle = new Bundle();
+                    bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_SUCCESS);
+                    mParent.mAnalytics.logEvent(Analytics.TAG_ISSUE_LOADED, bundle);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+                    if(error != APIHandler.APIError.NO_CONNECTION) {
+                        final Bundle bundle = new Bundle();
+                        bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_FAILURE);
+                        mParent.mAnalytics.logEvent(Analytics.TAG_ISSUE_LOADED, bundle);
+                        loadCount++;
+                        if(loadCount < 5) {
+                            mParent.loadIssue(this, card.getIssueId());
+                        }
+                    }
+                }
+            }, card.getIssueId());
+        } else if(card.hasIssue()) {
+            bindIssueCard(holder, pos);
+        } else {
+            bindStandardCard(holder, pos);
+        }
+
+    }
+
+    private void bindStandardCard(CardHolder holder, int pos) {
+        holder.mTitleLayout.setVisibility(View.GONE);
+        if(mCards.get(pos).second == null) {
+            final Card card = mCards.get(pos).first;
+            holder.mText.setMarkdown(
+                    Markdown.formatMD(
+                            card.getNote(),
+                            mParent.mParent.mProject.getRepoPath()
+                    ),
+                    new HttpImageGetter(holder.mText),
+                    text -> mCards.set(pos, new Pair<>(card, text))
+            );
+        } else {
+            holder.mText.setText(mCards.get(pos).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mText);
+    }
+
+    private void bindIssueCard(CardHolder holder, int pos) {
+        holder.mIssueIcon.setVisibility(View.VISIBLE);
+        holder.mUserAvatar.setVisibility(View.VISIBLE);
+        final Card card = mCards.get(pos).first;
+        holder.mIssueIcon.setImageResource(
+                card.getIssue().isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open);
+        holder.mUserAvatar.setImageUrl(card.getIssue().getOpenedBy().getAvatarUrl());
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mUserAvatar,
+                card.getIssue().getOpenedBy().getLogin()
+        );
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mText, holder.mUserAvatar,
+                holder.mCardView, card.getIssue()
+        );
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mIssueIcon, card.getIssue()
+        );
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mTitle, card.getIssue());
+        holder.mTitleLayout.setVisibility(View.VISIBLE);
+
+        holder.mTitle.setMarkdown(Formatter.bold(card.getIssue().getTitle()));
+        if(mCards.get(pos).second == null) {
+            holder.mText.setMarkdown(
+                    Formatter.buildIssueSpan(
+                            holder.itemView.getContext(),
+                            card.getIssue(),
+                            false,
+                            true,
+                            true,
+                            true,
+                            true
+                    ).toString(),
+                    new HttpImageGetter(holder.mText),
+                    text -> mCards.set(pos, new Pair<>(card, text))
+            );
+        } else {
+            holder.mText.setText(mCards.get(pos).second);
+        }
+        holder.mSpinner.setVisibility(View.GONE);
+    }
+
+    @Override
+    public int getItemCount() {
+        return mCards.size();
+    }
+
+    class CardHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.card_markdown) MarkdownTextView mText;
+        @BindView(R.id.card_title) MarkdownTextView mTitle;
+        @BindView(R.id.card_issue_progress) ProgressBar mSpinner;
+        @BindView(R.id.viewholder_card) CardView mCardView;
+        @BindView(R.id.card_menu_button) View mMenuButton;
+        @BindView(R.id.card_drawable_wrapper) View mTitleLayout;
+        @BindView(R.id.card_issue_drawable) ImageView mIssueIcon;
+        @BindView(R.id.card_user_avatar) NetworkImageView mUserAvatar;
+
+        @OnClick(R.id.card_menu_button)
+        void onMenuClick(View v) {
+            openMenu(v, getAdapterPosition());
+        }
+
+        CardHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            view.setOnClickListener(v -> cardClick(this));
+            mText.setOnClickListener(v -> cardClick(this));
+            mText.setParseHandler(mParseHandler);
+        }
+
+    }
+
+}
+
+```
+
+#### CardDragListener
+
+**CardDragListener.java**
+``` java
+package com.tpb.projects.project;
+
+import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.support.v7.widget.RecyclerView;
+import android.view.DragEvent;
+import android.view.View;
+
+import com.tpb.github.data.models.Card;
+import com.tpb.projects.R;
+import com.tpb.projects.util.Logger;
+
+/**
+ * Created by theo on 22/12/16.
+ */
+
+class CardDragListener implements View.OnDragListener {
+    private static final String TAG = CardDragListener.class.getSimpleName();
+
+    private boolean isDropped = false;
+    private Drawable selectedBG;
+    private final int accent;
+    private final View.OnDragListener mParent;
+
+    CardDragListener(Context context, View.OnDragListener parent) {
+        accent = context.getResources().getColor(R.color.colorAccent);
+        mParent = parent;
+    }
+
+    @Override
+    public boolean onDrag(View view, DragEvent event) {
+        if(mParent != null) {
+            mParent.onDrag(view, event);
+        }
+        final int action = event.getAction();
+        final View sourceView = (View) event.getLocalState();
+        if(sourceView.getId() == R.id.column_card || view.getTag() == sourceView.getTag()) {
+            return true;
+        }
+
+        switch(action) {
+            case DragEvent.ACTION_DROP:
+                isDropped = true;
+                int sourcePosition, targetPosition;
+
+                view.setVisibility(View.VISIBLE);
+
+                final RecyclerView target;
+                final RecyclerView source = (RecyclerView) sourceView.getParent();
+
+                final CardAdapter sourceAdapter = (CardAdapter) source.getAdapter();
+                sourcePosition = sourceAdapter.indexOf((int) sourceView.getTag());
+
+                final Card card = sourceAdapter.getCards().get(sourcePosition);
+                if(view.getId() == R.id.viewholder_card) {
+                    target = (RecyclerView) view.getParent();
+                } else {
+                    target = (RecyclerView) view;
+                }
+                final CardAdapter targetAdapter = (CardAdapter) target.getAdapter();
+
+                if(view.getId() == R.id.viewholder_card) {
+                    targetPosition = targetAdapter.indexOf((int) view.getTag());
+                    Logger.i(TAG, "onDrag: Hovering over position " + targetPosition);
+                    if(event.getY() < view.getHeight() / 2) {
+                        targetPosition = Math.max(0, targetPosition - 1);
+                    }
+                    if(source != target) {
+                        if(targetPosition >= 0) {
+                            targetAdapter.addCardFromDrag(targetPosition, card);
+                        } else {
+                            targetAdapter.addCardFromDrag(card);
+                        }
+                        sourceAdapter.removeCard(card);
+                    } else if(sourcePosition != targetPosition) { //We are moving a card
+                        sourceAdapter.moveCardFromDrag(sourcePosition, targetPosition);
+                    }
+
+                } else if(view.getId() == R.id.column_recycler && ((RecyclerView) view).getAdapter()
+                                                                                       .getItemCount() == 0) {
+                    sourceAdapter.removeCard(card);
+                    targetAdapter.addCardFromDrag(card);
+                }
+                view.setBackground(selectedBG);
+
+
+                break;
+            case DragEvent.ACTION_DRAG_ENTERED:
+                //  Log.i(TAG, "onDrag: Drag entered");
+                if(view.getId() == R.id.viewholder_card
+                        || (view.getId() == R.id.column_recycler && ((RecyclerView) view)
+                        .getAdapter().getItemCount() == 0)) {
+                    selectedBG = view.getBackground();
+                    view.setBackgroundColor(accent);
+                }
+                //This is when we have entered another view
+
+                break;
+            case DragEvent.ACTION_DRAG_EXITED:
+                Logger.i(TAG, "onDrag: Drag exited");
+                view.setBackground(selectedBG);
+                //This is when we have exited another view
+                break;
+            default:
+                break;
+        }
+
+        if(!isDropped) {
+            View vw = (View) event.getLocalState();
+            vw.setVisibility(View.VISIBLE);
+        }
+
+        return true;
+    }
+}
+
+```
+
+#### ProjectSearchAdapter
+
+**ProjectSearchAdapter.java**
+``` java
+package com.tpb.projects.project;
+
+import android.content.Context;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.Filter;
+import android.widget.TextView;
+
+import com.tpb.github.data.models.Card;
+import com.tpb.github.data.models.Label;
+import com.tpb.projects.R;
+import com.tpb.projects.util.search.ArrayFilter;
+import com.tpb.projects.util.search.FuzzyStringSearcher;
+
+import java.util.ArrayList;
+
+/**
+ * Created by theo on 02/02/17.
+ */
+
+class ProjectSearchAdapter extends ArrayAdapter<Card> {
+    private static final String TAG = ProjectSearchAdapter.class.getSimpleName();
+
+    private final ArrayList<Card> data;
+    private ArrayFilter<Card> mFilter;
+    private final FuzzyStringSearcher mSearcher;
+
+    public ProjectSearchAdapter(Context context, @NonNull ArrayList<Card> data) {
+        super(context, R.layout.viewholder_search_suggestion, data);
+        this.data = data;
+        final ArrayList<String> strings = new ArrayList<>();
+        String s;
+        for(Card c : data) {
+            if(c.hasIssue()) {
+                s = "#" + c.getIssue().getNumber();
+                for(Label l : c.getIssue().getLabels()) s += "\n" + l.getName();
+                strings.add(s + "\n" + c.getIssue().getBody());
+            } else {
+                strings.add(c.getNote());
+            }
+        }
+        mSearcher = FuzzyStringSearcher.getInstance(strings);
+    }
+
+
+    @Override
+    public long getItemId(int position) {
+        return mFilter.getFiltered().get(position).getId();
+    }
+
+    @Nullable
+    @Override
+    public Card getItem(int position) {
+        return mFilter.getFiltered().get(position);
+    }
+
+    @NonNull
+    @Override
+    public Filter getFilter() {
+        if(mFilter == null) {
+            mFilter = new ArrayFilter<>(this, mSearcher, data);
+        }
+        return mFilter;
+    }
+
+    @NonNull
+    @Override
+    public View getView(int position, View convertView, @NonNull ViewGroup parent) {
+        if(convertView == null) {
+            convertView = LayoutInflater.from(parent.getContext())
+                                        .inflate(R.layout.viewholder_search_suggestion, parent,
+                                                false
+                                        );
+        }
+        bindView(position, convertView);
+        return convertView;
+    }
+
+    private void bindView(int pos, View view) {
+        final int dp = data.indexOf(mFilter.getFiltered().get(pos));
+        final String text;
+        if(data.get(dp).hasIssue()) {
+            text = " #" + data.get(dp).getIssue().getNumber() + " " + data.get(dp).getIssue()
+                                                                          .getTitle();
+        } else {
+            text = data.get(dp).getNote();
+        }
+
+        if(data.get(dp).hasIssue()) {
+            ((TextView) view.findViewById(R.id.suggestion_text))
+                    .setCompoundDrawablesRelativeWithIntrinsicBounds(data.get(dp).getIssue()
+                                                                         .isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open,
+                            0, 0, 0
+                    );
+            ((TextView) view.findViewById(R.id.suggestion_text)).setText(text);
+        } else {
+            ((TextView) view.findViewById(R.id.suggestion_text))
+                    .setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+            //Log.i(TAG, "bindView: Setting text " + parseCache[dataPos]);
+            ((TextView) view.findViewById(R.id.suggestion_text)).setText(text);
+        }
+    }
+
+    @Override
+    public int getCount() {
+        return mFilter.getFiltered().size();
+    }
+
+}
+```
+
+## CommitActivity
+
+**CommitActivity.java**
+``` java
+package com.tpb.projects.commits;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.view.ViewPager;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Commit;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.fragments.CommitCommentsFragment;
+import com.tpb.projects.commits.fragments.CommitInfoFragment;
+import com.tpb.projects.common.CircularRevealActivity;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+
+/**
+ * Created by theo on 30/03/17.
+ */
+
+public class CommitActivity extends CircularRevealActivity implements Loader.ItemLoader<Commit> {
+    private static final String TAG = CommitActivity.class.getSimpleName();
+
+    @BindView(R.id.commit_hash) TextView mHash;
+    @BindView(R.id.commit_comment_fab) FloatingActionButton mFab;
+    @BindView(R.id.commit_fragment_tabs) TabLayout mTabs;
+    @BindView(R.id.commit_content_viewpager) ViewPager mPager;
+
+    private CommitPagerAdapter mAdapter;
+
+    private Commit mCommit;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_commit);
+        ButterKnife.bind(this);
+
+        mAdapter = new CommitPagerAdapter(getSupportFragmentManager());
+
+        mPager.setOffscreenPageLimit(2);
+        mPager.setAdapter(mAdapter);
+        mTabs.setupWithViewPager(mPager);
+        mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                if(position == 1) {
+                    mFab.show(true);
+                } else {
+                    mFab.hide(true);
+                }
+            }
+        });
+
+        final Intent launchIntent = getIntent();
+        if(launchIntent.hasExtra(getString(R.string.transition_card))) {
+            postponeEnterTransition();
+        }
+        if(launchIntent.hasExtra(getString(R.string.parcel_commit))) {
+            mCommit = launchIntent.getParcelableExtra(getString(R.string.parcel_commit));
+            loadComplete(mCommit);
+            Loader.getLoader(this).loadCommit(this, mCommit.getFullRepoName(), mCommit.getSha());
+        } else if(launchIntent.hasExtra(getString(R.string.intent_commit_sha))) {
+            Loader.getLoader(this).loadCommit(this,
+                    launchIntent.getStringExtra(getString(R.string.intent_repo)),
+                    launchIntent.getStringExtra(getString(R.string.intent_commit_sha))
+            );
+        }
+
+    }
+
+    @Override
+    public void loadComplete(Commit data) {
+        mCommit = data;
+        mHash.setText(com.tpb.github.data.Util.shortenSha(mCommit.getSha()));
+        mAdapter.notifyCommitLoaded();
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
+
+    }
+
+    private class CommitPagerAdapter extends FragmentPagerAdapter {
+
+        private CommitInfoFragment mInfoFragment;
+        private CommitCommentsFragment mCommentsFragment;
+
+        CommitPagerAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            if(position == 0) {
+                mInfoFragment = CommitInfoFragment.getInstance();
+                return mInfoFragment;
+            } else {
+                mCommentsFragment = CommitCommentsFragment.getInstance();
+                if(mFab != null) mCommentsFragment.setFab(mFab);
+                return mCommentsFragment;
+            }
+        }
+
+        void attachFragment(Fragment fragment) {
+            if(fragment instanceof CommitInfoFragment)
+                mInfoFragment = (CommitInfoFragment) fragment;
+            if(fragment instanceof CommitCommentsFragment)
+                mCommentsFragment = (CommitCommentsFragment) fragment;
+        }
+
+        void notifyCommitLoaded() {
+            if(mInfoFragment != null) mInfoFragment.commitLoaded(mCommit);
+            if(mCommentsFragment != null) mCommentsFragment.commitLoaded(mCommit);
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            if(position == 0) {
+                return getString(R.string.title_commit_info);
+            } else {
+                return getString(R.string.title_commit_comments);
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 2;
+        }
+    }
+
+}
+
+```
+
+### CommitInfoFragment
+
+**CommitInfoFragment.java**
+``` java
+package com.tpb.projects.commits.fragments;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.NestedScrollView;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.TextView;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Commit;
+import com.tpb.github.data.models.CompleteStatus;
+import com.tpb.github.data.models.Status;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.CommitDiffAdapter;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.util.Util;
+
+import java.util.Date;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 30/03/17.
+ */
+
+public class CommitInfoFragment extends CommitFragment {
+    private static final String TAG = CommitInfoFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.commit_header_card) View mHeader;
+    @BindView(R.id.commit_title) MarkdownTextView mTitle;
+    @BindView(R.id.commit_user_avatar) NetworkImageView mAvatar;
+    @BindView(R.id.commit_info) MarkdownTextView mInfo;
+    @BindView(R.id.commit_info_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.commit_info_scrollview) NestedScrollView mScrollView;
+    @BindView(R.id.commit_diff_recycler) AnimatingRecyclerView mRecyclerView;
+
+    private CommitDiffAdapter mAdapter;
+
+    public static CommitInfoFragment getInstance() {
+        return new CommitInfoFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_commit_info, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mRefresher.setRefreshing(true);
+        mAdapter = new CommitDiffAdapter();
+        mRecyclerView.setLayoutManager(new FixedLinearLayoutManger(getContext()));
+        mRecyclerView.setAdapter(mAdapter);
+        mRefresher.setOnRefreshListener(() -> {
+            ButterKnife.findById(getActivity(), R.id.commit_status).setVisibility(View.GONE);
+            mAdapter.clear();
+            Loader.getLoader(getContext()).loadCommit(new Loader.ItemLoader<Commit>() {
+                @Override
+                public void loadComplete(Commit commit) {
+                    commitLoaded(commit);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+                    mRefresher.setRefreshing(false);
+                }
+            }, mCommit.getFullRepoName(), mCommit.getSha());
+        });
+        checkSharedElementEntry();
+        mAreViewsValid = true;
+        if(mCommit != null) commitLoaded(mCommit);
+        return view;
+    }
+
+    @Override
+    public void commitLoaded(Commit commit) {
+        mCommit = commit;
+        if(!areViewsValid()) return;
+        mTitle.setMarkdown(Formatter.bold(mCommit.getMessage()));
+        final String user;
+        if(mCommit.getCommitter() != null) {
+            mAvatar.setImageUrl(mCommit.getCommitter().getAvatarUrl());
+            IntentHandler
+                    .addOnClickHandler(getActivity(), mAvatar, mCommit.getCommitter().getLogin());
+            user = String.format(getString(R.string.text_md_link),
+                    mCommit.getCommitter().getLogin(),
+                    mCommit.getCommitter().getHtmlUrl()
+            );
+        } else {
+            user = mCommit.getCommitterName();
+            IntentHandler.addOnClickHandler(getActivity(), mAvatar, user);
+        }
+        if(mCommit.getFiles() != null) {
+            final String commitText =
+                    "<br>" +
+                            getResources()
+                                    .getQuantityString(R.plurals.text_commit_additions,
+                                            mCommit.getAdditions(),
+                                            mCommit.getAdditions()
+                                    ) +
+                            "<br>" +
+                            getResources().getQuantityString(R.plurals.text_commit_deletions,
+                                    mCommit.getDeletions(), mCommit.getDeletions()
+                            ) +
+                            "<br><br>" +
+                            String.format(
+                                    getString(R.string.text_committed_by),
+                                    user,
+                                    Util.formatDateLocally(getContext(),
+                                            new Date(mCommit.getCreatedAt())
+                                    )
+                            );
+            mInfo.setMarkdown(Markdown.formatMD(commitText, mCommit.getFullRepoName()));
+            mRefresher.setRefreshing(false);
+            mAdapter.setDiffs(mCommit.getFiles());
+        }
+        Loader.getLoader(getContext()).loadCommitStatuses(new Loader.ItemLoader<CompleteStatus>() {
+            @Override
+            public void loadComplete(CompleteStatus data) {
+                if(data.getTotalCount() == 0) return; //We don't care if there is no integration
+                ButterKnife.findById(getActivity(), R.id.commit_status).setVisibility(View.VISIBLE);
+                final NetworkImageView niv = ButterKnife.findById(getActivity(), R.id.status_image);
+                final TextView status = ButterKnife.findById(getActivity(), R.id.status_state);
+                final TextView desc = ButterKnife.findById(getActivity(), R.id.status_context);
+                if("success".equals(data.getState())) {
+                    niv.setImageResource(R.drawable.ic_check);
+                } else if("pending".equals(data.getState())) {
+                    niv.setImageResource(R.drawable.ic_loading);
+                } else {
+                    niv.setImageResource(R.drawable.ic_failure);
+                }
+                status.setText(String.format(getString(R.string.text_ci_status), data.getState()));
+                final StringBuilder builder = new StringBuilder();
+                if(data.getStatuses() != null) {
+                    for(Status s : data.getStatuses()) {
+                        builder.append(
+                                String.format(getString(R.string.text_ci_info),
+                                        s.getContext(),
+                                        s.getDescription()
+                                )
+                        );
+                        builder.append('\n');
+                    }
+                }
+                desc.setText(builder.toString());
+            }
+
+            @Override
+            public void loadError(APIHandler.APIError error) {
+
+            }
+        }, mCommit.getFullRepoName(), mCommit.getSha());
+    }
+
+    private void checkSharedElementEntry() {
+        final Intent i = getActivity().getIntent();
+        if(i.hasExtra(getString(R.string.transition_card))) {
+            mHeader.getViewTreeObserver()
+                   .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                       @Override
+                       public boolean onPreDraw() {
+                           mHeader.getViewTreeObserver().removeOnPreDrawListener(this);
+                           if(i.hasExtra(getString(R.string.intent_drawable))) {
+                               mAvatar.setImageBitmap(
+                                       i.getParcelableExtra(getString(R.string.intent_drawable)));
+                           }
+                           getActivity().startPostponedEnterTransition();
+                           return true;
+                       }
+                   });
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### CommitDiffAdapter
+
+**CommitDiffAdapter.java**
+``` java
+package com.tpb.projects.commits;
+
+import android.animation.ObjectAnimator;
+import android.content.res.Resources;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import com.tpb.github.data.models.DiffFile;
+import com.tpb.projects.R;
+import com.tpb.projects.markdown.Formatter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 01/04/17.
+ */
+
+public class CommitDiffAdapter extends RecyclerView.Adapter<CommitDiffAdapter.DiffHolder> {
+
+    private DiffFile[] mDiffs = new DiffFile[0];
+
+    public void setDiffs(DiffFile[] diffs) {
+        mDiffs = diffs;
+        notifyItemRangeInserted(0, mDiffs.length);
+    }
+
+    public void clear() {
+        final int size = mDiffs.length;
+        mDiffs = new DiffFile[0];
+        notifyItemRangeRemoved(0, size);
+    }
+
+    @Override
+    public DiffHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new DiffHolder(LayoutInflater.from(parent.getContext())
+                                            .inflate(R.layout.viewholder_diff, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(DiffHolder holder, int position) {
+        holder.mFileName.setText(mDiffs[position].getFileName());
+        final Resources res = holder.itemView.getResources();
+        holder.mInfo.setText(
+                String.format(
+                        res.getString(R.string.text_diff_changes),
+                        mDiffs[position].getStatus(),
+                        res.getQuantityString(R.plurals.text_commit_additions,
+                                mDiffs[position].getAdditions(), mDiffs[position].getAdditions()
+                        ),
+                        res.getQuantityString(R.plurals.text_commit_deletions,
+                                mDiffs[position].getDeletions(), mDiffs[position].getDeletions()
+                        )
+                )
+        );
+        if(mDiffs[position].getPatch() != null) {
+            holder.mDiff.setVisibility(View.VISIBLE);
+            holder.mDiff.setText(Formatter.buildDiffSpan(mDiffs[position].getPatch()));
+            holder.mDiff.post(() -> {
+                final int maxLines = holder.mDiff.getLineCount();
+                holder.mDiff.setMaxLines(3);
+                holder.itemView.setOnClickListener(v -> {
+                    if(holder.mDiff.getLineCount() < maxLines) {
+                        ObjectAnimator.ofInt(
+                                holder.mDiff,
+                                "maxLines",
+                                3,
+                                maxLines
+                        ).setDuration(res.getInteger(android.R.integer.config_mediumAnimTime))
+                                      .start();
+                    } else {
+                        ObjectAnimator.ofInt(
+                                holder.mDiff,
+                                "maxLines",
+                                maxLines,
+                                3
+                        ).setDuration(res.getInteger(android.R.integer.config_mediumAnimTime))
+                                      .start();
+                    }
+                });
+            });
+
+
+        } else {
+            holder.mDiff.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return mDiffs.length;
+    }
+
+    class DiffHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.diff_filename) TextView mFileName;
+        @BindView(R.id.diff_info) TextView mInfo;
+        @BindView(R.id.diff_diff) TextView mDiff;
+
+        DiffHolder(View itemView) {
+            super(itemView);
+            ButterKnife.bind(this, itemView);
+        }
+    }
+
+}
+
+```
+
+### CommitCommentsFragment
+
+**CommitCommentsFragment.java**
+``` java
+package com.tpb.projects.commits.fragments;
+
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.PopupMenu;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Commit;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.CommitCommentsAdapter;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 30/03/17.
+ */
+
+public class CommitCommentsFragment extends CommitFragment {
+    private static final String TAG = CommitCommentsFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_recycler) RecyclerView mRecycler;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    private FloatingActionButton mFab;
+
+    private Editor mEditor;
+
+    private CommitCommentsAdapter mAdapter;
+
+    public static CommitCommentsFragment getInstance() {
+        return new CommitCommentsFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mEditor = Editor.getEditor(getContext());
+        mAdapter = new CommitCommentsAdapter(this, mRefresher);
+        mRecycler.setLayoutManager(new FixedLinearLayoutManger(getContext()));
+        mRecycler.setAdapter(mAdapter);
+
+        mAreViewsValid = true;
+        if(mFab != null) addListeners();
+        if(mCommit != null) commitLoaded(mCommit);
+        return view;
+    }
+
+    public void setFab(FloatingActionButton fab) {
+        mFab = fab;
+        if(mAreViewsValid) addListeners();
+    }
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        if(mFab != null && mAreViewsValid) addListeners();
+    }
+
+    private void addListeners() {
+        final LinearLayoutManager manager = (LinearLayoutManager) mRecycler.getLayoutManager();
+        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+                if(dy > 10) {
+                    mFab.hide(true);
+                } else if(dy < -10) {
+                    mFab.show(true);
+                }
+            }
+        });
+        mFab.setOnClickListener(v -> {
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            UI.setViewPositionForIntent(i, mFab);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
+        });
+    }
+
+    @Override
+    public void commitLoaded(Commit commit) {
+        mCommit = commit;
+        if(!areViewsValid()) return;
+        mAdapter.setCommit(mCommit);
+    }
+
+    private void createComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.createCommitComment(new Editor.CreationListener<Comment>() {
+            @Override
+            public void created(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.addComment(comment);
+                mRecycler.post(() -> mRecycler.smoothScrollToPosition(mAdapter.getItemCount()));
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mCommit.getFullRepoName(), mCommit.getSha(), comment.getBody());
+    }
+
+    private void editComment(Comment comment) {
+        mEditor.updateCommitComment(new Editor.UpdateListener<Comment>() {
+            @Override
+            public void updated(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.updateComment(comment);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mCommit.getFullRepoName(), comment.getId(), comment.getBody());
+    }
+
+    void removeComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.deleteCommitComment(new Editor.DeletionListener<Integer>() {
+            @Override
+            public void deleted(Integer id) {
+                mRefresher.setRefreshing(false);
+                mAdapter.removeComment(id);
+            }
+
+            @Override
+            public void deletionError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mCommit.getFullRepoName(), comment.getId());
+    }
+
+    public void displayCommentMenu(View view, Comment comment) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_comment);
+        if(comment.getUser().getLogin().equals(
+                GitHubSession.getSession(getContext()).getUserLogin())) {
+            menu.getMenu()
+                .add(0, R.id.menu_edit_comment, Menu.NONE, getString(R.string.menu_edit_comment));
+            menu.getMenu().add(0, R.id.menu_delete_comment, Menu.NONE,
+                    getString(R.string.menu_delete_comment)
+            );
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case R.id.menu_edit_comment:
+                    final Intent i = new Intent(getContext(), CommentEditor.class);
+                    i.putExtra(getString(R.string.parcel_comment), comment);
+                    UI.setViewPositionForIntent(i, view);
+                    startActivityForResult(i, CommentEditor.REQUEST_CODE_EDIT_COMMENT);
+                    break;
+                case R.id.menu_delete_comment:
+                    removeComment(comment);
+                    break;
+                case R.id.menu_copy_comment_text:
+                    final ClipboardManager cm = (ClipboardManager) getActivity().getSystemService(
+                            Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(ClipData.newPlainText("Comment", comment.getBody()));
+                    Toast.makeText(getContext(), getString(R.string.text_copied_to_board),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
+            if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
+                createComment(comment);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
+                mRefresher.setRefreshing(true);
+                editComment(comment);
+            }
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### CommitCommentsAdapter
+
+**CommitCommentsAdapter.java**
+``` java
+package com.tpb.projects.commits;
+
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Commit;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.fragments.CommitCommentsFragment;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.markdown.Formatter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 01/04/17.
+ */
+
+public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
+    private static final String TAG = CommitCommentsAdapter.class.getSimpleName();
+
+    private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
+    private Commit mCommit;
+    private final CommitCommentsFragment mParent;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public CommitCommentsAdapter(CommitCommentsFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mRefresher = refresher;
+        mLoader = Loader.getLoader(mParent.getContext());
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            clear();
+            loadComments(true);
+        });
+    }
+
+
+    public void clear() {
+        final int oldSize = mComments.size();
+        mComments.clear();
+        notifyItemRangeRemoved(0, oldSize);
+    }
+
+    public void setCommit(Commit commit) {
+        mCommit = commit;
+        clear();
+        mPage = 1;
+        mLoader.loadCommitComments(this, mCommit.getFullRepoName(), mCommit.getSha(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<Comment> comments) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(comments.size() > 0) {
+            final int oldLength = mComments.size();
+            for(Comment c : comments) {
+                mComments.add(new Pair<>(c, null));
+            }
+            notifyItemRangeInserted(oldLength, mComments.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mRefresher.setRefreshing(false);
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadComments(false);
+        }
+    }
+
+    private void loadComments(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadCommitComments(this, mCommit.getFullRepoName(), mCommit.getSha(), mPage);
+    }
+
+    public void addComment(Comment comment) {
+        mComments.add(new Pair<>(comment, null));
+        notifyItemInserted(mComments.size());
+    }
+
+    public void removeComment(int commentId) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == commentId) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.remove(index);
+            notifyItemRemoved(index);
+        }
+    }
+
+    public void updateComment(Comment comment) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == comment.getId()) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.set(index, new Pair<>(comment, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    @Override
+    public CommentHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new CommentHolder(LayoutInflater.from(parent.getContext())
+                                               .inflate(R.layout.viewholder_comment, parent,
+                                                       false
+                                               ));
+
+    }
+
+    @Override
+    public void onBindViewHolder(CommentHolder holder, int position) {
+        bindComment(holder);
+    }
+
+    private void bindComment(CommentHolder commentHolder) {
+        final int pos = commentHolder.getAdapterPosition();
+        final Comment comment = mComments.get(pos).first;
+        if(mComments.get(pos).second == null) {
+            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            final StringBuilder builder = new StringBuilder();
+            builder.append(String.format(
+                    commentHolder.itemView.getResources().getString(R.string.text_comment_by),
+                    String.format(
+                            commentHolder.itemView.getResources().getString(R.string.text_href),
+                            comment.getUser().getHtmlUrl(),
+                            comment.getUser().getLogin()
+                    ),
+                    DateUtils.getRelativeTimeSpanString(comment.getCreatedAt())
+            ));
+            if(comment.getUpdatedAt() != comment.getCreatedAt()) {
+                builder.append(" • ");
+                builder.append(commentHolder.itemView.getResources()
+                                                     .getString(R.string.text_comment_edited));
+            }
+            builder.append("<br><br>");
+            builder.append(Markdown.formatMD(comment.getBody(), mCommit.getFullRepoName()));
+            if(comment.getReaction().hasReaction()) {
+                builder.append("\n");
+                builder.append(Formatter.reactions(comment.getReaction()));
+            }
+
+            commentHolder.mText.setMarkdown(
+                    builder.toString(),
+                    new HttpImageGetter(commentHolder.mText),
+                    text -> mComments.set(pos, Pair.create(comment, text))
+            );
+        } else {
+            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            commentHolder.mText.setText(mComments.get(pos).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mText);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mAvatar,
+                comment.getUser().getLogin()
+        );
+    }
+
+    @Override
+    public int getItemCount() {
+        return mComments.size();
+    }
+
+    private void displayMenu(View view, int pos) {
+        mParent.displayCommentMenu(view, mComments.get(pos).first);
+    }
+
+    class CommentHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
+        @BindView(R.id.comment_text) MarkdownTextView mText;
+        @BindView(R.id.comment_menu_button) ImageButton mMenu;
+
+        CommentHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
+            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
+        }
+
+    }
+}
+
+```
+
+## IssueActivity
+
+**IssueActivity.java**
+``` java
+package com.tpb.projects.issues;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.AppBarLayout;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.view.ViewPager;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.CircularRevealActivity;
+import com.tpb.projects.common.LockableViewPager;
+import com.tpb.projects.common.ShortcutDialog;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.issues.fragments.IssueCommentsFragment;
+import com.tpb.projects.issues.fragments.IssueInfoFragment;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 15/03/17.
+ */
+
+public class IssueActivity extends CircularRevealActivity implements Loader.ItemLoader<Issue>{
+    private static final String TAG = IssueActivity.class.getSimpleName();
+    private static final String URL = "https://raw.githubusercontent.com/tpb1908/AndroidProjectsClient/master/app/src/main/java/com/tpb/projects/issues/IssueActivity.java";
+
+
+    @BindView(R.id.issue_appbar) AppBarLayout mAppbar;
+    @BindView(R.id.issue_toolbar) Toolbar mToolbar;
+    @BindView(R.id.issue_content_viewpager) LockableViewPager mPager;
+    @BindView(R.id.issue_fragment_tabs) TabLayout mTabs;
+    @BindView(R.id.issue_number) TextView mNumber;
+    @BindView(R.id.issue_comment_fab) FloatingActionButton mFab;
+
+    private Loader mLoader;
+
+    private IssueFragmentAdapter mAdapter;
+
+    private Issue mIssue;
+    public Repository.AccessLevel mAccessLevel = Repository.AccessLevel.NONE;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_issue);
+        ButterKnife.bind(this);
+        setSupportActionBar(mToolbar);
+        getSupportActionBar().setDisplayShowTitleEnabled(false);
+
+        mLoader = Loader.getLoader(this);
+        mAdapter = new IssueFragmentAdapter(getSupportFragmentManager());
+        final Intent launchIntent = getIntent();
+        if(launchIntent.hasExtra(getString(R.string.transition_card))) {
+            postponeEnterTransition();
+        }
+        if(launchIntent.getExtras() != null && launchIntent.getExtras().containsKey(
+                getString(R.string.parcel_issue))) {
+            mIssue = launchIntent.getExtras().getParcelable(getString(R.string.parcel_issue));
+
+            loadComplete(mIssue);
+        } else {
+            final int issueNumber = launchIntent
+                    .getIntExtra(getString(R.string.intent_issue_number), -1);
+            final String fullRepoName = launchIntent
+                    .getStringExtra(getString(R.string.intent_repo));
+            mLoader.loadIssue(this, fullRepoName, issueNumber, true);
+        }
+
+        mPager.setOffscreenPageLimit(2);
+        mPager.setAdapter(mAdapter);
+        mTabs.setupWithViewPager(mPager);
+        mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                if(position == 1 && mIssue != null && !mIssue.isLocked()) {
+                    mFab.show(true);
+                } else {
+                    mFab.hide(true);
+                }
+            }
+        });
+    }
+
+    @Override
+    public void loadComplete(Issue issue) {
+        mIssue = issue;
+        mNumber.setText(String.format("#%1$s", issue.getNumber()));
+        final String login = GitHubSession.getSession(IssueActivity.this).getUserLogin();
+        if(mIssue.getOpenedBy().getLogin().equals(login)) {
+            mAccessLevel = Repository.AccessLevel.ADMIN;
+            if(mAdapter.mInfoFragment != null) mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
+        } else {
+            mLoader.checkIfCollaborator(new Loader.ItemLoader<Repository.AccessLevel>() {
+                @Override
+                public void loadComplete(Repository.AccessLevel data) {
+                    mAccessLevel = data;
+                    if(mAdapter.mInfoFragment != null)
+                        mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, GitHubSession.getSession(this).getUserLogin(), mIssue.getRepoFullName());
+        }
+
+        mAdapter.setIssue();
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
+
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
+                mAdapter.mCommentsFragment.createCommentForState(
+                        data.getParcelableExtra(
+                                getString(R.string.parcel_comment)
+                        )
+                );
+            }
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_activity, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch(item.getItemId()) {
+            case R.id.menu_settings:
+                startActivity(new Intent(IssueActivity.this, SettingsActivity.class));
+                break;
+            case R.id.menu_source:
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
+                break;
+            case R.id.menu_share:
+                if(mIssue != null) {
+                    final Intent share = new Intent();
+                    share.setAction(Intent.ACTION_SEND);
+                    share.putExtra(Intent.EXTRA_TEXT,
+                            "https://github.com/" + mIssue.getRepoFullName() + "/issues/" + mIssue
+                                    .getNumber()
+                    );
+                    share.setType("text/plain");
+                    startActivity(share);
+                }
+                break;
+            case R.id.menu_save_to_homescreen:
+                final ShortcutDialog dialog = new ShortcutDialog();
+                final Bundle args = new Bundle();
+                args.putInt(getString(R.string.intent_title_res),
+                        R.string.title_save_issue_shortcut
+                );
+                args.putBoolean(getString(R.string.intent_drawable), false);
+                args.putString(getString(R.string.intent_name), "#" + mIssue.getNumber());
+
+                dialog.setArguments(args);
+                dialog.setListener((name, iconFlag) -> {
+                    final Intent i = new Intent(getApplicationContext(), IssueActivity.class);
+                    i.putExtra(getString(R.string.intent_repo), mIssue.getRepoFullName());
+                    i.putExtra(getString(R.string.intent_issue_number), mIssue.getNumber());
+
+                    final Intent add = new Intent();
+                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource
+                            .fromContext(getApplicationContext(), R.mipmap.ic_launcher));
+                    add.putExtra("duplicate", false);
+                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
+                    getApplicationContext().sendBroadcast(add);
+                });
+                dialog.show(getSupportFragmentManager(), TAG);
+                break;
+        }
+        return true;
+    }
+
+    @Override
+    public void onBackPressed() {
+        mAdapter.mInfoFragment.checkSharedElementExit();
+        super.onBackPressed();
+    }
+
+
+    private class IssueFragmentAdapter extends FragmentPagerAdapter {
+
+        IssueCommentsFragment mCommentsFragment;
+        IssueInfoFragment mInfoFragment;
+
+        IssueFragmentAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            if(position == 0) {
+                mInfoFragment = IssueInfoFragment.getInstance();
+                if(mIssue != null) mInfoFragment.issueLoaded(mIssue);
+                return mInfoFragment;
+            } else {
+                mCommentsFragment = IssueCommentsFragment.getInstance(mFab);
+                if(mIssue != null) mCommentsFragment.issueLoaded(mIssue);
+                return mCommentsFragment;
+            }
+        }
+
+        void setIssue() {
+            if(mCommentsFragment != null) mCommentsFragment.issueLoaded(mIssue);
+            if(mInfoFragment != null) mInfoFragment.issueLoaded(mIssue);
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            if(position == 0) {
+                return getString(R.string.title_issue_info_fragment);
+            } else {
+                return getString(R.string.title_issue_comments_fragment);
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 2;
+        }
+    }
+}
+
+```
+
+### IssueInfoFragment
+
+**IssueInfoFragment.java**
+``` java
+package com.tpb.projects.issues.fragments;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityOptionsCompat;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.CardView;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.PopupMenu;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Milestone;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.github.data.models.User;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.editors.IssueEditor;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.IssueActivity;
+import com.tpb.projects.issues.IssueEventsAdapter;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.user.UserActivity;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 14/03/17.
+ */
+
+public class IssueInfoFragment extends IssueFragment {
+
+    private static final String TAG = IssueInfoFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.issue_header_card) CardView mHeader;
+    @BindView(R.id.issue_events_recycler) RecyclerView mRecycler;
+    @BindView(R.id.issue_assignees) LinearLayout mAssigneesLayout;
+    @BindView(R.id.text_issue_assignees) View mAssigneesTitle;
+    @BindView(R.id.issue_menu_button) ImageButton mOverflowButton;
+    @BindView(R.id.issue_user_avatar) NetworkImageView mUserAvatar;
+    @BindView(R.id.issue_state) ImageView mImageState;
+    @BindView(R.id.issue_title) MarkdownTextView mTitle;
+    @BindView(R.id.issue_info) MarkdownTextView mInfo;
+    @BindView(R.id.issue_events_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.viewholder_milestone_card) CardView mMilestoneCard;
+
+    private Issue mIssue;
+
+    private Repository.AccessLevel mAccessLevel = Repository.AccessLevel.NONE;
+    private Editor mEditor;
+
+    private IssueEventsAdapter mAdapter;
+
+    public static IssueInfoFragment getInstance() {
+        return new IssueInfoFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_issue_info, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mAccessLevel = ((IssueActivity) getActivity()).mAccessLevel;
+        mEditor = Editor.getEditor(getContext());
+        mAdapter = new IssueEventsAdapter(this, mRefresher);
+        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setLayoutManager(manager);
+
+
+        mRefresher.setOnRefreshListener(() -> {
+            mAdapter.clear();
+            Loader.getLoader(getContext()).loadIssue(new Loader.ItemLoader<Issue>() {
+                @Override
+                public void loadComplete(Issue issue) {
+                    issueLoaded(issue);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, mIssue.getRepoFullName(), mIssue.getNumber(), true);
+        });
+        checkSharedElementEntry();
+        if(mIssue != null) issueLoaded(mIssue);
+        return view;
+    }
+
+    private void displayIssue(Issue issue) {
+        mTitle.setMarkdown(Formatter.header(issue.getTitle(), 1));
+        mInfo.setMarkdown(
+                Formatter.buildIssueSpan(
+                        getContext(),
+                        issue,
+                        false, //Header title
+                        false, //No numbered link
+                        false, //No assignees
+                        true, //Closed at
+                        false //No comment count
+                ).toString(),
+                new HttpImageGetter(mInfo), null
+        );
+        mUserAvatar.setOnClickListener(v -> IntentHandler
+                .openUser(getActivity(), mUserAvatar, issue.getOpenedBy().getLogin()));
+        mUserAvatar.setImageUrl(issue.getOpenedBy().getAvatarUrl());
+        mImageState.setOnClickListener(v -> toggleIssueState());
+        if(issue.isClosed()) {
+            mImageState.setImageResource(R.drawable.ic_state_closed);
+        } else {
+            mImageState.setImageResource(R.drawable.ic_state_open);
+        }
+    }
+
+    private void displayAssignees(Issue issue) {
+        mAssigneesLayout.removeAllViews();
+        if(issue != null && issue.getAssignees() != null && issue.getAssignees().length > 0) {
+            mAssigneesLayout.setVisibility(View.VISIBLE);
+            mAssigneesTitle.setVisibility(View.VISIBLE);
+            for(User u : issue.getAssignees()) {
+                final LinearLayout user = (LinearLayout) getActivity().getLayoutInflater()
+                                                                      .inflate(R.layout.shard_user,
+                                                                              mAssigneesLayout,
+                                                                              false
+                                                                      );
+                user.setId(View.generateViewId());
+                mAssigneesLayout.addView(user);
+                final NetworkImageView avatar = ButterKnife.findById(user, R.id.user_avatar);
+                avatar.setId(View.generateViewId());
+                avatar.setImageUrl(u.getAvatarUrl());
+                avatar.setScaleType(ImageView.ScaleType.FIT_XY);
+                final TextView login = ButterKnife.findById(user, R.id.user_login);
+                login.setId(View.generateViewId()); //Max 10 assignees
+                login.setText(u.getLogin());
+                user.setOnClickListener((v) -> {
+                    final Intent us = new Intent(getActivity(), UserActivity.class);
+                    us.putExtra(getString(R.string.intent_username), u.getLogin());
+                    UI.setDrawableForIntent(avatar, us);
+                    getActivity().startActivity(us,
+                            ActivityOptionsCompat.makeSceneTransitionAnimation(
+                                    getActivity(),
+                                    new Pair<>(login, getString(R.string.transition_username)),
+                                    new Pair<>(avatar, getString(R.string.transition_user_image))
+                            ).toBundle()
+                    );
+                });
+            }
+        } else {
+            mAssigneesLayout.setVisibility(View.GONE);
+            mAssigneesTitle.setVisibility(View.GONE);
+        }
+    }
+
+    private void displayMilestone() {
+        if(mIssue.getMilestone() != null) {
+            mMilestoneCard.setVisibility(View.VISIBLE);
+            final Milestone milestone = mIssue.getMilestone();
+            final MarkdownTextView tv = ButterKnife
+                    .findById(mMilestoneCard, R.id.milestone_content_markdown);
+            final ImageView status = ButterKnife.findById(mMilestoneCard, R.id.milestone_drawable);
+            final NetworkImageView user = ButterKnife
+                    .findById(mMilestoneCard, R.id.milestone_user_avatar);
+            IntentHandler
+                    .addOnClickHandler(getActivity(), tv, user, milestone.getCreator().getLogin());
+            IntentHandler.addOnClickHandler(getActivity(), user, milestone.getCreator().getLogin());
+            status.setImageResource(milestone
+                    .getState() == State.OPEN ? R.drawable.ic_state_open : R.drawable.ic_state_closed);
+            user.setImageUrl(milestone.getCreator().getAvatarUrl());
+
+            final StringBuilder builder = new StringBuilder();
+
+            builder.append("<b>");
+            builder.append(Markdown.escape(milestone.getTitle()));
+            builder.append("</b>");
+            builder.append("<br>");
+            if(milestone.getOpenIssues() > 0 || milestone.getClosedIssues() > 0) {
+                builder.append("<br>");
+                builder.append(String.format(getString(R.string.text_milestone_completion),
+                        milestone.getOpenIssues(),
+                        milestone.getClosedIssues(),
+                        Math.round(100f * milestone.getClosedIssues() / (milestone
+                                .getOpenIssues() + milestone.getClosedIssues()))
+                        )
+                );
+            }
+            builder.append("<br>");
+            builder.append(
+                    String.format(
+                            getString(R.string.text_milestone_opened_by),
+                            String.format(getString(R.string.text_href),
+                                    "https://github.com/" + mIssue.getMilestone().getCreator()
+                                                                  .getLogin(),
+                                    mIssue.getMilestone().getCreator().getLogin()
+                            ),
+                            DateUtils.getRelativeTimeSpanString(milestone.getCreatedAt())
+                    )
+            );
+            if(milestone.getUpdatedAt() != milestone.getCreatedAt()) {
+                builder.append("<br>");
+                builder.append(
+                        String.format(
+                                getString(R.string.text_last_updated),
+                                DateUtils.getRelativeTimeSpanString(milestone.getUpdatedAt())
+                        )
+                );
+            }
+            if(milestone.getClosedAt() > 0) {
+                builder.append("<br>");
+                builder.append(
+                        String.format(
+                                getString(R.string.text_milestone_closed_at),
+                                DateUtils.getRelativeTimeSpanString(milestone.getClosedAt())
+                        )
+                );
+            }
+            if(milestone.getDueOn() > 0) {
+                builder.append("<br>");
+                if(System.currentTimeMillis() < milestone.getDueOn() ||
+                        (milestone.getClosedAt() != 0 && milestone.getClosedAt() < milestone
+                                .getDueOn())) {
+                    builder.append(
+                            String.format(
+                                    getString(R.string.text_milestone_due_on),
+                                    DateUtils.getRelativeTimeSpanString(milestone.getDueOn())
+                            )
+                    );
+                } else {
+                    builder.append("<font color=\"");
+                    builder.append(String.format("#%06X", (0xFFFFFF & Color.RED)));
+                    builder.append("\">");
+                    builder.append(
+                            String.format(
+                                    getString(R.string.text_milestone_due_on),
+                                    DateUtils.getRelativeTimeSpanString(milestone.getDueOn())
+                            )
+                    );
+                    builder.append("</font>");
+                }
+            }
+            tv.setMarkdown(Markdown.formatMD(builder.toString(), mIssue.getRepoFullName()));
+
+        } else {
+            mMilestoneCard.setVisibility(View.GONE);
+        }
+    }
+
+    public void updateIssue(Issue issue, String[] assignees, String[] labels) {
+        mRefresher.setRefreshing(true);
+        mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
+            int issueCreationAttempts = 0;
+
+            @Override
+            public void updated(Issue issue) {
+                int matchCount = 0;
+                if(mIssue.getAssignees() != null && issue.getAssignees() != null) {
+                    for(User u : mIssue.getAssignees()) {
+                        for(User v : mIssue.getAssignees()) {
+                            if(u.equals(v)) matchCount++;
+                        }
+                    }
+                    if(matchCount != mIssue.getAssignees().length || matchCount != issue
+                            .getAssignees().length) {
+                        displayAssignees(issue);
+                    }
+                }
+                mIssue = issue;
+                displayIssue(mIssue);
+                mRefresher.setRefreshing(false);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(issueCreationAttempts < 5) {
+                        issueCreationAttempts++;
+                        mEditor.updateIssue(this, mIssue.getRepoFullName(), issue, assignees,
+                                labels
+                        );
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mRefresher.setRefreshing(false);
+                    }
+                }
+            }
+        }, mIssue.getRepoFullName(), issue, assignees, labels);
+    }
+
+    private void editIssue(View view) {
+        final Intent i = new Intent(getContext(), IssueEditor.class);
+        i.putExtra(getString(R.string.intent_repo), mIssue.getRepoFullName());
+        i.putExtra(getString(R.string.parcel_issue), mIssue);
+        UI.setViewPositionForIntent(i, view);
+        startActivityForResult(i, IssueEditor.REQUEST_CODE_EDIT_ISSUE);
+    }
+
+    private void toggleIssueState() {
+        if(mIssue == null || mAccessLevel != Repository.AccessLevel.ADMIN) return;
+        final Editor.UpdateListener<Issue> listener = new Editor.UpdateListener<Issue>() {
+            @Override
+            public void updated(Issue issue) {
+                mIssue = issue;
+                mImageState.setImageResource(
+                        mIssue.isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                }
+            }
+        };
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle(R.string.title_state_change_comment);
+        builder.setPositiveButton(R.string.action_ok, (dialog, which) -> {
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE);
+            mRefresher.setRefreshing(true);
+            if(mIssue.isClosed()) {
+                mEditor.openIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            } else {
+                mEditor.closeIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            }
+        });
+        builder.setNeutralButton(R.string.action_no, (dialog, which) -> {
+            mRefresher.setRefreshing(true);
+            if(mIssue.isClosed()) {
+                mEditor.openIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            } else {
+                mEditor.closeIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            }
+        });
+        builder.setNegativeButton(R.string.action_cancel, null);
+        builder.create().show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == Activity.RESULT_OK) {
+            if(requestCode == IssueEditor.REQUEST_CODE_EDIT_ISSUE) {
+                final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
+                final String[] assignees;
+                final String[] labels;
+                if(data.hasExtra(getString(R.string.intent_issue_assignees))) {
+                    assignees = data
+                            .getStringArrayExtra(getString(R.string.intent_issue_assignees));
+                } else {
+                    assignees = null;
+                }
+                if(data.hasExtra(getString(R.string.intent_issue_labels))) {
+                    labels = data.getStringArrayExtra(getString(R.string.intent_issue_labels));
+                } else {
+                    labels = null;
+                }
+                updateIssue(issue, assignees, labels);
+            }
+        }
+    }
+
+    @OnClick({R.id.issue_header_card, R.id.issue_info, R.id.issue_title})
+    void onHeaderClick() {
+        if(mIssue != null && mAccessLevel == Repository.AccessLevel.ADMIN) editIssue(mInfo);
+    }
+
+    @OnClick(R.id.issue_menu_button)
+    public void displayIssueMenu(View view) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_issue);
+        if(mAccessLevel == Repository.AccessLevel.ADMIN) {
+            menu.getMenu().add(0, 1, Menu.NONE,
+                    mIssue.isClosed() ? R.string.menu_reopen_issue : R.string.menu_close_issue
+            );
+            menu.getMenu().add(0, 2, Menu.NONE, R.string.menu_edit_issue);
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case 1:
+                    toggleIssueState();
+                    break;
+                case 2:
+                    editIssue(view);
+                    break;
+                case R.id.menu_fullscreen:
+                    IntentHandler.showFullScreen(getContext(), mIssue.getBody(),
+                            mIssue.getRepoFullName(), getFragmentManager()
+                    );
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    @Override
+    public void setAccessLevel(Repository.AccessLevel level) {
+        mAccessLevel = level;
+    }
+
+    @Override
+    public void issueLoaded(Issue issue) {
+        mIssue = issue;
+        if(mAdapter != null) {
+            mAdapter.setIssue(issue);
+            displayIssue(mIssue);
+            displayAssignees(mIssue);
+            displayMilestone();
+        }
+    }
+
+    private void checkSharedElementEntry() {
+        final Intent i = getActivity().getIntent();
+        if(i.hasExtra(getString(R.string.transition_card))) {
+            mHeader.getViewTreeObserver()
+                   .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                       @Override
+                       public boolean onPreDraw() {
+                           mHeader.getViewTreeObserver().removeOnPreDrawListener(this);
+                           if(i.hasExtra(getString(R.string.intent_drawable))) {
+                               mUserAvatar.setImageBitmap(
+                                       i.getParcelableExtra(getString(R.string.intent_drawable)));
+                           }
+                           getActivity().startPostponedEnterTransition();
+                           return true;
+                       }
+                   });
+        }
+    }
+
+    public void checkSharedElementExit() {
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### IssueEventsAdapter
+
+**IssueEventsAdapter.java**
+``` java
+package com.tpb.projects.issues;
+
+import android.content.res.Resources;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.Util;
+import com.tpb.github.data.models.DataModel;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.IssueEvent;
+import com.tpb.github.data.models.MergedModel;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.BuildConfig;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.fragments.IssueInfoFragment;
+import com.tpb.projects.markdown.Formatter;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 15/03/17.
+ */
+
+public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.EventHolder> implements Loader.ListLoader<IssueEvent> {
+    private static final String TAG = IssueEventsAdapter.class.getSimpleName();
+
+    private final ArrayList<Pair<DataModel, SpannableString>> mEvents = new ArrayList<>();
+    private Issue mIssue;
+    private final IssueInfoFragment mParent;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public IssueEventsAdapter(IssueInfoFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mLoader = Loader.getLoader(parent.getContext());
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            notifyDataSetChanged();
+            loadEvents(true);
+        });
+    }
+
+    public void clear() {
+        mEvents.clear();
+        notifyDataSetChanged();
+    }
+
+    public void setIssue(Issue issue) {
+        mIssue = issue;
+        mEvents.clear();
+        mPage = 1;
+        mLoader.loadEvents(this, issue.getRepoFullName(), issue.getNumber(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<IssueEvent> events) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(events.size() > 0) {
+            int oldLength = mEvents.size();
+            if(mPage == 1) mEvents.clear();
+            for(DataModel dm : Util.mergeModels(events, comparator)) {
+                mEvents.add(new Pair<>(dm, null));
+            }
+            notifyItemRangeInserted(oldLength, mEvents.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    private static Comparator<DataModel> comparator = (o1, o2) ->
+            o1 instanceof IssueEvent &&
+                    o2 instanceof IssueEvent &&
+                    o1.getCreatedAt() == o2.getCreatedAt() &&
+                    ((IssueEvent) o1).getEvent() == ((IssueEvent) o2).getEvent()
+                    ? 0 : -1;
+
+
+    private ArrayList<DataModel> mergeEvents(List<IssueEvent> events) {
+        final ArrayList<DataModel> merged = new ArrayList<>();
+        ArrayList<IssueEvent> toMerge = new ArrayList<>();
+        IssueEvent last = new IssueEvent();
+        for(int i = 0; i < events.size(); i++) {
+            //If we have two of the same event, happening at the same time
+            if(events.get(i).getCreatedAt() == last.getCreatedAt() && events.get(i)
+                                                                            .getEvent() == last
+                    .getEvent()) {
+                /*If multiple events (labels or assignees) were added as the first event,
+                * then we need to stop the first item being duplicated
+                 */
+                if(merged.size() == 1 && merged.get(0).equals(events.get(i - 1))) merged.remove(0);
+                toMerge.add(events.get(i - 1)); //Add the previous event
+                int j = i;
+                //Loop until we find an event which shouldn't be merged
+                while(j < events.size() && events.get(j).getCreatedAt() == last
+                        .getCreatedAt() && events.get(j).getEvent() == last.getEvent()) {
+                    toMerge.add(events.get(j++));
+                }
+                i = j - 1; //Jump to the end of the merged positions
+                merged.add(new MergedModel<IssueEvent>(toMerge));
+                toMerge = new ArrayList<>(); //Reset the list of merged events
+            } else {
+                merged.add(events.get(i));
+            }
+            last = events.get(i); //Set the last event
+        }
+        return merged;
+
+    }
+
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadEvents(false);
+        }
+    }
+
+    private void loadEvents(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadEvents(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
+    }
+
+    void addEvent(IssueEvent event) {
+        mEvents.add(new Pair<>(event, null));
+        notifyItemInserted(mEvents.size());
+    }
+
+    @Override
+    public EventHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new EventHolder(LayoutInflater.from(parent.getContext())
+                                             .inflate(R.layout.viewholder_event, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(EventHolder holder, int position) {
+        if(mEvents.get(position).first instanceof IssueEvent) {
+            bindEvent(holder, (IssueEvent) mEvents.get(position).first);
+        } else if(mEvents.get(position).first instanceof MergedModel) {
+            bindMergedEvent(holder, (MergedModel<IssueEvent>) mEvents.get(position).first);
+        }
+    }
+
+    private void bindMergedEvent(EventHolder eventHolder, MergedModel<IssueEvent> me) {
+        String text;
+        final Resources res = eventHolder.itemView.getResources();
+        switch(me.getData().get(0).getEvent()) {
+            case ASSIGNED:
+                final StringBuilder assignees = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    assignees.append(String.format(res.getString(R.string.text_href),
+                            e.getActor().getHtmlUrl(),
+                            e.getActor().getLogin()
+                    ));
+                    assignees.append(", ");
+                }
+                assignees.setLength(assignees.length() - 2); //Remove final comma
+                text = String.format(res.getString(R.string.text_event_assigned_multiple),
+                        assignees.toString()
+                );
+                break;
+            case UNASSIGNED:
+                final StringBuilder unassignees = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    unassignees.append(String.format(res.getString(R.string.text_href),
+                            e.getActor().getHtmlUrl(),
+                            e.getActor().getLogin()
+                    ));
+                    unassignees.append(", ");
+                }
+                unassignees.setLength(unassignees.length() - 2); //Remove final comma
+                text = String.format(res.getString(R.string.text_event_unassigned_multiple),
+                        unassignees.toString()
+                );
+                break;
+            case REVIEW_REQUESTED:
+                final StringBuilder requested = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    requested.append(String.format(res.getString(R.string.text_href),
+                            e.getRequestedReviewer().getHtmlUrl(),
+                            e.getRequestedReviewer().getLogin()
+                    ));
+                    requested.append(", ");
+                }
+                requested.setLength(requested.length() - 2); //Remove final comma
+                text = String.format(res.getString(R.string.text_event_review_requested_multiple),
+                        String.format(res.getString(R.string.text_href),
+                                me.getData().get(0).getReviewRequester().getHtmlUrl(),
+                                me.getData().get(0).getReviewRequester().getLogin()
+                        ),
+                        requested.toString()
+                );
+                break;
+            case REVIEW_REQUEST_REMOVED:
+                final StringBuilder derequested = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    derequested.append(String.format(res.getString(R.string.text_href),
+                            e.getReviewRequester().getHtmlUrl(),
+                            e.getReviewRequester().getLogin()
+                    ));
+                    derequested.append(", ");
+                }
+                derequested.setLength(derequested.length() - 2); //Remove final comma
+                text = String
+                        .format(res.getString(R.string.text_event_review_request_removed_multiple),
+                                String.format(res.getString(R.string.text_href),
+                                        me.getData().get(0).getActor().getHtmlUrl(),
+                                        me.getData().get(0).getActor().getLogin()
+                                ),
+                                derequested.toString()
+                        );
+                break;
+            case LABELED:
+                final StringBuilder labels = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    labels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
+                    labels.append("&nbsp;");
+                }
+                labels.setLength(labels.length() - "&nbsp;".length());
+                text = String.format(
+                        res.getString(R.string.text_event_labels_added),
+                        String.format(res.getString(R.string.text_href),
+                                me.getData().get(0).getActor().getHtmlUrl(),
+                                me.getData().get(0).getActor().getLogin()
+                        ),
+                        labels.toString()
+                );
+                break;
+            case UNLABELED:
+                final StringBuilder unlabels = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    unlabels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
+                    unlabels.append("&nbsp;");
+                }
+                unlabels.setLength(unlabels.length() - 2);
+                text = String.format(res.getString(R.string.text_event_labels_removed),
+                        String.format(res.getString(R.string.text_href),
+                                me.getData().get(0).getActor().getHtmlUrl(),
+                                me.getData().get(0).getActor().getLogin()
+                        ),
+                        unlabels.toString()
+                );
+                break;
+            case CLOSED:
+                //Duplicate close events seem to happen
+                bindEvent(eventHolder, me.getData().get(0));
+                return;
+            case REFERENCED:
+                final StringBuilder commits = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    commits.append("<br>");
+                    commits.append(String.format(res.getString(R.string.text_href),
+                            "https://github.com/" + mIssue.getRepoFullName() + "/commit/" + e
+                                    .getCommitId(),
+                            String.format(res.getString(R.string.text_commit), e.getShortCommitId())
+                    ));
+                }
+                commits.append("<br>");
+                text = String.format(res.getString(R.string.text_event_referenced_multiple),
+                        commits.toString()
+                );
+                break;
+            case MENTIONED:
+                final StringBuilder mentioned = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    mentioned.append("<br>");
+                    mentioned.append(String.format(res.getString(R.string.text_href),
+                            e.getActor().getHtmlUrl(),
+                            e.getActor().getLogin()
+                    ));
+                }
+                text = String.format(res.getString(R.string.text_event_mentioned_multiple),
+                        mentioned.toString()
+                );
+                break;
+            case RENAMED:
+                final StringBuilder named = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    named.append("<br>");
+                    named.append(
+                            String.format(
+                                    res.getString(R.string.text_event_rename_multiple),
+                                    e.getRenameFrom(),
+                                    e.getRenameTo()
+                            )
+                    );
+                }
+                text = String.format(res.getString(R.string.text_event_renamed_multiple),
+                        named.toString()
+                );
+                break;
+            case MOVED_COLUMNS_IN_PROJECT:
+                text = res.getString(R.string.text_event_moved_columns_in_project_multiple);
+                break;
+            default:
+                bindEvent(eventHolder, me.getData().get(0));
+                return;
+        }
+        text += " • " + DateUtils.getRelativeTimeSpanString(me.getCreatedAt());
+        eventHolder.mText.setMarkdown(
+                text,
+                new HttpImageGetter(eventHolder.mText),
+                null
+        );
+        if(me.getData().get(0).getActor() != null) {
+            eventHolder.mAvatar.setVisibility(View.VISIBLE);
+            eventHolder.mAvatar.setImageUrl(me.getData().get(0).getActor().getAvatarUrl());
+            IntentHandler.addOnClickHandler(
+                    mParent.getActivity(),
+                    eventHolder.mAvatar, me.getData().get(0).getActor().getLogin()
+            );
+            IntentHandler.addOnClickHandler(mParent.getActivity(),
+                    eventHolder.mText,
+                    eventHolder.mAvatar,
+                    me.getData().get(0).getActor().getLogin()
+            );
+        } else {
+            eventHolder.mAvatar.setVisibility(View.GONE);
+        }
+    }
+
+    private void bindEvent(EventHolder eventHolder, IssueEvent event) {
+        String text;
+        final Resources res = eventHolder.itemView.getResources();
+        switch(event.getEvent()) {
+            case CLOSED:
+                if(event.getShortCommitId() != null) {
+                    text = String.format(res.getString(R.string.text_event_closed_in),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            ),
+                            String.format(res.getString(R.string.text_href),
+                                    "https://github.com/" + mIssue
+                                            .getRepoFullName() + "/commit/" + event.getCommitId(),
+                                    String.format(res.getString(R.string.text_commit),
+                                            event.getShortCommitId()
+                                    )
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_closed),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                }
+                break;
+            case REOPENED:
+                text = String.format(res.getString(R.string.text_event_reopened),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case SUBSCRIBED:
+                text = String.format(res.getString(R.string.text_event_subscribed),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case MERGED:
+                text = String.format(res.getString(R.string.text_event_merged),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        String.format(res.getString(R.string.text_href),
+                                "https://github.com/" + mIssue
+                                        .getRepoFullName() + "/commit/" + event.getCommitId(),
+                                String.format(res.getString(R.string.text_commit),
+                                        event.getShortCommitId()
+                                )
+                        )
+                );
+                break;
+            case REFERENCED:
+                text = String.format(res.getString(R.string.text_event_referenced),
+                        String.format(res.getString(R.string.text_href),
+                                "https://github.com/" + mIssue
+                                        .getRepoFullName() + "/commit/" + event.getCommitId(),
+                                String.format(res.getString(R.string.text_commit),
+                                        event.getShortCommitId()
+                                )
+                        )
+                );
+                break;
+            case MENTIONED:
+                text = String.format(res.getString(R.string.text_event_mentioned),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case ASSIGNED:
+                if(event.getAssignee() != null && event.getActor().equals(event.getAssignee())) {
+                    text = String.format(res.getString(R.string.text_event_assigned_themselves),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_assigned),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                }
+                break;
+            case UNASSIGNED:
+                if(event.getAssignee() != null && event.getActor().equals(event.getAssignee())) {
+                    text = String.format(res.getString(R.string.text_event_unassigned_themselves),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_unassigned),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                }
+                break;
+            case LABELED:
+                text = String.format(res.getString(R.string.text_event_labeled),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        Formatter.getLabelString(event.getLabelName(), event.getLabelColor())
+                );
+                break;
+            case UNLABELED:
+                text = String.format(res.getString(R.string.text_event_unlabeled),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        Formatter.getLabelString(event.getLabelName(), event.getLabelColor())
+                );
+                break;
+            case MILESTONED:
+                text = "Milestoned"; //TODO
+                break;
+            case DEMILESTONED:
+                text = "De-milestoned"; //TODO
+                break;
+            case RENAMED:
+                text = String.format(res.getString(R.string.text_event_renamed),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        event.getRenameFrom(),
+                        event.getRenameTo()
+                );
+                break;
+            case LOCKED:
+                text = String.format(res.getString(R.string.text_event_locked),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case UNLOCKED:
+                text = String.format(res.getString(R.string.text_event_unlocked),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case HEAD_REF_DELETED:
+                text = res.getString(R.string.text_event_head_ref_deleted);
+                break;
+            case HEAD_REF_RESTORED:
+                text = res.getString(R.string.text_event_head_ref_restored);
+                break;
+            case REVIEW_DISMISSED:
+                text = String.format(res.getString(R.string.text_event_review_dismissed),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case REVIEW_REQUESTED:
+                if(event.getReviewRequester().getId() == event.getRequestedReviewer().getId()) {
+                    text = String.format(res.getString(R.string.text_event_own_review_request),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getReviewRequester().getHtmlUrl(),
+                                    event.getReviewRequester().getLogin()
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_review_requested),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getReviewRequester().getHtmlUrl(),
+                                    event.getReviewRequester().getLogin()
+                            ),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getRequestedReviewer().getHtmlUrl(),
+                                    event.getRequestedReviewer().getLogin()
+                            )
+                    );
+                }
+                break;
+            case REVIEW_REQUEST_REMOVED:
+                if(event.getReviewRequester().getId() == event.getRequestedReviewer().getId()) {
+                    text = String
+                            .format(res.getString(R.string.text_event_removed_own_review_request),
+                                    String.format(res.getString(R.string.text_href),
+                                            event.getReviewRequester().getHtmlUrl(),
+                                            event.getReviewRequester().getLogin()
+                                    )
+                            );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_review_request_removed),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            ),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getRequestedReviewer().getHtmlUrl(),
+                                    event.getRequestedReviewer().getLogin()
+                            )
+                    );
+                }
+                break;
+            case REMOVED_FROM_PROJECT:
+                text = String.format(res.getString(R.string.text_event_removed_from_project),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case ADDED_TO_PROJECT:
+                text = String.format(res.getString(R.string.text_event_added_to_project),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case MOVED_COLUMNS_IN_PROJECT:
+                text = res.getString(R.string.text_event_moved_columns_in_project);
+                break;
+            default:
+                text = "An event type hasn't been implemented " + event.getEvent();
+                text += "\nTell me here " + BuildConfig.BUG_EMAIL;
+        }
+        text += " • " + DateUtils.getRelativeTimeSpanString(event.getCreatedAt());
+        eventHolder.mText.setMarkdown(
+                text,
+                new HttpImageGetter(eventHolder.mText),
+                null
+        );
+        if(event.getActor() != null) {
+            eventHolder.mAvatar.setVisibility(View.VISIBLE);
+            eventHolder.mAvatar.setImageUrl(event.getActor().getAvatarUrl());
+            IntentHandler.addOnClickHandler(mParent.getActivity(), eventHolder.mAvatar,
+                    event.getActor().getLogin()
+            );
+            IntentHandler.addOnClickHandler(mParent.getActivity(), eventHolder.mText,
+                    eventHolder.mAvatar, event.getActor().getLogin()
+            );
+        } else {
+            eventHolder.mAvatar.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return mEvents.size();
+    }
+
+
+    class EventHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.event_text) MarkdownTextView mText;
+        @BindView(R.id.event_user_avatar) NetworkImageView mAvatar;
+
+        EventHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+        }
+
+    }
+
+
+}
+
+```
+
+### IssueCommentsFragment
+
+**IssueCommentsFragment.java**
+``` java
+package com.tpb.projects.issues.fragments;
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.PopupMenu;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.issues.IssueCommentsAdapter;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 14/03/17.
+ */
+
+public class IssueCommentsFragment extends IssueFragment {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_recycler) RecyclerView mRecycler;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    private FloatingActionButton mFab;
+
+    private IssueCommentsAdapter mAdapter;
+
+    private Editor mEditor;
+
+    private Repository.AccessLevel mAccessLevel;
+    private Issue mIssue;
+
+    public static IssueCommentsFragment getInstance(FloatingActionButton fab) {
+        final IssueCommentsFragment frag = new IssueCommentsFragment();
+        frag.mFab = fab;
+        return frag;
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mEditor = Editor.getEditor(getContext());
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+                if(dy > 10) {
+                    mFab.hide(true);
+                } else if(dy < -10 && mIssue != null && !mIssue.isLocked()) {
+                    mFab.show(true);
+                }
+            }
+        });
+        mFab.setOnClickListener(v -> {
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            UI.setViewPositionForIntent(i, mFab);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
+        });
+        mAdapter = new IssueCommentsAdapter(this, mRefresher);
+        if(mIssue != null) mAdapter.setIssue(mIssue);
+        if(mAccessLevel != null && mAccessLevel == Repository.AccessLevel.ADMIN) {
+            mFab.setVisibility(View.VISIBLE);
+        }
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setLayoutManager(manager);
+        mRefresher.setOnRefreshListener(() -> {
+            mAdapter.clear();
+            mAdapter.setIssue(mIssue);
+        });
+
+        return view;
+    }
+
+    @Override
+    public void issueLoaded(Issue issue) {
+        mIssue = issue;
+        if(mAdapter != null) mAdapter.setIssue(issue);
+    }
+
+    @Override
+    public void setAccessLevel(Repository.AccessLevel level) {
+        mAccessLevel = level;
+        if(mAccessLevel == Repository.AccessLevel.ADMIN && mIssue != null && !mIssue.isLocked()) {
+            mFab.setVisibility(View.VISIBLE);
+            mFab.show(true);
+        }
+    }
+
+    private void createComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.createIssueComment(new Editor.CreationListener<Comment>() {
+            @Override
+            public void created(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.addComment(comment);
+                mRecycler.post(() -> mRecycler.smoothScrollToPosition(mAdapter.getItemCount()));
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mIssue.getRepoFullName(), mIssue.getNumber(), comment.getBody());
+    }
+
+    public void createCommentForState(Comment comment) {
+        createComment(comment);
+    }
+
+    private void editComment(Comment comment) {
+        mEditor.updateIssueComment(new Editor.UpdateListener<Comment>() {
+            @Override
+            public void updated(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.updateComment(comment);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mIssue.getRepoFullName(), comment.getId(), comment.getBody());
+    }
+
+    void removeComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.deleteIssueComment(new Editor.DeletionListener<Integer>() {
+            @Override
+            public void deleted(Integer id) {
+                mRefresher.setRefreshing(false);
+                mAdapter.removeComment(id);
+            }
+
+            @Override
+            public void deletionError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mIssue.getRepoFullName(), comment.getId());
+    }
+
+    public void displayCommentMenu(View view, Comment comment) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_comment);
+        if(comment.getUser().getLogin().equals(
+                GitHubSession.getSession(getContext()).getUserLogin()) && !mIssue.isLocked()) {
+            menu.getMenu()
+                .add(0, R.id.menu_edit_comment, Menu.NONE, getString(R.string.menu_edit_comment));
+            menu.getMenu().add(0, R.id.menu_delete_comment, Menu.NONE,
+                    getString(R.string.menu_delete_comment)
+            );
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case R.id.menu_edit_comment:
+                    final Intent i = new Intent(getContext(), CommentEditor.class);
+                    i.putExtra(getString(R.string.parcel_comment), comment);
+                    UI.setViewPositionForIntent(i, view);
+                    startActivityForResult(i, CommentEditor.REQUEST_CODE_EDIT_COMMENT);
+                    break;
+                case R.id.menu_delete_comment:
+                    removeComment(comment);
+                    break;
+                case R.id.menu_copy_comment_text:
+                    final ClipboardManager cm = (ClipboardManager) getActivity()
+                            .getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(ClipData.newPlainText("Comment", comment.getBody()));
+                    Toast.makeText(getContext(), getString(R.string.text_copied_to_board),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
+            if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
+                createComment(comment);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
+                mRefresher.setRefreshing(true);
+                editComment(comment);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
+                createCommentForState(comment);
+            }
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### IssueCommentsAdapter
+
+**IssueCommentsAdapter.java**
+``` java
+package com.tpb.projects.issues;
+
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.fragments.IssueCommentsFragment;
+import com.tpb.projects.markdown.Formatter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 14/03/17.
+ */
+
+public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
+
+    private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
+    private Issue mIssue;
+    private final IssueCommentsFragment mParent;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public IssueCommentsAdapter(IssueCommentsFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mLoader = Loader.getLoader(parent.getContext());
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            clear();
+            loadComments(true);
+        });
+    }
+
+    public void clear() {
+        final int oldSize = mComments.size();
+        mComments.clear();
+        notifyItemRangeRemoved(0, oldSize);
+    }
+
+    public void setIssue(Issue issue) {
+        mIssue = issue;
+        clear();
+        mPage = 1;
+        mLoader.loadIssueComments(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<Comment> data) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(data.size() > 0) {
+            int oldLength = mComments.size();
+            for(Comment c : data) {
+                mComments.add(new Pair<>(c, null));
+            }
+            notifyItemRangeInserted(oldLength, mComments.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadComments(false);
+        }
+    }
+
+    private void loadComments(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadIssueComments(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
+    }
+
+    public void addComment(Comment comment) {
+        mComments.add(new Pair<>(comment, null));
+        notifyItemInserted(mComments.size());
+    }
+
+    public void removeComment(int commentId) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == commentId) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.remove(index);
+            notifyItemRemoved(index);
+        }
+    }
+
+    public void updateComment(Comment comment) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == comment.getId()) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.set(index, new Pair<>(comment, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    @Override
+    public CommentHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new CommentHolder(LayoutInflater.from(parent.getContext())
+                                               .inflate(R.layout.viewholder_comment, parent,
+                                                       false
+                                               ));
+
+    }
+
+    @Override
+    public void onBindViewHolder(CommentHolder holder, int position) {
+        final int pos = holder.getAdapterPosition();
+        final Comment comment = mComments.get(pos).first;
+        if(mComments.get(pos).second == null) {
+            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            final StringBuilder builder = new StringBuilder();
+            builder.append(String.format(
+                    holder.itemView.getResources().getString(R.string.text_comment_by),
+                    String.format(
+                            holder.itemView.getResources().getString(R.string.text_href),
+                            comment.getUser().getHtmlUrl(),
+                            comment.getUser().getLogin()
+                    ),
+                    DateUtils.getRelativeTimeSpanString(comment.getCreatedAt())
+            ));
+            if(comment.getUpdatedAt() != comment.getCreatedAt()) {
+                builder.append(" • ");
+                builder.append(holder.itemView.getResources()
+                                                     .getString(R.string.text_comment_edited));
+            }
+            builder.append("<br><br>");
+            builder.append(Markdown.formatMD(comment.getBody(), mIssue.getRepoFullName()));
+            if(comment.hasReaction()) {
+                builder.append("\n");
+                builder.append(Formatter.reactions(comment.getReaction()));
+            }
+
+            holder.mText.setMarkdown(
+                    builder.toString(),
+                    new HttpImageGetter(holder.mText),
+                    text -> mComments.set(pos, Pair.create(comment, text))
+            );
+        } else {
+            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            holder.mText.setText(mComments.get(pos).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mText);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mAvatar,
+                comment.getUser().getLogin()
+        );
+    }
+
+    @Override
+    public int getItemCount() {
+        return mComments.size();
+    }
+
+    private void displayMenu(View view, int pos) {
+        mParent.displayCommentMenu(view, mComments.get(pos).first);
+    }
+
+    class CommentHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
+        @BindView(R.id.comment_text) MarkdownTextView mText;
+        @BindView(R.id.comment_menu_button) ImageButton mMenu;
+
+        CommentHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
+            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
+        }
+
+    }
+}
+
+```
+
+## Notifications
+
+### NotificationServiceStarterReceiver
+
+**NotificationServiceStarterReceiver.java**
+``` java
+package com.tpb.projects.notifications.receivers;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+
+/**
+ * Created by theo on 04/04/17.
+ */
+
+public final class NotificationServiceStarterReceiver extends BroadcastReceiver {
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        NotificationEventReceiver.setupAlarm(context);
+    }
+}
+```
+
+### NotificationEventReceiver
+
+**NotificationEventReceiver.java**
+``` java
+package com.tpb.projects.notifications.receivers;
+
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.support.annotation.IntRange;
+import android.support.v4.content.WakefulBroadcastReceiver;
+
+import com.tpb.projects.notifications.NotificationIntentService;
+import com.tpb.projects.util.Logger;
+
+import java.util.Date;
+
+/**
+ * Created by theo on 04/04/17.
+ */
+
+public class NotificationEventReceiver extends WakefulBroadcastReceiver {
+
+    private static final String ACTION_START_NOTIFICATION_SERVICE = "ACTION_START_NOTIFICATION_SERVICE";
+    private static final String ACTION_NOTIFICATION_DISMISSED = "ACTION_NOTIFICATION_DISMISSED";
+
+    private static int NOTIFICATIONS_INTERVAL_IN_MINUTES = 1;
+
+    public static void setUpdateInterval(@IntRange(from = 1, to = 60) int minutes) {
+        NOTIFICATIONS_INTERVAL_IN_MINUTES = minutes;
+    }
+
+    public static void setupAlarm(Context context) {
+        final AlarmManager alarmManager = (AlarmManager) context
+                .getSystemService(Context.ALARM_SERVICE);
+        final PendingIntent alarmIntent = getStartPendingIntent(context);
+        alarmManager.setRepeating(AlarmManager.RTC_WAKEUP,
+                new Date().getTime(),
+                NOTIFICATIONS_INTERVAL_IN_MINUTES * 60000,
+                alarmIntent
+        );
+    }
+
+    private static PendingIntent getStartPendingIntent(Context context) {
+        final Intent intent = new Intent(context, NotificationEventReceiver.class);
+        intent.setAction(ACTION_START_NOTIFICATION_SERVICE);
+        return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        if(ACTION_START_NOTIFICATION_SERVICE.equals(action)) {
+            Logger.i(getClass().getSimpleName(),
+                    "onReceive from alarm, starting notification service"
+            );
+            // Start the service, keeping the device awake while it is launching.
+            startWakefulService(context,
+                    NotificationIntentService.createIntentStartNotificationService(context)
+            );
+        }
+
+    }
+}
+```
+
+### NotificationIntentService
+
+**NotificationIntentService.java**
+``` java
+package com.tpb.projects.notifications;
+
+import android.app.IntentService;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.support.annotation.Nullable;
+import android.support.v4.app.TaskStackBuilder;
+import android.support.v4.content.WakefulBroadcastReceiver;
+import android.support.v7.app.NotificationCompat;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.Util;
+import com.tpb.github.data.models.Notification;
+import com.tpb.mdtext.TextUtils;
+import com.tpb.projects.BuildConfig;
+import com.tpb.projects.R;
+import com.tpb.projects.flow.Interceptor;
+import com.tpb.projects.util.Logger;
+
+import java.util.List;
+
+/**
+ * Created by theo on 04/04/17.
+ */
+
+public class NotificationIntentService extends IntentService implements Loader.ListLoader<Notification> {
+    private static final String TAG = NotificationIntentService.class.getSimpleName();
+
+    private static final String ACTION_CHECK = "ACTION_CHECK";
+    private static final String ACTION_DELETE = "ACTION_DELETE";
+
+    private Loader mLoader;
+    private long mLastLoadedSuccessfully = 0;
+
+    public NotificationIntentService() {
+        super(BuildConfig.APPLICATION_ID);
+    }
+
+    public static Intent createIntentStartNotificationService(Context context) {
+        Intent intent = new Intent(context, NotificationIntentService.class);
+        intent.setAction(ACTION_CHECK);
+        return intent;
+    }
+
+    @Override
+    protected void onHandleIntent(@Nullable Intent intent) {
+        if(intent == null) return;
+        try {
+            final String action = intent.getAction();
+            if(ACTION_CHECK.equals(action)) {
+                loadNotifications();
+            } else if(ACTION_DELETE.equals(action) && intent.hasExtra("notification")) {
+                markNotificationRead(
+                        ((Notification) intent.getParcelableExtra("notification")).getId());
+            }
+        } finally {
+            Logger.i(TAG, "onHandleIntent: " + intent.toString());
+            WakefulBroadcastReceiver.completeWakefulIntent(intent);
+        }
+    }
+
+    private void loadNotifications() {
+        if(mLoader == null) mLoader = Loader.getLoader(getApplicationContext());
+        Logger.i(TAG, "loadNotifications: Timestamp " + Util
+                .toISO8061FromMilliseconds(mLastLoadedSuccessfully));
+        mLoader.loadNotifications(this, mLastLoadedSuccessfully);
+    }
+
+    private void markNotificationRead(long id) {
+        Logger.i(TAG, "markNotificationRead: Should me marking read");
+        Editor.getEditor(this).markNotificationThreadRead(id);
+    }
+
+    private android.app.Notification buildNotification(Notification notif) {
+        final NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
+        String title;
+        switch(notif.getReason()) {
+            case AUTHOR:
+                title = String.format(getString(R.string.text_notification_author),
+                        notif.getRepository().getFullName()
+                );
+                builder.setSmallIcon(R.drawable.ic_person_white);
+                break;
+            case COMMENT:
+                if("issue".equalsIgnoreCase(notif.getType())) {
+                    //TODO Get issue number
+                } else if(notif.getUrl().contains("/commits/")) {
+                    //TODO get commit ref
+                }
+                //else
+                title = String.format(getString(R.string.text_notification_comment),
+                        notif.getRepository().getName()
+                );
+                builder.setSmallIcon(R.drawable.ic_comment_white);
+                break;
+            case ASSIGN:
+                title = String.format(
+                        getString(R.string.text_notification_assign),
+                        "#A number",
+                        notif.getRepository().getFullName()
+                );
+                builder.setSmallIcon(R.drawable.ic_person_white);
+                break;
+            case INVITATION:
+                title = getString(R.string.text_notification_invitation);
+                builder.setSmallIcon(R.drawable.ic_group_add_white);
+                break;
+            case MANUAL:
+                title = getString(R.string.text_notification_manual,
+                        notif.getRepository().getFullName()
+                );
+                builder.setSmallIcon(R.drawable.ic_watchers_white);
+                //TODO get thread
+                break;
+            case MENTION:
+                title = getString(R.string.text_notification_mention,
+                        notif.getRepository().getFullName()
+                );
+                builder.setSmallIcon(R.drawable.ic_mention_white);
+                break;
+            case SUBSCRIBED:
+                if("issue".equalsIgnoreCase(notif.getType())) {
+                    title = String.format(getString(R.string.text_notification_issue),
+                            notif.getRepository().getName()
+                    );
+                    builder.setSmallIcon(R.drawable.ic_issue_white);
+                } else {
+                    title = getString(R.string.text_notification_subscribed,
+                            notif.getRepository().getFullName()
+                    );
+                    builder.setSmallIcon(R.drawable.ic_watchers_white);
+                }
+                break;
+            default:
+                title = TextUtils.capitaliseFirst(notif.getReason().toString());
+                break;
+        }
+        final TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
+        stackBuilder.addParentStack(Interceptor.class);
+        stackBuilder.addNextIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(notif.getUrl())));
+        Logger.i(TAG, "buildNotification: URL " + notif.getUrl());
+        builder.setContentIntent(
+                stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT));
+        builder.setCategory(android.app.Notification.CATEGORY_MESSAGE);
+        builder.setContentTitle(title);
+        builder.setContentText(notif.getTitle());
+        builder.setAutoCancel(true);
+        builder.setDeleteIntent(generateDismissIntent(notif));
+        builder.setGroup("GITHUB_GROUP");
+        return builder.build();
+    }
+
+    private PendingIntent generateDismissIntent(Notification notif) {
+        final Intent i = new Intent(NotificationIntentService.this,
+                NotificationIntentService.class
+        );
+        i.setAction(ACTION_DELETE);
+        i.putExtra("notification", notif);
+        return PendingIntent.getService(this, 53253, i, PendingIntent.FLAG_ONE_SHOT);
+
+    }
+
+    @Override
+    public void listLoadComplete(List<Notification> notifications) {
+        Logger.i(TAG, "listLoadComplete: " + notifications.size());
+        mLastLoadedSuccessfully = Util.getUTCTimeInMillis();
+        final NotificationManager manager = (NotificationManager) this
+                .getSystemService(Context.NOTIFICATION_SERVICE);
+        for(Notification n : notifications) {
+            manager.notify((int) n.getId(), buildNotification(n));
+        }
+    }
+
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        Logger.e(TAG, "listLoadError: " + error);
+    }
+
+}
+
+```
+
+# Testing
