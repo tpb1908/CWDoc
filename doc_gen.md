@@ -10130,6 +10130,68 @@ The ```EditorActivity``` is used for editing cards, comments, issues, and projec
 
 #### CardEditor
 
+The ```CardEditor``` deals with the creation and editing of cards, including creating cards from issues.
+
+It inflates the ```ViewStub``` with a layout containing a ```MarkdownEditText```, a button used when showing the list of available issues for card creation, and a button for clearing any issue preview information shown.
+
+**stub_card_editor.xml**
+``` xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:app="http://schemas.android.com/apk/res-auto"
+              android:orientation="vertical"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+    <android.support.design.widget.TextInputLayout
+        android:id="@+id/card_note_wrapper"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_margin="8dp"
+        android:hint="@string/hint_card_new"
+        app:counterEnabled="true"
+        app:counterMaxLength="250">
+
+        <com.tpb.mdtext.views.MarkdownEditText
+            android:id="@+id/card_note_edit"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLength="250"
+            android:imeOptions="actionNone"
+            android:scrollHorizontally="false"
+            android:gravity="top"/>
+
+    </android.support.design.widget.TextInputLayout>
+
+    <Button
+        android:id="@+id/card_clear_issue_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_weight="0"
+        android:text="@string/text_clear"
+        android:background="?android:attr/selectableItemBackground"
+        style="@style/Widget.AppCompat.Button.Borderless"
+        android:visibility="gone"/>
+
+    <Button
+        android:id="@+id/card_from_issue_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_weight="0"
+        android:text="@string/hint_from_issue"
+        android:background="?android:attr/selectableItemBackground"
+        style="@style/Widget.AppCompat.Button.Borderless"
+        android:visibility="gone"/>
+
+</LinearLayout>
+```
+
+The ```MarkdownEditText``` is wrapped in a ```TextInputLayout``` allowing the character limit to be shown above the ```EditText``` when the ```EditText``` is in use.
+
 **CardEditor.java**
 ``` java
 package com.tpb.projects.editors;
@@ -10240,7 +10302,7 @@ public class CardEditor extends EditorActivity {
                             mEditor.saveText();
                             mEditor.disableEditing();
                             mEditor.setMarkdown(
-                                    Markdown.formatMD(mEditor.getInputText().toString(), null),
+                                    Markdown.formatMD(mEditor.getInputText().toString()),
                                     new HttpImageGetter(mEditor)
                             );
                         } else {
@@ -10275,7 +10337,7 @@ public class CardEditor extends EditorActivity {
         mEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
             @Override
             public void textChanged() {
-                mHasBeenEdited = mHasBeenEdited || mEditor.isEditing();
+                mHasBeenEdited |= mEditor.isEditing();
             }
         });
     }
@@ -10429,6 +10491,54 @@ public class CardEditor extends EditorActivity {
 
 ```
 
+When the ```CardEditor``` ```onCreate``` method is called, the markdown_editor layout is inflated, the ```ViewStub``` is found and inflated with the ```card_editor``` stub layout, and the ```Views``` are found.
+
+If the launch ```Intent``` contains a ```Card```, a ```Card``` is being edited, so the ```Card``` is stored, and the ```EditText``` text is set to the contents of the ```Card``` note.
+Otherwise, a new ```Card``` is created and ```addFromIssueButtonListeners``` is called with the launch ```Intent```.
+
+This collects the full repository name from the ```Intent```, as well as a list of issue ids which have already been used in cards, and therefore cannot be used again.
+The issue button is made visible add its ```OnClickListener``` is set.
+When the button is clicked:
+1. A new ```ProgressDialog``` is created is created with a title telling the user that it is loading the ```Issues```.
+2. When the ```Issues``` are loaded, the first check is that the ```Activity``` is not closing, in which case the listener returns. Next, the method iterates through all of the returned ```Issues```, adding them to a new list if their id is not in the list of invalid ids.
+3. If the list of valid ```Issues``` is empty, a toast error message is displayed, telling the user that there are no valid ```Issues```. The method then returns.
+4. Otherwise, a string array of the ```Issue``` titles is created, and a single choice dialog is created in which to display them.
+5. When an ```Issue``` is selected
+    1. ```setFromIssue``` is called on the ```Card``` instance, setting its note and ```Issue```.
+    2. The ```InputFilters``` on the ```EditText``` are removed.
+    3. The character counter on the ```EditText``` is disabled.
+    4. The ```Issue``` is bound:
+        1. The span is built with ```buildIssueSpan``` with flags to format the title as a header, insert the numbered link to the ```Issue```, show the assignees, show the time that the issue was closed, and not show the comment count.
+    5. The ```MarkdownEditText``` is made non-focusable so that it cannot be clicked.
+    6. The clear issue button is made visible so that the issue being previewed can be removed.
+
+The ```OnClickListener``` is then set on the clear button.
+This clears the text in the ```MarkdownEditText```, re-enables the 250 character limit, re-enables the counter, re-creates the ```Card```, and hides the clear issue button.
+
+If the ```Issues``` do not load successfully, the dialog is dismissed, and a toast message is shown with the error resource for the ```APIError```.
+
+Returning to the ```onCreate``` method, an anonymous ```MarkdownButtonAdapter``` is created with the ```CardEditor``` ```Activity```, the mEditButtons ```LinearLayout```, and an anonymous ```MarkdownButtonListener```.
+The ```MarkdownButtonListener``` implementes, ```snippetEntered```, where it checks that the ```MarkdownEditText``` has focus, is enabled, and is editing. The current selection is then found and maxed with 0 as it will be -1 if there is no selection, before the snippet is inserted at this position and the selection is moved by the relativePosition offset.
+```getText``` returns the ```MarkdownEditText``` ```Editable``` as a string.
+```previewCalled``` checks if the ```MarkdownEditText``` is currently in the editing state. If it is it:
+1. Calls ```saveText``` on the ```MarkdownEditText``` to save the raw markdown
+2. Calls ```disableEditing``` on the ```MarkdownEditText``` to disable any input
+3. Sets the formatted markdown with a new HttpImageGetter with the ```MarkdownEditText``` as its container.
+Otherwise it:
+1. Calls ```restoreText``` to set the text back to the value saved in ```saveText```.
+2. Calls ```enableEditing``` to re-enable input in the ```MarkdownEditText```.
+
+An instance of ```KeyBoardVisibilityChecker``` is created and assigned to ```mKeyBoardChecker``` with the root content layout, and an anonymous ```KeyBoardVisibilityChecker``` which hides the issue button when the keyboard is shown, and shows it again after the keyboard is hidden, if it has a listener.
+
+Finally, a ```SimpleTextChangeWatcher``` is added to the ```MarkdownEditText``` which ORs mHasBeenEdited with the ```MarkdownEditText``` editing state.
+
+The ```CardEditor``` implements character and emoji insertion using the ```Util.insertString``` method.
+
+When ```onDone``` is called, a new ```Intent``` is created, the ```Card``` note is set, and the ```Card``` is added to the ```Intent``` which is then set as the result.
+The mHasBeenEdited flag is set to false, indicating that the content has not been updated since the last time that it was saved, and ```finish``` is called.
+
+```finish``` checks if mHasBeenEdited is true, and the ```EditText``` is non-empty. If so, it displays a dialog asking the user to confirm that they wish to dismiss their changes.
+If mHasBeenEdited is false, or the user chooses to dismiss their changes, the keyboard is dismissed and ```super.finish``` is called to close the ```Activity```.
 
 #### CommentEditor
 

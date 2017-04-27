@@ -4223,6 +4223,21 @@ This clears the text in the ```MarkdownEditText```, re-enables the 250 character
 
 If the ```Issues``` do not load successfully, the dialog is dismissed, and a toast message is shown with the error resource for the ```APIError```.
 
+Returning to the ```onCreate``` method, an anonymous ```MarkdownButtonAdapter``` is created with the ```CardEditor``` ```Activity```, the mEditButtons ```LinearLayout```, and an anonymous ```MarkdownButtonListener```.
+The ```MarkdownButtonListener``` implementes, ```snippetEntered```, where it checks that the ```MarkdownEditText``` has focus, is enabled, and is editing. The current selection is then found and maxed with 0 as it will be -1 if there is no selection, before the snippet is inserted at this position and the selection is moved by the relativePosition offset.
+```getText``` returns the ```MarkdownEditText``` ```Editable``` as a string.
+```previewCalled``` checks if the ```MarkdownEditText``` is currently in the editing state. If it is it:
+1. Calls ```saveText``` on the ```MarkdownEditText``` to save the raw markdown
+2. Calls ```disableEditing``` on the ```MarkdownEditText``` to disable any input
+3. Sets the formatted markdown with a new HttpImageGetter with the ```MarkdownEditText``` as its container.
+Otherwise it:
+1. Calls ```restoreText``` to set the text back to the value saved in ```saveText```.
+2. Calls ```enableEditing``` to re-enable input in the ```MarkdownEditText```.
+
+An instance of ```KeyBoardVisibilityChecker``` is created and assigned to ```mKeyBoardChecker``` with the root content layout, and an anonymous ```KeyBoardVisibilityChecker``` which hides the issue button when the keyboard is shown, and shows it again after the keyboard is hidden, if it has a listener.
+
+Finally, a ```SimpleTextChangeWatcher``` is added to the ```MarkdownEditText``` which ORs mHasBeenEdited with the ```MarkdownEditText``` editing state.
+
 The ```CardEditor``` implements character and emoji insertion using the ```Util.insertString``` method.
 
 When ```onDone``` is called, a new ```Intent``` is created, the ```Card``` note is set, and the ```Card``` is added to the ```Intent``` which is then set as the result.
