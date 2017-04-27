@@ -4187,8 +4187,49 @@ The ```EditorActivity``` is used for editing cards, comments, issues, and projec
 
 #### CardEditor
 
+The ```CardEditor``` deals with the creation and editing of cards, including creating cards from issues.
+
+It inflates the ```ViewStub``` with a layout containing a ```MarkdownEditText```, a button used when showing the list of available issues for card creation, and a button for clearing any issue preview information shown.
+
+#import "app/src/main/res/layout/stub_card_editor.xml"
+
+The ```MarkdownEditText``` is wrapped in a ```TextInputLayout``` allowing the character limit to be shown above the ```EditText``` when the ```EditText``` is in use.
+
 #import "app/src/main/java/com/tpb/projects/editors/CardEditor.java"
 
+When the ```CardEditor``` ```onCreate``` method is called, the markdown_editor layout is inflated, the ```ViewStub``` is found and inflated with the ```card_editor``` stub layout, and the ```Views``` are found.
+
+If the launch ```Intent``` contains a ```Card```, a ```Card``` is being edited, so the ```Card``` is stored, and the ```EditText``` text is set to the contents of the ```Card``` note.
+Otherwise, a new ```Card``` is created and ```addFromIssueButtonListeners``` is called with the launch ```Intent```.
+
+This collects the full repository name from the ```Intent```, as well as a list of issue ids which have already been used in cards, and therefore cannot be used again.
+The issue button is made visible add its ```OnClickListener``` is set.
+When the button is clicked:
+1. A new ```ProgressDialog``` is created is created with a title telling the user that it is loading the ```Issues```.
+2. When the ```Issues``` are loaded, the first check is that the ```Activity``` is not closing, in which case the listener returns. Next, the method iterates through all of the returned ```Issues```, adding them to a new list if their id is not in the list of invalid ids.
+3. If the list of valid ```Issues``` is empty, a toast error message is displayed, telling the user that there are no valid ```Issues```. The method then returns.
+4. Otherwise, a string array of the ```Issue``` titles is created, and a single choice dialog is created in which to display them.
+5. When an ```Issue``` is selected
+    1. ```setFromIssue``` is called on the ```Card``` instance, setting its note and ```Issue```.
+    2. The ```InputFilters``` on the ```EditText``` are removed.
+    3. The character counter on the ```EditText``` is disabled.
+    4. The ```Issue``` is bound:
+        1. The span is built with ```buildIssueSpan``` with flags to format the title as a header, insert the numbered link to the ```Issue```, show the assignees, show the time that the issue was closed, and not show the comment count.
+    5. The ```MarkdownEditText``` is made non-focusable so that it cannot be clicked.
+    6. The clear issue button is made visible so that the issue being previewed can be removed.
+
+The ```OnClickListener``` is then set on the clear button.
+This clears the text in the ```MarkdownEditText```, re-enables the 250 character limit, re-enables the counter, re-creates the ```Card```, and hides the clear issue button.
+
+If the ```Issues``` do not load successfully, the dialog is dismissed, and a toast message is shown with the error resource for the ```APIError```.
+
+The ```CardEditor``` implements character and emoji insertion using the ```Util.insertString``` method.
+
+When ```onDone``` is called, a new ```Intent``` is created, the ```Card``` note is set, and the ```Card``` is added to the ```Intent``` which is then set as the result.
+The mHasBeenEdited flag is set to false, indicating that the content has not been updated since the last time that it was saved, and ```finish``` is called.
+
+```finish``` checks if mHasBeenEdited is true, and the ```EditText``` is non-empty. If so, it displays a dialog asking the user to confirm that they wish to dismiss their changes.
+If mHasBeenEdited is false, or the user chooses to dismiss their changes, the keyboard is dismissed and ```super.finish``` is called to close the ```Activity```.
 
 #### CommentEditor
 
