@@ -4128,7 +4128,7 @@ private static int parseIssue(StringBuilder builder, char[] cs, int pos, String 
         for(int i = pos + 1; i < cs.length; i++) {
             if(cs[i] >= '0' && cs[i] <= '9' && i != cs.length - 1) {
                 numBuilder.append(cs[i]);
-            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i)))  {
+            } else if((isWhiteSpace(cs[i]) || isLineEnding(cs, i)) && i > pos + 1)  {
                 if(i == cs.length - 1) {
                     if(cs[i] >= '0' && cs[i] <= '9') {
                         numBuilder.append(cs[i]);
@@ -7594,6 +7594,7 @@ import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.util.AttributeSet;
+import android.util.Log;
 
 import com.tpb.mdtext.ClickableMovementMethod;
 import com.tpb.mdtext.HtmlTagHandler;
@@ -7686,31 +7687,37 @@ public class MarkdownEditText extends AppCompatEditText {
         setMarkdown(convertStreamToString(inputStreamText), imageGetter);
     }
 
-    public void setMarkdown(@NonNull final String markdown, @Nullable final Html.ImageGetter imageGetter) {
+    public void setMarkdown(@NonNull String markdown, @Nullable final Html.ImageGetter imageGetter) {
         // Override tags to stop Html.fromHtml destroying some of them
         final String overridden = HtmlTagHandler.overrideTags(Markdown.parseMD(markdown));
         final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
                 imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
         );
-        final Spanned text;
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            text = removeHtmlBottomPadding(
-                    Html.fromHtml(overridden, Html.FROM_HTML_MODE_LEGACY, imageGetter,
-                            htmlTagHandler
-                    ));
-        } else {
-            text = removeHtmlBottomPadding(
-                    Html.fromHtml(overridden, imageGetter, htmlTagHandler));
-        }
+        try {
+            final Spanned text;
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                text = removeHtmlBottomPadding(
+                        Html.fromHtml(overridden, Html.FROM_HTML_MODE_LEGACY, imageGetter,
+                                htmlTagHandler
+                        ));
+            } else {
+                text = removeHtmlBottomPadding(
+                        Html.fromHtml(overridden, imageGetter, htmlTagHandler));
+            }
 
-        // Convert to a buffer to allow editing
-        final SpannableString buffer = new SpannableString(text);
+            // Convert to a buffer to allow editing
+            final SpannableString buffer = new SpannableString(text);
 
-        //Add links for emails and web-urls
-        TextUtils.addLinks(buffer);
-        setText(buffer);
-        if(!(getMovementMethod() instanceof ClickableMovementMethod)) {
-            setMovementMethod(ClickableMovementMethod.getInstance());
+            //Add links for emails and web-urls
+            TextUtils.addLinks(buffer);
+            setText(buffer);
+            if(!(getMovementMethod() instanceof ClickableMovementMethod)) {
+                setMovementMethod(ClickableMovementMethod.getInstance());
+            }
+        } catch(Exception e) {
+            Log.e("TextView", "WTF", e);
+            markdown = "Error parsing markdown\n\n\n" + Html.fromHtml(Html.escapeHtml(markdown));
+            setText(markdown);
         }
     }
 
@@ -10285,9 +10292,7 @@ public class CardEditor extends EditorActivity {
                     @Override
                     public void snippetEntered(String snippet, int relativePosition) {
                         if(mEditor.hasFocus() && mEditor.isEnabled() && mEditor.isEditing()) {
-                            final int start = Math.max(mEditor.getSelectionStart(), 0);
-                            mEditor.getText().insert(start, snippet);
-                            mEditor.setSelection(start + relativePosition);
+                            Util.insertString(mEditor, snippet, relativePosition);
                         }
                     }
 
@@ -10518,7 +10523,7 @@ This clears the text in the ```MarkdownEditText```, re-enables the 250 character
 If the ```Issues``` do not load successfully, the dialog is dismissed, and a toast message is shown with the error resource for the ```APIError```.
 
 Returning to the ```onCreate``` method, an anonymous ```MarkdownButtonAdapter``` is created with the ```CardEditor``` ```Activity```, the mEditButtons ```LinearLayout```, and an anonymous ```MarkdownButtonListener```.
-The ```MarkdownButtonListener``` implementes, ```snippetEntered```, where it checks that the ```MarkdownEditText``` has focus, is enabled, and is editing. The current selection is then found and maxed with 0 as it will be -1 if there is no selection, before the snippet is inserted at this position and the selection is moved by the relativePosition offset.
+The ```MarkdownButtonListener``` implements, ```snippetEntered```, which uses ```Util.insertString``` to insert the snippet at a relative position.
 ```getText``` returns the ```MarkdownEditText``` ```Editable``` as a string.
 ```previewCalled``` checks if the ```MarkdownEditText``` is currently in the editing state. If it is it:
 1. Calls ```saveText``` on the ```MarkdownEditText``` to save the raw markdown
@@ -10541,6 +10546,8 @@ The mHasBeenEdited flag is set to false, indicating that the content has not bee
 If mHasBeenEdited is false, or the user chooses to dismiss their changes, the keyboard is dismissed and ```super.finish``` is called to close the ```Activity```.
 
 #### CommentEditor
+
+The ```CommentEditor``` is very similar to the ```CardEditor``` and deals with editing comments for issues and commits.
 
 **CommentEditor.java**
 ``` java
@@ -10579,7 +10586,6 @@ import butterknife.OnClick;
  */
 
 public class CommentEditor extends EditorActivity {
-    private static final String TAG = CommentEditor.class.getSimpleName();
 
     public static final int REQUEST_CODE_NEW_COMMENT = 1799;
     public static final int REQUEST_CODE_EDIT_COMMENT = 5734;
@@ -10624,7 +10630,7 @@ public class CommentEditor extends EditorActivity {
         mEditor.addTextChangedListener(new SimpleTextChangeWatcher() {
             @Override
             public void textChanged() {
-                mHasBeenEdited = mHasBeenEdited || mEditor.isEditing();
+                mHasBeenEdited |= mEditor.isEditing();
             }
         });
 
@@ -10646,8 +10652,7 @@ public class CommentEditor extends EditorActivity {
                     public void previewCalled() {
                         if(mEditor.isEditing()) {
                             mEditor.saveText();
-                            String repo = null;
-                            if(mIssue != null) repo = mIssue.getRepoFullName();
+                            final String repo = mIssue == null ? null : mIssue.getRepoFullName();
                             mEditor.disableEditing();
                             mEditor.setMarkdown(
                                     Markdown.formatMD(mEditor.getInputText().toString(), repo),
@@ -10732,7 +10737,13 @@ public class CommentEditor extends EditorActivity {
 
 ```
 
+The key differences are in the ```onDone``` and ```previewCalled``` methods.
+```onDone``` passes the ```Issue``` with the ```Intent``` if it is non-null.
+```previewCalled``` extracts the repository URL from the ```Issue``` if it exists, and uses it when formatting the markdown.
+
 #### IssueEditor
+
+The ```IssueEditor``` is more complex as it also deals with setting the labels and collaborators on an issue, as well as creating issues form cards.
 
 **IssueEditor.java**
 ``` java
@@ -10744,6 +10755,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
+import android.support.v4.util.Pair;
 import android.support.v7.app.AlertDialog;
 import android.view.View;
 import android.view.ViewStub;
@@ -10765,7 +10777,6 @@ import com.tpb.mdtext.views.MarkdownEditText;
 import com.tpb.mdtext.views.MarkdownTextView;
 import com.tpb.projects.R;
 import com.tpb.projects.markdown.Formatter;
-import com.tpb.projects.util.Logger;
 import com.tpb.projects.util.SettingsActivity;
 import com.tpb.projects.util.Util;
 import com.tpb.projects.util.input.KeyBoardVisibilityChecker;
@@ -10838,35 +10849,35 @@ public class IssueEditor extends EditorActivity {
             }
 
             if(mLaunchIssue.getLabels() != null && mLaunchIssue.getLabels().length > 0) {
-                final ArrayList<String> labels = new ArrayList<>();
-                final ArrayList<Integer> colours = new ArrayList<>();
+                final ArrayList<Pair<String, Integer>> labels = new ArrayList<>();
                 for(Label l : mLaunchIssue.getLabels()) {
-                    labels.add(l.getName());
-                    colours.add(l.getColor());
+                    labels.add(Pair.create(l.getName(), l.getColor()));
                 }
-                setLabelsText(labels, colours);
+                setLabelsText(labels);
             }
 
         } else if(launchIntent.hasExtra(getString(R.string.parcel_card))) {
             mLaunchCard = launchIntent.getParcelableExtra(getString(R.string.parcel_card));
-            //Split the first line of the card to use as a title
-            final String[] text = mLaunchCard.getNote().split("\n", 2);
-            //If the title is too long we ellipsize it
-            if(text[0].length() > 140) {
-                text[1] = "..." + text[0].substring(137) + text[1];
-                text[0] = text[0].substring(0, 137) + "...";
+
+            final String note = mLaunchCard.getNote();
+            int index = note.indexOf("\n");
+            if(index == -1) index = 137;
+            if(index < note.length()) {
+                mTitleEdit.setText(note.substring(0, index) + "...");
+                mBodyEdit.setText("..." + note.substring(index));
+            } else {
+                mTitleEdit.setText(note);
             }
-            mTitleEdit.setText(text[0]);
-            if(text.length > 1) {
-                mBodyEdit.setText(text[1]);
-            }
+
+        } else {
+            finish();
         }
 
         final SimpleTextChangeWatcher editWatcher = new SimpleTextChangeWatcher() {
             @Override
             public void textChanged() {
 
-                mHasBeenEdited = mHasBeenEdited || mBodyEdit.isEditing();
+                mHasBeenEdited |= mBodyEdit.isEditing();
             }
         };
 
@@ -10898,19 +10909,7 @@ public class IssueEditor extends EditorActivity {
                     @Override
                     public void snippetEntered(String snippet, int relativePosition) {
                         mHasBeenEdited = true;
-                        //Check which EditText has focus and insert into the correct one
-                        if(mTitleEdit.hasFocus()) {
-                            final int start = Math.max(mTitleEdit.getSelectionStart(), 0);
-                            mTitleEdit.getText().insert(start, snippet);
-                            mTitleEdit.setSelection(start + relativePosition);
-                        } else if(mBodyEdit.hasFocus() && mBodyEdit.isEditing()) {
-                            final int start = Math.max(mBodyEdit.getSelectionStart(), 0);
-                            mBodyEdit.getText().insert(start, snippet);
-                            Logger.i(TAG,
-                                    "snippetEntered: Setting selection " + (start + relativePosition)
-                            );
-                            mBodyEdit.setSelection(start + relativePosition);
-                        }
+                        Util.insertString(mBodyEdit, snippet, relativePosition);
                     }
 
                     @Override
@@ -10925,6 +10924,7 @@ public class IssueEditor extends EditorActivity {
                             String repo = null;
                             if(mLaunchIssue != null) repo = mLaunchIssue.getRepoFullName();
                             mBodyEdit.disableEditing();
+                            mTitleEdit.setEnabled(false);
                             mBodyEdit.setMarkdown(
                                     Markdown.formatMD(mBodyEdit.getInputText().toString(), repo),
                                     new HttpImageGetter(mBodyEdit)
@@ -10933,6 +10933,7 @@ public class IssueEditor extends EditorActivity {
                         } else {
                             mBodyEdit.restoreText();
                             mBodyEdit.enableEditing();
+                            mTitleEdit.setEnabled(true);
                             if(!mKeyBoardChecker.isKeyboardOpen()) {
                                 mInfoLayout.setVisibility(View.VISIBLE);
                             }
@@ -10961,9 +10962,7 @@ public class IssueEditor extends EditorActivity {
                 final boolean[] checked = new boolean[names.length];
                 for(int i = 0; i < names.length; i++) {
                     names[i] = collaborators.get(i).getLogin();
-                    if(mAssignees.indexOf(names[i]) != -1) {
-                        checked[i] = true;
-                    }
+                    checked[i] = mAssignees.indexOf(names[i]) != -1;
                 }
                 mcd.setChoices(names, checked);
                 mcd.setListener(new MultiChoiceDialog.MultiChoiceDialogListener() {
@@ -11005,7 +11004,6 @@ public class IssueEditor extends EditorActivity {
         Loader.getLoader(this).loadLabels(new Loader.ListLoader<Label>() {
             @Override
             public void listLoadComplete(List<Label> labels) {
-                Logger.i(TAG, "listLoadComplete: " + labels.toString());
                 final MultiChoiceDialog mcd = new MultiChoiceDialog();
 
                 final Bundle b = new Bundle();
@@ -11027,16 +11025,14 @@ public class IssueEditor extends EditorActivity {
                     @Override
                     public void choicesComplete(String[] choices, boolean[] checked) {
                         mSelectedLabels.clear();
-                        final ArrayList<String> labels = new ArrayList<>();
-                        final ArrayList<Integer> colours = new ArrayList<>();
+                        final ArrayList<Pair<String, Integer>> labels = new ArrayList<>();
                         for(int i = 0; i < choices.length; i++) {
                             if(checked[i]) {
                                 mSelectedLabels.add(choices[i]);
-                                labels.add(choices[i]);
-                                colours.add(colors[i]);
+                                labels.add(Pair.create(choices[i], colors[i]));
                             }
                         }
-                        setLabelsText(labels, colours);
+                        setLabelsText(labels);
                         mHasBeenEdited = true;
                     }
 
@@ -11060,13 +11056,13 @@ public class IssueEditor extends EditorActivity {
     }
 
     private void setAssigneesText() {
-        final StringBuilder builder = new StringBuilder();
-        for(String a : mAssignees) {
-            builder.append(
-                    String.format(getString(R.string.text_href), "https://github.com/" + a, a));
-            builder.append("<br>");
-        }
-        if(builder.length() > 0) {
+        if(!mAssignees.isEmpty()) {
+            final StringBuilder builder = new StringBuilder();
+            for(String a : mAssignees) {
+                builder.append(
+                        String.format(getString(R.string.text_href), "https://github.com/" + a, a));
+                builder.append("<br>");
+            }
             mAssigneesText.setVisibility(View.VISIBLE);
             mAssigneesText.setMarkdown(builder.toString());
         } else {
@@ -11074,18 +11070,19 @@ public class IssueEditor extends EditorActivity {
         }
     }
 
-    private void setLabelsText(ArrayList<String> names, ArrayList<Integer> colors) {
-        final StringBuilder builder = new StringBuilder();
+    private void setLabelsText(ArrayList<Pair<String, Integer>> labels) {
         mSelectedLabels.clear();
-        builder.append("<ul bulleted=\"false\">");
-        for(int i = 0; i < names.size(); i++) {
-            mSelectedLabels.add(names.get(i));
-            builder.append("<li>");
-            builder.append(Formatter.getLabelString(names.get(i), colors.get(i)));
-            builder.append("</li>");
-        }
-        builder.append("</ul>");
-        if(builder.length() > 0) {
+
+        if(!labels.isEmpty()) {
+            final StringBuilder builder = new StringBuilder();
+            builder.append("<ul bulleted=\"false\">");
+            for(Pair<String, Integer> p : labels) {
+                mSelectedLabels.add(p.first);
+                builder.append("<li>");
+                builder.append(Formatter.getLabelString(p.first, p.second));
+                builder.append("</li>");
+            }
+            builder.append("</ul>");
             mLabelsText.setVisibility(View.VISIBLE);
             mLabelsText.setMarkdown(builder.toString());
         } else {
@@ -11124,14 +11121,16 @@ public class IssueEditor extends EditorActivity {
         mLaunchIssue.setBody(mBodyEdit.getInputText().toString());
         done.putExtra(getString(R.string.parcel_issue), mLaunchIssue);
         if(mLaunchCard != null) done.putExtra(getString(R.string.parcel_card), mLaunchCard);
-        if(mSelectedLabels.size() > 0)
+        if(!mSelectedLabels.isEmpty()) {
             done.putExtra(getString(R.string.intent_issue_labels),
                     mSelectedLabels.toArray(new String[0])
             );
-        if(mAssignees.size() > 0)
+        }
+        if(!mAssignees.isEmpty()) {
             done.putExtra(getString(R.string.intent_issue_assignees),
                     mAssignees.toArray(new String[0])
             );
+        }
 
         setResult(RESULT_OK, done);
         mHasBeenEdited = false;
@@ -11179,6 +11178,57 @@ public class IssueEditor extends EditorActivity {
 }
 
 ```
+
+After inflating the layout and ```ViewStub``` layout, there are more checks to perform than in the other editors.
+
+##### onCreate
+
+Every time the ```IssueEditor``` is launched, a repository path is provided for loading the labels and collaborators.
+If the ```Intent``` contains an ```Issue``` model:
+1. The ```Issue``` is extracted to mLaunchIssue
+2. The ```Card``` is extracted to mLaunchCard
+3. The title and body ```EditTexts``` are set with the ```Issue``` title and body.
+4. If the launch ```Issue``` has a list of assignees:
+    1. The assignee logins are added to the mAssignees ```ArrayList```.
+    2. ```setAssigneesText``` is called. (To be explained)
+5. If the launch ```Issue``` has a non-null and non-empty list of ```Labels```:
+    1. An ```ArrayList``` of ```Pairs``` of strings and integers is created from the labels array.
+    2. ```setLabelsText``` is called (To be explained).
+
+If the ```Intent``` contains a ```Card``` model:
+1. The ```Card``` is extracted to mLaunchCard
+2. The ```Card``` note is stored.
+3. The index of the first newline in the note is found.
+4. If the index is -1, the index is set to 137
+5. If the index is less than the length of the note, the note is split between the title and body and ellipsized.
+6. Otherwise the note is set as the title.
+
+A ```SimpleTextChangeWatcher``` is then added to both the title and body ```EditTexts``` which ORs mHasBeenEdited with the body editing state.
+
+A ```KeyBoardVisibilityChecker``` is then used to hide the layout containing information about the issues' labels and assignees when the keyboard is shown, and to show it again once the keyboard has been hidden.
+
+Finally, the ```MarkdownButtonAdapter``` is created, which also deals with the title ```EditText``` in this case, enabling or disabling it along with the body ```MarkdownEditText``` as well as hiding the layout for labels and assigneees.
+
+##### Choosing assignees
+
+When the assignees button is clicked, a new ```ProgressDialog``` is created and shown while the assignees are loaded.
+A call is then made to load the collaborators for the current repository.
+Once the collaborators are loaded a new ```MultiChoiceDialog``` is created, and each of the collaborators names are added to an array, with the respective checked flag set dependent on whether the collaborator name is already in the mAssignees list.
+The dialog listener is then set to clear the current list of assignees and add the checked assignees before calling ```setAssigneesText``` to display the updated list.
+
+```setAssigneesText``` checks if the assignees list is empty, if so it hides the ```TextView```, otherwise it bilds a list of links to each of the assignees GitHub user pages.
+
+##### Choosing labels
+
+When the labels button is clicked, a new ```ProgressDialog``` is created and shown while the labels are loaded.
+Arrays for the label texts, colours, and current choices are then created before being set on the ```MultiChoiceDialog```.
+The ```MultiChoiceDialogListener``` is then set to clear the current list of label names, and then add the checked names to the list as well as building an array of pairs of label names and their respective colours.
+```setLabelsText``` is then called to display the newly selected labels.
+If the labels list is empty, the labels ```TextView``` is hidden, otherwise a ```StringBuilder``` is used to created a non-bulleted list of labels using ```Formatter.getLabelString``` to create each font tag with the correct text colour and background colour.
+
+##### onDone
+
+The ```onDone``` method follows the save pattern as the other ```onDone``` methods, except tha it also adds the assignees and labels to the array if they are not empty.
 
 #### ProjectEditor
 

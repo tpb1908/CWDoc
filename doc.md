@@ -4224,7 +4224,7 @@ This clears the text in the ```MarkdownEditText```, re-enables the 250 character
 If the ```Issues``` do not load successfully, the dialog is dismissed, and a toast message is shown with the error resource for the ```APIError```.
 
 Returning to the ```onCreate``` method, an anonymous ```MarkdownButtonAdapter``` is created with the ```CardEditor``` ```Activity```, the mEditButtons ```LinearLayout```, and an anonymous ```MarkdownButtonListener```.
-The ```MarkdownButtonListener``` implementes, ```snippetEntered```, where it checks that the ```MarkdownEditText``` has focus, is enabled, and is editing. The current selection is then found and maxed with 0 as it will be -1 if there is no selection, before the snippet is inserted at this position and the selection is moved by the relativePosition offset.
+The ```MarkdownButtonListener``` implements, ```snippetEntered```, which uses ```Util.insertString``` to insert the snippet at a relative position.
 ```getText``` returns the ```MarkdownEditText``` ```Editable``` as a string.
 ```previewCalled``` checks if the ```MarkdownEditText``` is currently in the editing state. If it is it:
 1. Calls ```saveText``` on the ```MarkdownEditText``` to save the raw markdown
@@ -4248,11 +4248,70 @@ If mHasBeenEdited is false, or the user chooses to dismiss their changes, the ke
 
 #### CommentEditor
 
+The ```CommentEditor``` is very similar to the ```CardEditor``` and deals with editing comments for issues and commits.
+
 #import "app/src/main/java/com/tpb/projects/editors/CommentEditor.java"
+
+The key differences are in the ```onDone``` and ```previewCalled``` methods.
+```onDone``` passes the ```Issue``` with the ```Intent``` if it is non-null.
+```previewCalled``` extracts the repository URL from the ```Issue``` if it exists, and uses it when formatting the markdown.
 
 #### IssueEditor
 
+The ```IssueEditor``` is more complex as it also deals with setting the labels and collaborators on an issue, as well as creating issues form cards.
+
 #import "app/src/main/java/com/tpb/projects/editors/IssueEditor.java"
+
+After inflating the layout and ```ViewStub``` layout, there are more checks to perform than in the other editors.
+
+##### onCreate
+
+Every time the ```IssueEditor``` is launched, a repository path is provided for loading the labels and collaborators.
+If the ```Intent``` contains an ```Issue``` model:
+1. The ```Issue``` is extracted to mLaunchIssue
+2. The ```Card``` is extracted to mLaunchCard
+3. The title and body ```EditTexts``` are set with the ```Issue``` title and body.
+4. If the launch ```Issue``` has a list of assignees:
+    1. The assignee logins are added to the mAssignees ```ArrayList```.
+    2. ```setAssigneesText``` is called. (To be explained)
+5. If the launch ```Issue``` has a non-null and non-empty list of ```Labels```:
+    1. An ```ArrayList``` of ```Pairs``` of strings and integers is created from the labels array.
+    2. ```setLabelsText``` is called (To be explained).
+
+If the ```Intent``` contains a ```Card``` model:
+1. The ```Card``` is extracted to mLaunchCard
+2. The ```Card``` note is stored.
+3. The index of the first newline in the note is found.
+4. If the index is -1, the index is set to 137
+5. If the index is less than the length of the note, the note is split between the title and body and ellipsized.
+6. Otherwise the note is set as the title.
+
+A ```SimpleTextChangeWatcher``` is then added to both the title and body ```EditTexts``` which ORs mHasBeenEdited with the body editing state.
+
+A ```KeyBoardVisibilityChecker``` is then used to hide the layout containing information about the issues' labels and assignees when the keyboard is shown, and to show it again once the keyboard has been hidden.
+
+Finally, the ```MarkdownButtonAdapter``` is created, which also deals with the title ```EditText``` in this case, enabling or disabling it along with the body ```MarkdownEditText``` as well as hiding the layout for labels and assigneees.
+
+##### Choosing assignees
+
+When the assignees button is clicked, a new ```ProgressDialog``` is created and shown while the assignees are loaded.
+A call is then made to load the collaborators for the current repository.
+Once the collaborators are loaded a new ```MultiChoiceDialog``` is created, and each of the collaborators names are added to an array, with the respective checked flag set dependent on whether the collaborator name is already in the mAssignees list.
+The dialog listener is then set to clear the current list of assignees and add the checked assignees before calling ```setAssigneesText``` to display the updated list.
+
+```setAssigneesText``` checks if the assignees list is empty, if so it hides the ```TextView```, otherwise it bilds a list of links to each of the assignees GitHub user pages.
+
+##### Choosing labels
+
+When the labels button is clicked, a new ```ProgressDialog``` is created and shown while the labels are loaded.
+Arrays for the label texts, colours, and current choices are then created before being set on the ```MultiChoiceDialog```.
+The ```MultiChoiceDialogListener``` is then set to clear the current list of label names, and then add the checked names to the list as well as building an array of pairs of label names and their respective colours.
+```setLabelsText``` is then called to display the newly selected labels.
+If the labels list is empty, the labels ```TextView``` is hidden, otherwise a ```StringBuilder``` is used to created a non-bulleted list of labels using ```Formatter.getLabelString``` to create each font tag with the correct text colour and background colour.
+
+##### onDone
+
+The ```onDone``` method follows the save pattern as the other ```onDone``` methods, except tha it also adds the assignees and labels to the array if they are not empty.
 
 #### ProjectEditor
 
