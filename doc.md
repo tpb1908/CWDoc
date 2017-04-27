@@ -4647,6 +4647,64 @@ When displaying a user's repositories, the ```RepositoriesAdapter``` must also s
 
 #import "app/src/main/java/com/tpb/projects/common/RepositoriesAdapter.java"
 
+The ```RepositoriesAdapter``` is constructed with a parent ```Activity```, used for launching the ```RepoActivity``` when a repository is clicked or a user when a user icon is clicked, and a ```SwipeRefreshLayout``` which is used to refresh the ```RecyclerView```.
+
+The ```Loader``` is created, and the ```SwipeRefreshLayout``` is set to refreshing.
+The ```OnRefreshListener``` is set on the ```SwipeRefreshLayout``` to reset the adapter conditions when it is refreshed.
+Finally, the ```RepoPinChecker``` for sorting ```Repositories``` by their pin status is created, and the authencitaed user login is loaded from ```GitHubSession```.
+
+#### States
+
+The adapter will begin loading ```Repositories``` once ```setUser``` is called.
+This method sets the mUser login string, the mIsShowingStars flag, and then clears the current list of ```Repositories``` before calling ```loadReposForUser``` with the flag to reset the page.
+
+When ```loadReposForUser``` is called, the mIsLoading flag is set to true, and the ```SwipeRefreshLayout``` is set to refreshing.
+If resetPage is true, the mPage value is reset to 1 and mMaxPageReached is reset to false.
+
+Next, there are three network calls which may be made:
+1. ```loadStarredRepositories``` if mIsShowingStars is true.
+2. ```loadRepositories``` without a user parameter if the current user login is the same as the authenticated user.
+3. ```loadRepositories``` with a user parameter otherwise.
+
+Finally, the ```RepoPinChecker``` key is set to the current user login.
+
+When the ```Repositories``` are loaded, they are returned through the ```ListLoader``` interface method ```listLoadComplete```.
+The ```SwipeRefreshLayout``` is disabled, and mIsLoading is set to false.
+If the list of ```Repositories``` is not empty, the old length is stored.
+If mIsShowingStars is true, all of the new ```Repositories``` are added.
+Otherwise ```insertPinnedRepos``` is called which uses the ```RepoPinChecker``` ```isPinned``` method when iterating through each ```Repository``` and if it is pinned, adds it to the start of the list.
+Finally, ```notifyItemRangeInserted``` is called.
+
+Otherwise, mMaxPageReached is set to true.
+
+##### insertPinnedRepos
+
+```insertPinnedRepos``` serves two purposes, first ensuring that the pinned ```Repositories``` which have been loaded are added to the start of the adapter, and second loading any pinned repositories which are
+not loaded in the first page of the the ```Repositories``` returned by GitHub.
+If the page is 1, each ```Repository``` is added either to the start or end of the array, and these initial positions are then passed to the ```RepoPinChecker``` before ```ensureLoadOfPinnedRepos``` is called.
+Otherwise, the ```Repositories``` are added to the end of the array if they do not already exist in the array.
+
+```ensureLoadOfPinnedRepos``` iterates through each of the repository names returned by ```RepoPinChecker.findNonLoadedPinnedRepositories``` (That's a bit of a mouthful), and loads each of the ```Repositories``` individually, inserting them into the array and ```RepoPinChecker``` if they do not already exist there, and calling ```notifyItemInserted(0)```.
+
+#### RepoPinChecker
+
+The ```RepoPinChecker``` which has been reference above is a class which controls a ```SharedPreferences``` instance and manages the pinned repositories.
+Each time a user is loaded in ```RepositoriesAdapter``` the ```SharedPreferences``` is opened with the "PINS" key, and from this map a delimited string is loaded using the user login as a key.
+This allows different repositories to be pinned for each user.
+
+ The ```RepoPinChecker``` contains two ```ArrayLists```, one containing the names of the pinned repositories, and the other containing the names of the repositories loaded in their initial order, allowing them to be returned to these positions if they are unpinned.
+
+When ```setKey``` is called, the KEY is st, and a string array is loaded with ```Util.stringArrayFromPrefs``` which loads the string and splits it around each comma.
+
+When ```pin``` is called, if the repository is not already pinned, the repository name is added to the pins list and the new string from ```Util.stringArrayForPrefs``` is written to the ```SharedPreferences```.
+
+When ```unpin``` is called, the repository is removed from the pins list, and the new string is again written to the ```SharedPreferences```.
+
+```findNonLoadedPinnedRepositories``` checks each value in pins and if it is not in mInitialPositions, it is added to the list of non loaded pinned repositories which is then returned.
+
+#### Binding
+
+The ```RepoHolder``` sets ```OnClickListeners``` on its elements, and if the mIsShowingStars flag is false, it sets an ```OnClickListener``` on the ```NetworkImageView``` which would otherwise be used for displaying the user avatar. This listener calls ```togglePIn```, flips the isPinned flag and switches the image resource from the pinned to not pinned drawable.
 
 ### UserStarsFragment
 
@@ -4726,7 +4784,7 @@ When displaying a user's repositories, the ```RepositoriesAdapter``` must also s
 
 #### CardDragListener
 
-#import "app/src/main/java/com/tpb/projects/project/CardDragListener.java.java"
+#import "app/src/main/java/com/tpb/projects/project/CardDragListener.java"
 
 #### ProjectSearchAdapter
 
@@ -4734,23 +4792,23 @@ When displaying a user's repositories, the ```RepositoriesAdapter``` must also s
 
 ## CommitActivity
 
-#import "app/src/main/java/com/tpb/projects/commit/CommitActivity.java"
+#import "app/src/main/java/com/tpb/projects/commits/CommitActivity.java"
 
 ### CommitInfoFragment
 
-#import "app/src/main/java/com/tpb/projects/commit/fragments/CommitInfoFragment.java"
+#import "app/src/main/java/com/tpb/projects/commits/fragments/CommitInfoFragment.java"
 
 #### CommitDiffAdapter
 
-#import "app/src/main/java/com/tpb/projects/commit/CommitDiffAdapter.java"
+#import "app/src/main/java/com/tpb/projects/commits/CommitDiffAdapter.java"
 
 ### CommitCommentsFragment
 
-#import "app/src/main/java/com/tpb/projects/commit/fragments/CommitCommentsFragment.java"
+#import "app/src/main/java/com/tpb/projects/commits/fragments/CommitCommentsFragment.java"
 
 #### CommitCommentsAdapter
 
-#import "app/src/main/java/com/tpb/projects/commit/CommitCommentsAdapter.java"
+#import "app/src/main/java/com/tpb/projects/commits/CommitCommentsAdapter.java"
 
 ## IssueActivity
 
