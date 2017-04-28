@@ -1182,7 +1182,7 @@ The client must implement the following features:
                             <li>Display short code blocks as monospaced text blocks within the text body</li>
                             <li>Display large code blocks as placeholders for a separate view</li>
                         </ol>
-                    <li>Parse strikethroughs and create the correct spans </li>
+                    <li>Parse horizontal rules and create the correct spans </li>
                     <li>Images
                         <ol type="1">
                             <li>Parse image links</li>
@@ -4855,7 +4855,56 @@ Throughout the construction of the project I added test cards to a GitHub projec
 
 These cards test each of the different markdown features which should be included.
 
-### Username linking
+### Objective 9.ii.a: Code blocks
+
+### Objective 9.ii.b: Horizontal rules
+
+### Objective 9.ii.c: Image handling and relative link handling 
+
+Images with a relative path in the repository should be shown.
+
+In order to test this I added images of each type (png, jpg, gif, bmp, and webp) to the test repository and added relative links to the README as well as a relative path.
+
+```
+
+![Test 1](./test_1.png)
+
+![Test 2](/test_2.jpg)
+
+![Test 3](test_3.bmp)
+
+![Test_4](./test_4.gif)
+
+![Test 5](/test_5.webp)
+```
+
+The links are either the file name, a single forward slash, or a dot slash, which are all valid relative path formats.
+
+The sets of images displayed correctly in both the ```MarkdownWebView``` and ```MarkdownTextView```.
+
+Next, I moved the images to a directory within the repository and updated the links.
+
+```
+![Test 1](./test/test_1.png)
+
+![Test 2](/test/test_2.jpg)
+
+![Test 3](test/test_3.bmp)
+
+![Test_4](./test/test_4.gif)
+
+![Test 5](/test/test_5.webp)
+```
+
+The images were still displayed in the same manner as before.
+
+| ```MarkdownWebView``` | ```MarkdownTextView```
+| --- | --- |
+| ![WV](http://imgur.com/B4aqUDZ.png) | ![TV](http://imgur.com/ClujAd6.png)
+
+
+
+### Objective 9.ii.d: Username linking
 
 The test card for username linking tests the following items which should be parsed as username links:
 
@@ -4886,7 +4935,7 @@ The display within the app is shown below:
 
 ![Username parsing test](http://imgur.com/KZlnSnV.png)
 
-### Issue linking
+### Objective 9.ii.e: Issue linking
 
 The test card for issue linking tests the following items which should be parsed as issue links:
 
@@ -4913,7 +4962,7 @@ The display within the app is shown below:
 
 ![Issue parsing test](http://imgur.com/dnSAMmp.png)
 
-### Emoji parsing
+### Objective 9.ii.f: Emoji parsing
 
 The test card for emoji parsing tests a list of emoji aliases which should be converted to their respective emoji characters.
 
@@ -5236,51 +5285,76 @@ The Emoji are displayed as shown below:
 
 There are some emoji which are not shown with a character not found symbol. This is a limitation of the font used rather than the emoji parsing, as the original emoji aliases have been removed.
 
-### Image handling and relative link handling
+### Objective 9.ii.g: Checkboxes
 
-Images with a relative path in the repository should be shown.
+The following sets of characters should be converted to unicode checkbox characters
+- "[]" should be converted to ☐
+- "[ ]" should be converted to ☐
+- "[x]" should be converted to ☑
 
-In order to test this I added images of each type (png, jpg, gif, bmp, and webp) to the test repository and added relative links to the README as well as a relative path.
+The checkbox test card contains the following which should be parsed to unicode ballot box characters:
 
-```
+- "[x]" at the start of the text immediately followed by an alphabet character
+- "[]" on its own line
+- "[ ]" at the start of a list line
+- "[x]" at the start of a list line
+- "[]" between two spaces within line
+- "[x]" at the end of a line
 
-![Test 1](./test_1.png)
+And the following which should not:
+- "\[]" escaped ballot
+- "\[ ]" escaped ballot
+- "\[x]" escaped ballot
 
-![Test 2](/test_2.jpg)
-
-![Test 3](test_3.bmp)
-
-![Test_4](./test_4.gif)
-
-![Test 5](/test_5.webp)
-```
-
-The links are either the file name, a single forward slash, or a dot slash, which are all valid relative path formats.
-
-The sets of images displayed correctly in both the ```MarkdownWebView``` and ```MarkdownTextView```.
-
-Next, I moved the images to a directory within the repository and updated the links.
+The test note is shown below 
 
 ```
-![Test 1](./test/test_1.png)
+[x]Test for formatting checkboxes
 
-![Test 2](/test/test_2.jpg)
+Ballot on its own:
 
-![Test 3](test/test_3.bmp)
+[]
 
-![Test_4](./test/test_4.gif)
+Ballots at start of list
 
-![Test 5](/test/test_5.webp)
+- [ ] Some text
+- [x] Some more text
+ 
+
+Ballot between text [] some more text
+
+And the others  [ ] and [x]
+
+
+Escape ballots:
+\[]
+\[ ]
+\[x]
+
+Ending ballot:
+
+[X]
 ```
 
-The images were still displayed in the same manner as before.
+| Test | Expected result | Result |
+| --- | --- | --- | 
+| "[x]" at the start of the text | Unicode U+2611 character | Pass |
+| "[]" on its own line | Unicode U+2610 character | Pass |
+| "[ ]" at the start of a list line | Unicode U+2610 character | Pass |
+| "[x]" at the start of a list line | Unicode U+2611 character | Pass |
+| "[]" between text in a line | Unicode U+2610 character | Pass |
+| "\[]" | "[]" | Pass |
+| "\[ ]" | "[ ]" | Pass |
+| "\[x]" | "[x]" | Pass |
+| "[x]" at the end of the text | Unicode U+2611 character | Pass |
 
-| ```MarkdownWebView``` | ```MarkdownTextView```
-| --- | --- |
-| ![WV](http://imgur.com/B4aqUDZ.png) | ![TV](http://imgur.com/ClujAd6.png)
+The card was displayed as shown below:
 
-#### Relative paths
+![Ballot text](http://imgur.com/NsNebAc.png)
 
+### Objective 9.ii.h: Text background colours
+
+### Objective 9.ii.i: Table placeholders
 
 
 ## 
