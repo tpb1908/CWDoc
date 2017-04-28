@@ -3969,7 +3969,7 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
         final StringBuilder builder = new StringBuilder();
         char p = ' ';
         char pp = ' ';
-        final char[] chars = ("\n" + s).toCharArray();
+        final char[] chars = s.toCharArray();
         for(int i = 0; i < chars.length; i++) {
             if(linkUsernames && chars[i] == '@' && isWhiteSpace(p)) {
                 i = parseUsername(builder, chars, i);
@@ -22224,11 +22224,8 @@ The card used to test this is
 
 \```
 System.out.println("Line");
-
 System.out.println("Line 2");
-
 System.out.println("Line 3");
-
 \```
 
 Some text with a \```print("Code block")\``` in the middle.
@@ -22240,12 +22237,20 @@ A list:
 A block with 10 lines:
 \```
 print("Line")
-
 print("Line 2")
-
 print("Line 3")
-
 print("Line 4")
+print("Line 5")
+print("Line 6")
+print("Line 7")
+print("Line 8")
+print("Line 9")
+print("Line 10")
+\```
+
+Text below
+\```
+print("This is the end code block.")
 \```
 
 | Test | Expected Result | Result |
@@ -22261,6 +22266,87 @@ The card is displayed as shown below:
 ![InlineCode test card](http://imgur.com/uzxPmU8.png)
 
 #### Larger code blocks
+
+Objective 9.ii.a.2 is to display large code blocks as placeholders within the text body, allowing them to be clicked to show the full code block.
+
+A large code block is any code block with more than 10 lines.
+
+The test card for large code blocks contains the following items which should be displayed as large code blocks:
+- A large code block at the start of the text
+- A large code block with a language
+- A large code block without a language
+- A large code block with eleven lines
+- A large code block at the end of the text
+
+The card used to test this is:
+
+\``` java
+System.out.println("Line");
+System.out.println("Line 2");
+System.out.println("Line 3");
+System.out.println("Line 4");
+System.out.println("Line 5");
+System.out.println("Line 6");
+System.out.println("Line 7");
+System.out.println("Line 8");
+System.out.println("Line 9");
+System.out.println("Line 10");
+System.out.println("Line 11");
+System.out.println("Line 12");
+\```
+
+A block with 11 lines and no language:
+\```
+print("Line")
+print("Line 2")
+print("Line 3")
+print("Line 4")
+print("Line 5")
+print("Line 6")
+print("Line 7")
+print("Line 8")
+print("Line 9")
+print("Line 10")
+print("Line 11")
+\```
+
+The end block (Actual code)
+\```Python
+import time
+
+import cv2
+
+cap = cv2.VideoCapture()
+
+print(cap.open(0))
+
+while True:
+    start = time.time()
+    ret, frame = cap.read()
+
+    cv2.imshow("Image", frame)
+    k = cv2.waitKey(33)
+    if k != -1:
+        break
+    print("FPS = " + str((1.0/(time.time()-start))))
+
+cv2.destroyAllWindows()
+cap.release()
+\```
+
+| Test | Expected Result | Result |
+| --- | --- | --- |
+| Block at start of text | Block placeholder shown | Pass |
+| Block with a language | Block placeholder shown with corresponding language | Pass |
+| Block without language | Block shown without language | Pass | 
+| Block clicked | Code dialog shown | Pass |
+| Block at end of text | Block placeholder shown | Pass |
+
+The code blocks and code dialog are shown as below:
+
+| Code blocks | Code dialog |
+| --- | --- | 
+| ![Blocks](http://imgur.com/KFszbeL.png) | ![Dialog](http://imgur.com/yD7hjM3.png) |
 
 ### Objective 9.ii.b: Horizontal rules
 
