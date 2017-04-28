@@ -8086,7 +8086,7 @@ private void end(Editable output, Class kind, boolean paragraphStyle, Object... 
                 len++;
             }
             for(Object replace : replaces) {
-                if(output.length() > 0) {
+                if(output.length() > 0 && len < output.length()) {
                     output.setSpan(replace, start, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
             }
@@ -22345,6 +22345,7 @@ cap.release()
 | Block without language | Block shown without language | Pass | 
 | Block clicked | Code dialog shown | Pass |
 | Block at end of text | Block placeholder shown | Pass |
+| Icon displayed before text | Icon was displayed | Pass |
 
 The code blocks and code dialog are shown as below:
 
@@ -22940,6 +22941,83 @@ The HTML above produced the following set of background and text colours in a ``
 The first two objectives are clearly met, and the third is also met as all of the text is legible.
 
 ### Objective 9.ii.i: Table placeholders
+
+Tables are to be displayed as placeholders in the same way as large code blocks.
+They should show a table dialog when clicked, and maintain markdown formatting with in each table element.
+
+The test card for tables contains three tables which should be converted to placeholder spans:
+- A table at the start of the text
+- A table within the text
+- A table at the end of the text
+
+And two tables which should not be converted:
+- A table within a short code block
+- A table within a large code block
+
+The test card is below:
+
+\| Header 1 | Header 2 | Header 3 |
+\| --- | --- | --- |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+
+Table in body text:
+
+\| Header 1 | Header 2 | Header 3 |
+\| --- | --- | --- |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+
+Table in code span:
+
+\```
+\| Header 1 | Header 2 | Header 3 |
+\| --- | --- | --- |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+
+```
+
+Table rows duplicated to fill large code span:
+
+\```
+\| Header 1 | Header 2 | Header 3 |
+\| --- | --- | --- |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+```
+
+Table at the end of the text:
+
+\| Header 1 | Header 2 | Header 3 |
+\| --- | --- | --- |
+| Item 1 | Item 2 | Item 3 |
+| **Bold**  | :smiley: | ~~strikethrough~~ |
+
+
+| Test | Expected result | Result |
+| Table at start of text | Table placeholder displayed | Pass |
+| Table within the text body | Table placeholder displayed | Pass |
+| Table in short code span | Table markdown displayed in short code span | Pass |
+| Table in large code span | Table markdown displayed when code span is clicked | Pass |
+| Table at end of text | Table placeholder displayed | Pass |
+| Emoji in table | Emoji displayed in table item | Pass |
+| Strikethrough in table | Strikethrough displayed in table item | Pass |
+
+The card is displayed as shown below:
+
+| Card | Table content | Code span content |
+| --- | --- | --- |
+| ![Table card](http://imgur.com/JvDAER4.png) | ![Table content](http://imgur.com/AsoZWqT.png) | ![Code block content](http://imgur.com/4M4Jisl.png) |
+
 
 
 ## 
