@@ -4857,6 +4857,62 @@ These cards test each of the different markdown features which should be include
 
 ### Objective 9.ii.a: Code blocks
 
+#### Short code blocks
+
+Objective 9.ii.a.1 is to display short code blocks within the text body, including code inline with other text.
+
+A short code block is any code block with fewer than 10 lines.
+
+The test card for short code blocks contains the following items which should be displayed as short code blocks:
+
+- A short code block at the start of the text
+- A short code block in the middle of a line, between other text
+- A short code block within a list item
+- A short code block with ten lines
+- A short code block at the end of the text
+
+The card used to test this is 
+
+\```
+System.out.println("Line");
+
+System.out.println("Line 2");
+
+System.out.println("Line 3");
+
+\```
+
+Some text with a \```print("Code block")\``` in the middle.
+
+A list:
+- Item 1
+- Item 2 \```print("With code")\```
+
+A block with 10 lines:
+\```
+print("Line")
+
+print("Line 2")
+
+print("Line 3")
+
+print("Line 4")
+\```
+
+| Test | Expected Result | Result |
+| --- | --- | --- |
+| Block at start of text | Block shown with gray background | Pass |
+| Block in the middle of a line | Only the part of the line is shown with a gray background | Pass |
+| Block in list item | Only the code part of the list item is shown with a gray background | Pass |
+| Block with ten lines | Block shown with all ten lines within the text | Pass | 
+| Block at end of text | Block shown with gray background | Pass |
+
+The card is displayed as shown below:
+
+![InlineCode test card](http://imgur.com/uzxPmU8.png)
+
+#### Larger code blocks
+
 ### Objective 9.ii.b: Horizontal rules
 
 ### Objective 9.ii.c: Image handling and relative link handling 

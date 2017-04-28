@@ -3972,8 +3972,6 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
         final char[] chars = ("\n" + s).toCharArray();
         for(int i = 0; i < chars.length; i++) {
             if(linkUsernames && chars[i] == '@' && isWhiteSpace(p)) {
-                //Max username length is 39 characters
-                //Usernames can be alphanumeric with single hyphens
                 i = parseUsername(builder, chars, i);
             } else if(chars[i] == '#' && isWhiteSpace(p) && fullRepoPath != null) {
                 i = parseIssue(builder, chars, i, fullRepoPath);
@@ -4010,6 +4008,7 @@ public static String formatMD(@NonNull String s, @Nullable String fullRepoPath, 
                         p = chars[j];
                     }
                 }
+
             } else {
                 builder.append(chars[i]);
             }
@@ -7416,7 +7415,6 @@ public class MarkdownTextView extends AppCompatTextView implements View.OnClickL
     private void parseAndSetMd(@NonNull String markdown, @Nullable final Html.ImageGetter imageGetter) {
         // Override tags to stop Html.fromHtml destroying some of them
         markdown = HtmlTagHandler.overrideTags(Markdown.parseMD(markdown));
-
         final HtmlTagHandler htmlTagHandler = new HtmlTagHandler(this,
                 imageGetter,  mLinkHandler, mImageClickHandler, mCodeHandler, mTableHandler
         );
@@ -8701,6 +8699,7 @@ private void handleInlineCodeTag(Editable output) {
         final Object obj = getLast(output, InlineCode.class);
         final int start = output.getSpanStart(obj);
         final int end = output.length();
+        Log.i("Markdown", "Handling inline code tag from " + start + " to " + end);
         output.removeSpan(obj);
         output.setSpan(new InlineCodeSpan(mTextPaint.getTextSize()), start, end,
                 Spannable.SPAN_INCLUSIVE_EXCLUSIVE
@@ -10869,10 +10868,7 @@ public class IssueEditor extends EditorActivity {
                 mTitleEdit.setText(note);
             }
 
-        } else {
-            finish();
         }
-
         final SimpleTextChangeWatcher editWatcher = new SimpleTextChangeWatcher() {
             @Override
             public void textChanged() {
@@ -11353,8 +11349,6 @@ public class ProjectEditor extends EditorActivity {
             mProjectNumber = project.getId();
             mNameEditor.setText(project.getName());
             mDescriptionEditor.setText(project.getBody());
-        } else {
-            finish();
         }
     }
 
@@ -18765,7 +18759,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
                 public void loadComplete(Issue data) {
                     if(mParent.isAdded() && !mParent.isRemoving()) {
                         mCards.get(pos).first.setFromIssue(data);
-                        bindIssueCard(holder, pos);
+                        notifyItemChanged(pos);
                     }
 
                     final Bundle bundle = new Bundle();
@@ -22211,6 +22205,62 @@ Throughout the construction of the project I added test cards to a GitHub projec
 These cards test each of the different markdown features which should be included.
 
 ### Objective 9.ii.a: Code blocks
+
+#### Short code blocks
+
+Objective 9.ii.a.1 is to display short code blocks within the text body, including code inline with other text.
+
+A short code block is any code block with fewer than 10 lines.
+
+The test card for short code blocks contains the following items which should be displayed as short code blocks:
+
+- A short code block at the start of the text
+- A short code block in the middle of a line, between other text
+- A short code block within a list item
+- A short code block with ten lines
+- A short code block at the end of the text
+
+The card used to test this is 
+
+\```
+System.out.println("Line");
+
+System.out.println("Line 2");
+
+System.out.println("Line 3");
+
+\```
+
+Some text with a \```print("Code block")\``` in the middle.
+
+A list:
+- Item 1
+- Item 2 \```print("With code")\```
+
+A block with 10 lines:
+\```
+print("Line")
+
+print("Line 2")
+
+print("Line 3")
+
+print("Line 4")
+\```
+
+| Test | Expected Result | Result |
+| --- | --- | --- |
+| Block at start of text | Block shown with gray background | Pass |
+| Block in the middle of a line | Only the part of the line is shown with a gray background | Pass |
+| Block in list item | Only the code part of the list item is shown with a gray background | Pass |
+| Block with ten lines | Block shown with all ten lines within the text | Pass | 
+| Block at end of text | Block shown with gray background | Pass |
+
+The card is displayed as shown below:
+
+![InlineCode test card](http://imgur.com/uzxPmU8.png)
+
+#### Larger code blocks
 
 ### Objective 9.ii.b: Horizontal rules
 
