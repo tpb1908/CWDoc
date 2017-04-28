@@ -22595,4 +22595,51 @@ The Emoji are displayed as shown below:
 
 There are some emoji which are not shown with a character not found symbol. This is a limitation of the font used rather than the emoji parsing, as the original emoji aliases have been removed.
 
+### Image handling and relative link handling
+
+Images with a relative path in the repository should be shown.
+
+In order to test this I added images of each type (png, jpg, gif, bmp, and webp) to the test repository and added relative links to the README as well as a relative path.
+
+```
+
+![Test 1](./test_1.png)
+
+![Test 2](/test_2.jpg)
+
+![Test 3](test_3.bmp)
+
+![Test_4](./test_4.gif)
+
+![Test 5](/test_5.webp)
+```
+
+The links are either the file name, a single forward slash, or a dot slash, which are all valid relative path formats.
+
+The sets of images displayed correctly in both the ```MarkdownWebView``` and ```MarkdownTextView```.
+
+Next, I moved the images to a directory within the repository and updated the links.
+
+```
+![Test 1](./test/test_1.png)
+
+![Test 2](/test/test_2.jpg)
+
+![Test 3](test/test_3.bmp)
+
+![Test_4](./test/test_4.gif)
+
+![Test 5](/test/test_5.webp)
+```
+
+The images were still displayed in the same manner as before.
+
+| ```MarkdownWebView``` | ```MarkdownTextView```
+| --- | --- |
+| ![WV](http://imgur.com/B4aqUDZ.png) | ![TV](http://imgur.com/ClujAd6.png)
+
+#### Relative paths
+
+
+
 ## 
