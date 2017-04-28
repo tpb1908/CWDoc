@@ -8465,6 +8465,11 @@ private void handleFontTag(Editable output) {
                         Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
                 );
             }
+            if(fgc == null) {
+                output.setSpan(new ForegroundColorSpan(TextUtils.getTextColorForBackground(color)), start, end,
+                        Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
 
         }
         if(f != null) {
@@ -8699,7 +8704,6 @@ private void handleInlineCodeTag(Editable output) {
         final Object obj = getLast(output, InlineCode.class);
         final int start = output.getSpanStart(obj);
         final int end = output.length();
-        Log.i("Markdown", "Handling inline code tag from " + start + " to " + end);
         output.removeSpan(obj);
         output.setSpan(new InlineCodeSpan(mTextPaint.getTextSize()), start, end,
                 Spannable.SPAN_INCLUSIVE_EXCLUSIVE
@@ -22278,7 +22282,7 @@ The test card for large code blocks contains the following items which should be
 - A large code block with eleven lines
 - A large code block at the end of the text
 
-The card used to test this is:
+The card text used to test this is:
 
 \``` java
 System.out.println("Line");
@@ -22349,6 +22353,59 @@ The code blocks and code dialog are shown as below:
 | ![Blocks](http://imgur.com/KFszbeL.png) | ![Dialog](http://imgur.com/yD7hjM3.png) |
 
 ### Objective 9.ii.b: Horizontal rules
+
+Horizontal rules should be displayed in the place of any of the three character combinations "\---", "\***", or "\___".
+
+The test card for horizontal rules tests the following which should display a horizontal rule:
+- Any of the valid combinations on its own line in the text
+- Any of the valid combinations at the start of the text
+- Any of the valid combinations at the end of the text
+
+And the following which should not display a horizontal rule:
+- Any of the valid combinations in the middle of a line of text
+- Any of the valid combinations preceded by a backslash
+
+The card text used to test this is:
+
+\---
+
+Thematic breaks
+
+\___
+
+Do underscores work?
+
+\---
+
+
+Do dashes work?
+
+
+\***
+
+Do asterisks work?
+
+
+Escaped values:
+
+\\***
+
+\\___
+
+\\---
+
+\---
+
+| Test | Expected Result | Result |
+| --- | --- | --- |
+| Valid combination at start of text | Horizontal rule displayed | Pass |
+| Valid combination on its own line | Horizontal rule displayed | Pass |
+| Valid combination at the end of text | Horizontal rule displayed | Pass |
+| Escaped combinations | Horizontal rule not displayed | Pass |
+
+The card is displayed as shown below:
+
+![Thematic break test](http://imgur.com/KdTXSUQ.png)
 
 ### Objective 9.ii.c: Image handling and relative link handling 
 
@@ -22844,6 +22901,43 @@ The card was displayed as shown below:
 ![Ballot text](http://imgur.com/NsNebAc.png)
 
 ### Objective 9.ii.h: Text background colours
+
+The test card for font background colours contains font tags with background-color attributes which should produce both white and black text colors.
+
+The card is as follows
+
+```
+<font background-color="#000000">Test</font>
+
+<font background-color="#FFFFFF">Test</font>
+
+<font background-color="#7FFF00">Test</font>
+
+<font background-color="#F0F8FF">Test</font>
+
+<font background-color="#DC143C">Test</font>
+
+<font background-color="#00FFFF">Test</font>
+
+<font background-color="#0000FF">Test</font>
+
+<font background-color="#2F4F4F">Test</font>
+
+<font background-color="#FF1493">Test</font>
+
+<font background-color="#7CFC00">Test</font>
+```
+
+| Test | Expected Result | Result |
+| Black background | White text | Pass |
+| White background | Black text | Pass |
+| Other colours | Text colour which ensures text is legible | Pass |
+
+The HTML above produced the following set of background and text colours in a ```MarkdownEditText```:
+
+![Text color test](http://imgur.com/U0T5jg8.png)
+
+The first two objectives are clearly met, and the third is also met as all of the text is legible.
 
 ### Objective 9.ii.i: Table placeholders
 
