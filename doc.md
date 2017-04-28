@@ -4847,6 +4847,8 @@ The ```Fragment``` is only responsible for creating the layout, handling its own
 
 #import "app/src/main/java/com/tpb/projects/notifications/NotificationIntentService.java"
 
+#page
+
 # Testing
 
 ## Markdown
@@ -5577,6 +5579,7 @@ The card is as follows
 ```
 
 | Test | Expected Result | Result |
+| --- | --- | --- | 
 | Black background | White text | Pass |
 | White background | Black text | Pass |
 | Other colours | Text colour which ensures text is legible | Pass |
@@ -5604,15 +5607,21 @@ And two tables which should not be converted:
 The test card is below:
 
 \| Header 1 | Header 2 | Header 3 |
+
 \| --- | --- | --- |
+
 | Item 1 | Item 2 | Item 3 |
+
 | **Bold**  | :smiley: | ~~strikethrough~~ |
 
 Table in body text:
 
 \| Header 1 | Header 2 | Header 3 |
+
 \| --- | --- | --- |
+
 | Item 1 | Item 2 | Item 3 |
+
 | **Bold**  | :smiley: | ~~strikethrough~~ |
 
 Table in code span:
@@ -5651,6 +5660,7 @@ Table at the end of the text:
 
 
 | Test | Expected result | Result |
+| --- | --- | --- |
 | Table at start of text | Table placeholder displayed | Pass |
 | Table within the text body | Table placeholder displayed | Pass |
 | Table in short code span | Table markdown displayed in short code span | Pass |
