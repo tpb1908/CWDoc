@@ -8086,7 +8086,7 @@ private void end(Editable output, Class kind, boolean paragraphStyle, Object... 
                 len++;
             }
             for(Object replace : replaces) {
-                if(output.length() > 0 && len < output.length()) {
+                if(output.length() > 0) {
                     output.setSpan(replace, start, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
             }
@@ -23160,4 +23160,47 @@ In this case the app performed better than GitHub's own website, as GitHub match
 
 
 #### Part B- Ignoring code
+
+Many code segments, especially those in C style languages, contain code segments which might be matched as URLs.
+
+Outside of code blocks, these should still be matched if they are valid URLs, such as "com.package.build".
+
+The test for ignoring these problematic strings involves wrapping the test used in part A within a code block. As such it is unnecessary to duplicate the body of text above in order to show another six characters.
+
+As expected, the test was displayed correctly, as a code block placeholder.
+
+This block contained the test in part A, without any modifications:
+
+![Code block](http://imgur.com/JEgAYhm.png)
+
+### Objective 9.iv: List formatting
+
+In order to test this objective, I used three different lists declared in different ways.
+
+#### Nested HTML list
+
+The first is the list of objectives for this project which is declared as HTML and contains 32 ordered lists and 280 list items.
+Each of the ordered lists has a type specified.
+
+The app handled this as expected, displaying each nested element with the correct indentation and list item styling.
+
+| --- | --- | 
+| ![One](http://imgur.com/t1hp6of.png) | ![Two](http://imgur.com/dMexwLm.png) |
+
+#### Long HTML list
+
+The second list is intended to test handling of different list types for particularly long lists.
+The single ordered list is declared in HTML and contains 200 list items.
+
+It should be displayed up to 200 with the numeric type, cc in roman numerals, and gr in base 26.
+
+| Numeric | Roman numerals | Base 26 |
+| --- | --- | --- | 
+| ![Numeric](http://imgur.com/jUtaycB.png) | ![Roman](http://imgur.com/IT2tJVX.png) | ![Alpha](http://imgur.com/VBn6cl9.png) |
+
+
+All three of these tests passed succesfully, and the formatting for particularly long roman numerals was better than GitHub which overflowed the bounds of its text box on some longer values such as "clxxxviii".
+
+#### Nested markdown list
+
 
