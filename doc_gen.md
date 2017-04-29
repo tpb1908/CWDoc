@@ -23641,7 +23641,7 @@ The test markdown contains an unordered list, which contains:
 | Bold text item | Text displayed in bold | Pass |
 | Strikethrough text item | Text displayed with strikethrough | Pass |
 | Chekecd list items | Unicode U+2611 checkbox displayed at start of item | Pass |
-| Unchecked list items Unicode U+2610 checkbox displayed at start of item | Pass |
+| Unchecked list items | Unicode U+2610 checkbox displayed at start of item | Pass |
 | URL in list item | URL converted to clickable link | Pass |
 | Email address in list item | Email address converted to clickable link | Pass |
 | User reference in list item | User reference converted to clickable link | Pass |
