@@ -3721,7 +3721,7 @@ public class Interceptor extends Activity {
                             i.putExtra(getString(R.string.intent_milestone_number),
                                     safelyExtractInt(segments.get(3))
                             );
-                        } else if("commit".equals(segments.get(2))) {
+                        } else if("commit".equals(segments.get(2)) || "commits".equals(segments.get(2))) {
                             i.setClass(Interceptor.this, CommitActivity.class);
                             i.putExtra(getString(R.string.intent_commit_sha), segments.get(3));
                         }
@@ -3766,7 +3766,6 @@ public class Interceptor extends Activity {
         }
     }
 
-
     private void fail() {
         try {
             startActivity(generateFailIntentWithoutApp());
@@ -3776,7 +3775,6 @@ public class Interceptor extends Activity {
             finish();
         }
     }
-
 
     private Intent generateFailIntentWithoutApp() {
         try {
@@ -9268,7 +9266,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
-import com.androidnetworking.error.ANError;
+import com.tpb.github.data.APIHandler;
 import com.tpb.github.data.Uploader;
 import com.tpb.projects.BuildConfig;
 import com.tpb.projects.R;
@@ -9473,9 +9471,9 @@ public abstract class EditorActivity extends CircularRevealActivity {
                                  }
 
                                  @Override
-                                 public void uploadError(ANError error) {
+                                 public void uploadError(APIHandler.APIError error) {
                                      mUploadDialog.cancel();
-                                     Toast.makeText(EditorActivity.this, error.getErrorBody(), Toast.LENGTH_SHORT).show();
+                                     Toast.makeText(EditorActivity.this, error.resId, Toast.LENGTH_SHORT).show();
                                  }
                              },
                 image64,
@@ -9527,6 +9525,7 @@ Image uploading is handled with the ```Uploader```.
 ``` java
 package com.tpb.github.data;
 
+import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
@@ -9543,10 +9542,15 @@ import org.json.JSONObject;
  * Created by theo on 15/02/17.
  */
 
-public class Uploader {
+public class Uploader extends APIHandler {
 
     private static final String IMGUR_AUTH_KEY = "Authorization";
     private static final String IMGUR_AUTH_FORMAT = "Client-ID %1$s";
+
+
+    protected Uploader(Context context) {
+        super(context);
+    }
 
     public static void uploadImage(@NonNull final ImgurUploadListener listener, String image64, @Nullable UploadProgressListener uploadListener, @NonNull String clientId) {
         AndroidNetworking.upload("https://api.imgur.com/3/image")
@@ -9570,7 +9574,7 @@ public class Uploader {
 
                              @Override
                              public void onError(ANError anError) {
-                                 listener.uploadError(anError);
+                                 listener.uploadError(parseError(anError));
                              }
                          });
     }
@@ -9579,7 +9583,7 @@ public class Uploader {
 
         void imageUploaded(String url);
 
-        void uploadError(ANError error);
+        void uploadError(APIError error);
 
     }
 
@@ -22086,7 +22090,6 @@ public class NotificationIntentService extends IntentService implements Loader.L
     }
 
     private void markNotificationRead(long id) {
-        Logger.i(TAG, "markNotificationRead: Should me marking read");
         Editor.getEditor(this).markNotificationThreadRead(id);
     }
 
@@ -23265,3 +23268,54 @@ The test markdown contains an unordered list, which contains:
 The markdown was displayed as shown below:
 
 ![MD list test](http://imgur.com/LZL2aDM.png)
+
+## Markdown editing
+
+It should already be clear form the "Markdown editing" section, that the interface for a markdown editor has been created, and that ```Activities``` for searching and selecting emoji and unicode characters have been implemented.
+
+The purpose of this test section is to ensure that the flow for uploading an image can deal with the user exiting the process, or other problems occuring.
+
+| Test | Expected result | Result |
+| --- | --- | --- |
+| The cancel button is clicked in the upload dialog | The dialog is cancelled and nothing is inserted | Pass |
+| The take a picture button is clicked in the upload dialog | The camera is launched | Pass |
+| The camera is cancelled without taking a picture | Nothing is inserted | Pass |
+| A picture is taken | The camera closes and returns to the app | Pass |
+| The choose from gallery button is clicked in the upload dialog | The default gallery application is launched | Pass | 
+| A picture is chosen from the gallery | The gallery closes and returns to the app | Pass |
+| A valid image is returned from either the camera or gallery | The upload dialog is shown | Pass |
+| There is no network connection | A suitable is shown when the user attempts to upload an image | Pass |
+| The connection is lost while uploading the image | A suitable error message is shown | Pass |
+
+The app pass each of the tests, dealing with each of the ways that the user might attempt to upload an image or cancel doing so, and the problems which could occur while uploading the image.
+
+## Notifications
+
+Notifications are more difficult to test than other features, as they must be triggered manually and then require waiting for a scheduled task to perform the required action.
+Further, some notification types cannot be tested without being part of an organisation.
+
+In order to test the most common notification types I used a test GitHub account to to create comments and mentions on the test repository.
+
+### Commit comments
+
+### Issue comments
+
+### Mentions
+
+Mentions occur when another user tags the authenticated user in a section of markdown.
+
+In order to test notifications for mentions, I used the test account to mention my own account in an issue, and on a commit comment.
+
+| Test | Expected Result | Result | 
+| --- | --- | --- |
+| Authenticated user mentioned in issue | Notification received within 5 minutes | Pass |
+| Authenticated user mentioned in commit comment | Notification received within 5 minutes | Pass |
+| Mention notification received | "@" icon used | Pass |
+| Issue mention notification clicked | Corresponding issue launched in app | Pass |
+| Comment comment mention notification clicked | Corresponding commit launched in app | Pass |
+
+As I made the mentions close together, the notifications were received together and displayed as shown below:
+
+![Mentions](http://imgur.com/YvlhvED.png)
+
+### Assignment

@@ -5912,3 +5912,54 @@ The test markdown contains an unordered list, which contains:
 The markdown was displayed as shown below:
 
 ![MD list test](http://imgur.com/LZL2aDM.png)
+
+## Markdown editing
+
+It should already be clear form the "Markdown editing" section, that the interface for a markdown editor has been created, and that ```Activities``` for searching and selecting emoji and unicode characters have been implemented.
+
+The purpose of this test section is to ensure that the flow for uploading an image can deal with the user exiting the process, or other problems occuring.
+
+| Test | Expected result | Result |
+| --- | --- | --- |
+| The cancel button is clicked in the upload dialog | The dialog is cancelled and nothing is inserted | Pass |
+| The take a picture button is clicked in the upload dialog | The camera is launched | Pass |
+| The camera is cancelled without taking a picture | Nothing is inserted | Pass |
+| A picture is taken | The camera closes and returns to the app | Pass |
+| The choose from gallery button is clicked in the upload dialog | The default gallery application is launched | Pass | 
+| A picture is chosen from the gallery | The gallery closes and returns to the app | Pass |
+| A valid image is returned from either the camera or gallery | The upload dialog is shown | Pass |
+| There is no network connection | A suitable is shown when the user attempts to upload an image | Pass |
+| The connection is lost while uploading the image | A suitable error message is shown | Pass |
+
+The app pass each of the tests, dealing with each of the ways that the user might attempt to upload an image or cancel doing so, and the problems which could occur while uploading the image.
+
+## Notifications
+
+Notifications are more difficult to test than other features, as they must be triggered manually and then require waiting for a scheduled task to perform the required action.
+Further, some notification types cannot be tested without being part of an organisation.
+
+In order to test the most common notification types I used a test GitHub account to to create comments and mentions on the test repository.
+
+### Commit comments
+
+### Issue comments
+
+### Mentions
+
+Mentions occur when another user tags the authenticated user in a section of markdown.
+
+In order to test notifications for mentions, I used the test account to mention my own account in an issue, and on a commit comment.
+
+| Test | Expected Result | Result | 
+| --- | --- | --- |
+| Authenticated user mentioned in issue | Notification received within 5 minutes | Pass |
+| Authenticated user mentioned in commit comment | Notification received within 5 minutes | Pass |
+| Mention notification received | "@" icon used | Pass |
+| Issue mention notification clicked | Corresponding issue launched in app | Pass |
+| Comment comment mention notification clicked | Corresponding commit launched in app | Pass |
+
+As I made the mentions close together, the notifications were received together and displayed as shown below:
+
+![Mentions](http://imgur.com/YvlhvED.png)
+
+### Assignment
