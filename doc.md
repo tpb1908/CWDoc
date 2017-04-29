@@ -5940,9 +5940,21 @@ Further, some notification types cannot be tested without being part of an organ
 
 In order to test the most common notification types I used a test GitHub account to to create comments and mentions on the test repository.
 
-### Commit comments
-
 ### Issue comments
+
+Issue coment notifications occur when another user comments on an issue which the authenticated user created.
+
+In order to test this I used the test account to comment on an issue created by the authenticated account on the test repository.
+
+| Test | Expected result | Result |
+| --- | --- | --- |
+| Comment made on issue | Notification received within 5 minutes | Pass |
+| Notification displayed | Notification displayed with user icon | Pass |
+| Notification clicked | Corresponding issue opened in app | Pass |
+
+The comment notification was displayed as shown below:
+
+![Comment](http://imgur.com/T4oKtyT.png)
 
 ### Mentions
 
@@ -5962,4 +5974,78 @@ As I made the mentions close together, the notifications were received together 
 
 ![Mentions](http://imgur.com/YvlhvED.png)
 
-### Assignment
+### Dismissing notifications
+
+When notifications are opened or dismissed, the notification should be dismissed through the GitHub API.
+
+| Test | Expected Result | Result | 
+| --- | --- | --- | 
+| Notification deleted | Dismiss ```Intent``` triggered | Pass |
+| Notification dismiss ```Intent``` received | API call made, successfully dismissing notification | Pass |
+
+Proof of this test is best shown through the logs generated when sending the dismiss intent, and subsequently sending a network request to dismiss the notification.
+
+The code used for generating the ```PendingIntent``` trigerred when a notification is dismissed is as follows:
+
+``` java
+final Intent i = new Intent(NotificationIntentService.this,NotificationIntentService.class);
+i.setAction(ACTION_DELETE);
+i.putExtra("notification", notif);
+return PendingIntent.getService(this, 53253, i, PendingIntent.FLAG_ONE_SHOT);
+```
+
+When the ```Intent``` is received, the action will be ACTION_DELETE.
+
+This is shown in the logs:
+
+```
+com.tpb.projects I/NotificationIntentService: onHandleIntent: Intent { act=ACTION_DELETE cmp=com.tpb.projects/.notifications.NotificationIntentService (has extras) }
+```
+
+The action is shown as ACTION_DELETE and the component to send the ```Intent``` to is the ```NotificationIntentService``` which originally created the ```Intent```.
+
+When the ```Intent``` is received in ```onHandleIntent```, ```markNotificationRead``` is called, which calls the ```Editor``` method to make the request.
+
+The log for the request sent is as follows:
+```
+com.tpb.projects I/LoggingInterceptor: Sending request https://api.github.com/notifications/threads/omitted_id on Connection{api.github.com:443, proxy=DIRECT@ hostAddress=api.github.com/192.30.253.117:443 cipherSuite=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 protocol=http/1.1}
+                                       Accept: application/vnd.github.v3+json
+                                       Authorization: token omitted_token
+                                       Content-Type: application/x-www-form-urlencoded
+                                       Content-Length: 0
+                                       Host: api.github.com
+                                       Connection: Keep-Alive
+                                       Accept-Encoding: gzip
+                                       User-Agent: okhttp/3.6.0
+```
+
+This shows that the request is being sent to the correct API endpoint.
+
+The log for the request response is as follows:
+
+```
+com.tpb.projects I/LoggingInterceptor: Received response for https://api.github.com/notifications/threads/omitted_id in 609.8ms
+                                       Server: GitHub.com
+                                       Date: Sat, 29 Apr 2017 14:30:55 GMT
+                                       Transfer-Encoding: chunked
+                                       Status: 205 Reset Content
+                                       X-RateLimit-Limit: 5000
+                                       X-RateLimit-Remaining: 4987
+                                       X-RateLimit-Reset: 1493479595
+                                       X-OAuth-Scopes: gist, repo, user
+                                       X-Accepted-OAuth-Scopes: notifications, repo
+                                       X-OAuth-Client-Id: omitted_client_id
+                                       X-GitHub-Media-Type: github.v3; format=json
+                                       Access-Control-Expose-Headers: ETag, Link, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval
+                                       Access-Control-Allow-Origin: *
+                                       Content-Security-Policy: default-src 'none'
+                                       Strict-Transport-Security: max-age=31536000; includeSubdomains; preload
+                                       X-Content-Type-Options: nosniff
+                                       X-Frame-Options: deny
+                                       X-XSS-Protection: 1; mode=block
+                                       X-GitHub-Request-Id: DB9A:6F20:27DB76F:3335CCD:5904A39E
+```
+
+The response shows the 205 reset content status which is listed as the succesfull response for marking notifications as read.
+
+## Link handling
