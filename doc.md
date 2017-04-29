@@ -5797,7 +5797,7 @@ All of the tests were passed as expected:
 
 | Part 1 | Part 2
 | --- | --- | 
-| ![Part 1] (http://imgur.com/T8Tf7wc.png) | ![Part 2] (http://imgur.com/Ujnnpta.png) |
+| ![Part 1](http://imgur.com/T8Tf7wc.png) | ![Part 2](http://imgur.com/Ujnnpta.png) |
 
 In this case the app performed better than GitHub's own website, as GitHub matched two the invalid URLs and both of the invalid email addresses:
 
