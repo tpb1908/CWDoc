@@ -5850,4 +5850,65 @@ All three of these tests passed succesfully, and the formatting for particularly
 
 #### Nested markdown list
 
+This test is for a nested markdown list containing nested ordered and unordered lists, and list items containing other markdown elements.
 
+The test markdown contains an unordered list, which contains:
+- Two text items
+- A text item with an emoji alias
+- A nested unordered list which contains:
+    - An inline code segment
+- A nested ordered list which contains:
+    - Two text items
+    - An italicised text item
+    - A bold text item
+    - An italicised text item
+    - A nested unordered checkboxed list which contains:
+        - A non-checked URL
+        - A checked email address
+        - A checked user reference
+        - A non-checked issue reference
+        - A nested unordered list which contains:
+            - A triple asterisk which should be ignored
+            - An image link which should be displayed in line
+
+```
+- unordered item 1
+- unordered item 2
+    1. Ordered item 1
+    2. Ordered item 2
+    3. *Italicised ordered item*
+    4. **Bold ordered item**
+    5. ~~Struck-through ordered item~~
+    6. More deeply nested
+        - [ ] www.link.in.item.com
+        - [x] email.in.item@test.com
+        - [x] @tpb1908-test user reference
+        - [ ] #15 issue reference
+            - *** thematic break is ignored
+            - ![Image](http://imgur.com/Bap3G8x.png)
+- :smiley: emoji in list item
+    - \```Code in a nested item\```
+
+```
+
+| Test | Expected result | Result | 
+| --- | --- | --- |
+| Unordered text items | Displayed with correct indentation | Pass |
+| Text item with emoji alias | Alias is displayed as its unicode character | Pass |
+| Inline code segment | Inline code segment displayed with correct indentation | Pass |
+| Nested lists | All child elements indented the same amount | Pass |
+| Italicised text item | Text displayed in italics | Pass |
+| Bold text item | Text displayed in bold | Pass |
+| Strikethrough text item | Text displayed with strikethrough | Pass |
+| Chekecd list items | Unicode U+2611 checkbox displayed at start of item | Pass |
+| Unchecked list items Unicode U+2610 checkbox displayed at start of item | Pass |
+| URL in list item | URL converted to clickable link | Pass |
+| Email address in list item | Email address converted to clickable link | Pass |
+| User reference in list item | User reference converted to clickable link | Pass |
+| Issue reference in list item | Issue reference converted to clickable link | Pass |
+| Triple asterisks in list item | Asterisks are not converted to horizontal rule | Pass |
+| Image in list item | Image displayed inline with indentation | Pass |
+
+The markdown was displayed as shown below:
+
+![MD list test](http://imgur.com/LZL2aDM.png)
