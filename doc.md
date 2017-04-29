@@ -5830,7 +5830,7 @@ The first is the list of objectives for this project which is declared as HTML a
 Each of the ordered lists has a type specified.
 
 The app handled this as expected, displaying each nested element with the correct indentation and list item styling.
-
+| Part one | Part 2 |
 | --- | --- | 
 | ![One](http://imgur.com/t1hp6of.png) | ![Two](http://imgur.com/dMexwLm.png) |
 
