@@ -1142,6 +1142,7 @@ The client must implement the following features:
             <li>Direct item links
                 <ol type="i"> 
                     <li>Open individual issues from their numbers</li>
+                    <li>Open individual commits from their hashes </li>
                     <li>Open individual files from their paths</li>
                     <li>Projects
                         <ol type="a">
@@ -23405,3 +23406,32 @@ com.tpb.projects I/LoggingInterceptor: Received response for https://api.github.
 The response shows the 205 reset content status which is listed as the succesfull response for marking notifications as read.
 
 ## Link handling
+
+This objective is one of the simplest to test.
+
+Throughtout the development process of the app I have added content to the test repository and launched the app through a URL rather than navigating through the UI in order to save time.
+
+\* All links in data are prepended with https://github.com/
+
+| Test | Data | Expected Result | Result | 
+| --- | --- |--- | --- | 
+| Username link | tpb1908 tpb1908-test | Open the ```UserActivity``` with the specified user | Pass |
+| Repository link | tpb1908/GitTesting | Open the GitTesting repository | Pass | 
+| Repository issues link | tpb1908/GitTesting/issues | Open the issues tab in the ```RepositoryActivity``` | Pass |
+| Repository commits link | tpb1908/GitTesting/commits | Open the commits tab int the ```RepositoryActivity``` | Pass |
+| Issue link | tpb1908/GitTesting/issues/5 | Open the issue with number 5 | Pass |
+| Invalid issue link | tpb1908/GitTesting/issues/abc | Reject the link | Pass |
+| Other users' issue link | tpb1908/GitTesting/issues/56 | Open issue 56 with full access | Pass |
+| Other user's locked issue link | tpb1908-test/Testing/issues/1 | Open the issue without comment access | Pass |
+| Commit link | tpb1908/GitTesting/commit/af60c3141a699362d582e668eca42937ab22459e | Open commit with hash | Pass |
+| Project link | tpb1908/GitTesting/projects/1 | Open the project with id 1 | Pass |
+| Project card | tpb1908/GitTesting/projects/1#card-2705834 | Open the project with id 1 and highlight the card with id 2705834 | Pass |
+| Path link | tpb1908/AndroidProjectsClient/tree/master/app | Open ```ContentActivity``` | Pass |
+| File link | tpb1908/AndroidProjectsClient/blob/899d0bb4b3e5b3fcfad8b5b2fe404a53793940c9/app/src/main/java/com/tpb/projects/util/Interceptor.java | Open the ```Interceptor``` class | Pass |
+
+The app opened all of these links succesfully, launching the correct ```Activities``` with the correct state.
+
+Objective 7.ii also states that the app should gracefully reject unsupported links.
+
+| Test | Data | Expected Result | Result | 
+| --- | --- | --- | --- |
