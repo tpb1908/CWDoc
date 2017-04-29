@@ -3634,10 +3634,12 @@ import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.Parcelable;
 
+import com.tpb.github.data.models.Notification;
 import com.tpb.projects.R;
 import com.tpb.projects.commits.CommitActivity;
 import com.tpb.projects.issues.IssueActivity;
 import com.tpb.projects.milestones.MilestonesActivity;
+import com.tpb.projects.notifications.NotificationIntentService;
 import com.tpb.projects.project.ProjectActivity;
 import com.tpb.projects.repo.RepoActivity;
 import com.tpb.projects.repo.content.ContentActivity;
@@ -3656,10 +3658,15 @@ public class Interceptor extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if(getIntent().getAction().equals(Intent.ACTION_VIEW) &&
-                getIntent().getData() != null &&
-                "github.com".equals(getIntent().getData().getHost())) {
-            final List<String> segments = getIntent().getData().getPathSegments();
+        final Intent l = getIntent();
+        if(l.getAction().equals(Intent.ACTION_VIEW) &&
+                l.getData() != null &&
+                "github.com".equals(l.getData().getHost())) {
+            if(l.hasExtra("notif")) {
+                final Notification notif = l.getParcelableExtra("notif");
+                startService(NotificationIntentService.generateBroadcastDismissIntent(this, notif));
+            }
+            final List<String> segments = l.getData().getPathSegments();
             if(segments.size() == 0) {
                fail();
             } else if(segments.size() == 1) {
@@ -3701,7 +3708,7 @@ public class Interceptor extends Activity {
                             i.putExtra(getString(R.string.intent_project_number),
                                     safelyExtractInt(segments.get(3))
                             );
-                            final String path = getIntent().getDataString();
+                            final String path = l.getDataString();
                             final StringBuilder id = new StringBuilder();
                             for(int j = path
                                     .indexOf('#', path.indexOf(segments.get(3))) + 6; j < path
@@ -6584,7 +6591,7 @@ If the array is empty, the selection is removed, the touch event is triggered, a
 Within the ```TextView```, ```setSpanHit``` is used to set a flag for triggering click events.
 
 Usually, to handle click events for a ```View```, one would call ```setOnClickListener``` which would then be called when the ```TextView``` is clicked.
-The problem with this is that the ```OnClickListener``` would recieve span click events.
+The problem with this is that the ```OnClickListener``` would receive span click events.
 
 To solve this problem, the ```TextView``` itself implements ```OnClickListener```.
 
@@ -13571,7 +13578,7 @@ public class UserStarsFragment extends UserFragment {
 
 ### UserGistsFragment
 
-The ```UserGistsFragment``` is also very simple as it only deals with notifying the ```GistsAdapter``` of scroll changes, and opening the ```FileActivity``` when a gist is clicked.
+The ```UserGistsFragment``` is also very simple as it only deals with notifying the ```GistAdapter``` of scroll changes, and opening the ```FileActivity``` when a gist is clicked.
 
 **UserGistsFragment.java**
 ``` java
@@ -13593,7 +13600,7 @@ import com.tpb.github.data.models.User;
 import com.tpb.projects.R;
 import com.tpb.projects.common.FixedLinearLayoutManger;
 import com.tpb.projects.repo.content.FileActivity;
-import com.tpb.projects.user.GistsAdapter;
+import com.tpb.projects.user.GistAdapter;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -13603,14 +13610,14 @@ import butterknife.Unbinder;
  * Created by theo on 10/03/17.
  */
 
-public class UserGistsFragment extends UserFragment implements GistsAdapter.GistOpener {
+public class UserGistsFragment extends UserFragment implements GistAdapter.GistOpener {
 
     private Unbinder unbinder;
 
     @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
     @BindView(R.id.fragment_recycler) AnimatingRecyclerView mRecycler;
 
-    private GistsAdapter mAdapter;
+    private GistAdapter mAdapter;
 
     @Nullable
     @Override
@@ -13621,7 +13628,7 @@ public class UserGistsFragment extends UserFragment implements GistsAdapter.Gist
         final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
         mRecycler.setLayoutManager(manager);
         mRecycler.enableLineDecoration();
-        mAdapter = new GistsAdapter(getContext(), this, mRefresher);
+        mAdapter = new GistAdapter(getContext(), this, mRefresher);
         mRecycler.setAdapter(mAdapter);
 
         mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -13661,7 +13668,7 @@ public class UserGistsFragment extends UserFragment implements GistsAdapter.Gist
 
 ```
 
-**GistsAdapter.java**
+**GistAdapter.java**
 ``` java
 package com.tpb.projects.user;
 
@@ -13691,7 +13698,7 @@ import butterknife.ButterKnife;
  * Created by theo on 11/03/17.
  */
 
-public class GistsAdapter extends RecyclerView.Adapter<GistsAdapter.GistHolder> implements Loader.ListLoader<Gist> {
+public class GistAdapter extends RecyclerView.Adapter<GistAdapter.GistHolder> implements Loader.ListLoader<Gist> {
 
     private String mUser;
     private String mAuthenticatedUser;
@@ -13707,7 +13714,7 @@ public class GistsAdapter extends RecyclerView.Adapter<GistsAdapter.GistHolder> 
     private Loader mLoader;
     private GistOpener mOpener;
 
-    public GistsAdapter(Context context, GistOpener opener, SwipeRefreshLayout refresher) {
+    public GistAdapter(Context context, GistOpener opener, SwipeRefreshLayout refresher) {
         mLoader = Loader.getLoader(context);
         mOpener = opener;
         mRefresher = refresher;
@@ -13837,7 +13844,17 @@ public class GistsAdapter extends RecyclerView.Adapter<GistsAdapter.GistHolder> 
 
 ```
 
-### UserFollowingFragment
+The ```GistAdapter``` implements ```Loader.ListLoader<Gist>``` and deals with loading and binding a list of a user's gists.
+
+The adapter inflates the ```viewholder_gist``` layout which contains a ```NetworkImageView``` and two ```TextViews```.
+It then binds the ```Gist``` owners avatar to the ```NetworkImageView```, the ```Gist``` name to the title ```TextView```, and the ```Gist``` description to the second ```TextView``` if the description exists.
+
+When a gist list item is clicked, the ```FileActivity``` is launched to display the gist file.
+
+### UserFollowingFragment and UserFollowersFragment
+
+The two fragments display a list of users that the authenticated user is following or that are following the authenticated user respectively.
+Each list item consists of the user's login and their avatar, as other information is not guaranteed to exist and is superflous.
 
 **UserFollowingFragment.java**
 ``` java
@@ -13907,12 +13924,6 @@ public class UserFollowingFragment extends UserFragment {
     }
 
     @Override
-    public void onResume() {
-        mRecycler.getRecycledViewPool().clear();
-        super.onResume();
-    }
-
-    @Override
     public void onDestroyView() {
         super.onDestroyView();
         unbinder.unbind();
@@ -13920,8 +13931,6 @@ public class UserFollowingFragment extends UserFragment {
 }
 
 ```
-
-### UserFollowersFragment
 
 **UserFollowersFragment.java**
 ``` java
@@ -13997,6 +14006,156 @@ public class UserFollowersFragment extends UserFragment {
 }
 
 ```
+
+They each inflate the ```fragment_recycler``` layout and when the ```User``` is loaded they pass it to the ```UserAdapter``` which deals with loading and bind data.
+
+**UserAdapter.java**
+``` java
+package com.tpb.projects.user;
+
+import android.app.Activity;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.User;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 19/03/17.
+ */
+
+public class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserHolder> implements Loader.ListLoader<User> {
+
+    private ArrayList<User> mUsers = new ArrayList<>();
+
+    private boolean mIsShowingFollowers = false;
+    private String mUser;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    private Activity mLauncher;
+
+    public UserAdapter(Activity activity, SwipeRefreshLayout refresher) {
+        mLauncher = activity;
+        mLoader = Loader.getLoader(activity);
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            final int oldSize = mUsers.size();
+            mUsers.clear();
+            notifyItemRangeRemoved(0, oldSize);
+            loadUsers(true);
+        });
+    }
+
+    public void setUser(String user, boolean isShowingFollowers) {
+        mUser = user;
+        mIsShowingFollowers = isShowingFollowers;
+        mUsers.clear();
+        loadUsers(true);
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadUsers(false);
+        }
+    }
+
+    private void loadUsers(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        if(mIsShowingFollowers) {
+            mLoader.loadFollowers(this, mUser, mPage);
+        } else {
+            mLoader.loadFollowing(this, mUser, mPage);
+        }
+
+    }
+
+    @Override
+    public void listLoadComplete(List<User> users) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(users.size() > 0) {
+            int oldLength = mUsers.size();
+            mUsers.addAll(users);
+            notifyItemRangeInserted(oldLength, mUsers.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mIsLoading = false;
+    }
+
+    @Override
+    public UserHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new UserHolder(LayoutInflater.from(parent.getContext())
+                                            .inflate(R.layout.viewholder_user, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(UserHolder holder, int position) {
+
+        holder.mAvatar.setImageUrl(mUsers.get(position).getAvatarUrl());
+        holder.mName.setText(mUsers.get(position).getLogin());
+    }
+
+    @Override
+    public int getItemCount() {
+        return mUsers.size();
+    }
+
+    private void openUser(int pos, NetworkImageView iv) {
+        IntentHandler.openUser(mLauncher, iv, mUsers.get(pos).getLogin());
+    }
+
+    class UserHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.user_avatar) NetworkImageView mAvatar;
+        @BindView(R.id.user_name) TextView mName;
+
+        UserHolder(View itemView) {
+            super(itemView);
+            ButterKnife.bind(this, itemView);
+            itemView.setOnClickListener(v -> openUser(getAdapterPosition(), mAvatar));
+        }
+    }
+
+}
+
+```
+
+The two states for the ```UserAdapter``` are showing followers, or showing following.
+If mIsShowingFollowers is true, the ```loadFollowersCall``` is made, otherwise the ```loadFollowing``` call is made. (An amazingly complex piece of logic).
 
 ## Search
 
@@ -16913,7 +17072,6 @@ import android.widget.Toast;
 
 import com.commonsware.cwac.pager.PageDescriptor;
 import com.commonsware.cwac.pager.v4.ArrayPagerAdapter;
-import com.google.firebase.analytics.FirebaseAnalytics;
 import com.tpb.github.data.APIHandler;
 import com.tpb.github.data.Editor;
 import com.tpb.github.data.Loader;
@@ -16945,6 +17103,8 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 
+import static com.tpb.projects.flow.ProjectsApplication.mAnalytics;
+
 
 /**
  * Created by theo on 19/12/16.
@@ -16953,8 +17113,6 @@ import butterknife.OnClick;
 public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<Project> {
     private static final String TAG = ProjectActivity.class.getSimpleName();
     private static final String URL = "https://github.com/tpb1908/AndroidProjectsClient/blob/master/app/src/main/java/com/tpb/projects/project/ProjectActivity.java";
-
-    private FirebaseAnalytics mAnalytics;
 
     @BindView(R.id.project_toolbar) Toolbar mToolbar;
     @BindView(R.id.project_name) TextView mName;
@@ -16986,8 +17144,6 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
         UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
         setContentView(R.layout.activity_project);
         ButterKnife.bind(this);
-        mAnalytics = FirebaseAnalytics.getInstance(this);
-        mAnalytics.setAnalyticsCollectionEnabled(prefs.areAnalyticsEnabled());
 
         final Intent launchIntent = getIntent();
         mLoader = Loader.getLoader(this);
@@ -17835,7 +17991,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.google.firebase.analytics.FirebaseAnalytics;
 import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
 import com.tpb.github.data.APIHandler;
 import com.tpb.github.data.Editor;
@@ -17863,6 +18018,7 @@ import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.Unbinder;
 
+import static com.tpb.projects.flow.ProjectsApplication.mAnalytics;
 import static com.tpb.projects.util.SettingsActivity.Preferences.CardAction.COPY;
 
 /**
@@ -17871,8 +18027,6 @@ import static com.tpb.projects.util.SettingsActivity.Preferences.CardAction.COPY
 
 public class ColumnFragment extends ViewSafeFragment {
     private static final String TAG = ColumnFragment.class.getSimpleName();
-
-    FirebaseAnalytics mAnalytics;
 
     private Unbinder unbinder;
 
@@ -17930,7 +18084,6 @@ public class ColumnFragment extends ViewSafeFragment {
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
-        mAnalytics = FirebaseAnalytics.getInstance(getContext());
 
         mEditor = Editor.getEditor(getContext());
         mName.setOnEditorActionListener((textView, i, keyEvent) -> {
@@ -18694,6 +18847,8 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 
+import static com.tpb.projects.flow.ProjectsApplication.mAnalytics;
+
 /**
  * Created by theo on 20/12/16.
  */
@@ -18917,7 +19072,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
 
                     final Bundle bundle = new Bundle();
                     bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_SUCCESS);
-                    mParent.mAnalytics.logEvent(Analytics.TAG_ISSUE_LOADED, bundle);
+                    mAnalytics.logEvent(Analytics.TAG_ISSUE_LOADED, bundle);
                 }
 
                 @Override
@@ -18925,7 +19080,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
                     if(error != APIHandler.APIError.NO_CONNECTION) {
                         final Bundle bundle = new Bundle();
                         bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_FAILURE);
-                        mParent.mAnalytics.logEvent(Analytics.TAG_ISSUE_LOADED, bundle);
+                        mAnalytics.logEvent(Analytics.TAG_ISSUE_LOADED, bundle);
                         loadCount++;
                         if(loadCount < 5) {
                             mParent.loadIssue(this, card.getIssueId());
@@ -22066,9 +22221,26 @@ public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdap
 
 ## Notifications
 
-### NotificationServiceStarterReceiver
+In order to display notifications, the application needs to register a service to run in the background and poll the GitHub API for notifications.
 
-**NotificationServiceStarterReceiver.java**
+There are two ways which the service may be started.
+First, it may be started on boot.
+
+### NotificationServiceStartBroadcastReceiver
+
+This is done by declaring the receiver with a BOOT_COMPLETED action intent filter in the manifest.
+``` XML
+<receiver android:name=".notifications.receivers.NotificationServiceStartBroadcastReceiver">
+    <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED"/>
+        <action android:name="android.intent.action.TIME_SET"/>
+    </intent-filter>
+</receiver>
+```
+
+The ```NotificationServiceStartBroadcastReceiver``` extends ```BroadcastReceiver``` and true to its name, starts the notification service when it receives a broadcast that the device has started.
+
+**NotificationServiceStartBroadcastReceiver.java**
 ``` java
 package com.tpb.projects.notifications.receivers;
 
@@ -22080,7 +22252,7 @@ import android.content.Intent;
  * Created by theo on 04/04/17.
  */
 
-public final class NotificationServiceStarterReceiver extends BroadcastReceiver {
+public final class NotificationServiceStartBroadcastReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -22089,7 +22261,11 @@ public final class NotificationServiceStarterReceiver extends BroadcastReceiver 
 }
 ```
 
+Registering the intent filter for the boot action means that the user will be able to begin receiving notifications immediately.
+
 ### NotificationEventReceiver
+
+The ```NotificationEventReceiver``` extends ```WakefulBroadcastReceiver``` as the device must be awake to make the network request.
 
 **NotificationEventReceiver.java**
 ``` java
@@ -22114,19 +22290,14 @@ import java.util.Date;
 public class NotificationEventReceiver extends WakefulBroadcastReceiver {
 
     private static final String ACTION_START_NOTIFICATION_SERVICE = "ACTION_START_NOTIFICATION_SERVICE";
-    private static final String ACTION_NOTIFICATION_DISMISSED = "ACTION_NOTIFICATION_DISMISSED";
 
     private static int NOTIFICATIONS_INTERVAL_IN_MINUTES = 1;
-
-    public static void setUpdateInterval(@IntRange(from = 1, to = 60) int minutes) {
-        NOTIFICATIONS_INTERVAL_IN_MINUTES = minutes;
-    }
 
     public static void setupAlarm(Context context) {
         final AlarmManager alarmManager = (AlarmManager) context
                 .getSystemService(Context.ALARM_SERVICE);
         final PendingIntent alarmIntent = getStartPendingIntent(context);
-        alarmManager.setRepeating(AlarmManager.RTC_WAKEUP,
+        alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP,
                 new Date().getTime(),
                 NOTIFICATIONS_INTERVAL_IN_MINUTES * 60000,
                 alarmIntent
@@ -22139,10 +22310,14 @@ public class NotificationEventReceiver extends WakefulBroadcastReceiver {
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
+    public static void setUpdateInterval(@IntRange(from = 1, to = 60) int minutes) {
+        NOTIFICATIONS_INTERVAL_IN_MINUTES = minutes;
+    }
+
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        String action = intent.getAction();
+        final String action = intent.getAction();
         if(ACTION_START_NOTIFICATION_SERVICE.equals(action)) {
             Logger.i(getClass().getSimpleName(),
                     "onReceive from alarm, starting notification service"
@@ -22157,7 +22332,36 @@ public class NotificationEventReceiver extends WakefulBroadcastReceiver {
 }
 ```
 
+The ```NotificationEventReceiver``` contains the private string ACTION_START_NOTIFICATION_SERVICE which is used to ensure that the ```Intent``` received is from an ```Intent``` generated within the class.
+
+In order to start the service, a repeating alarm is created.
+First the system ```AlarmManager``` service is collected from the ```Context```, and then a ```PendingIntent``` is created with ```PendingIntent```.
+
+The particularly perceptive may have already realised that a *Pending* ```Intent``` is not to be launched immediately and is instead used to trigger an action in the future.
+
+The ```PendingIntent.getBroadcast``` method returns a ```PendingIntent``` to trigger a broadcast with the ```Intent``` passed to it, which in this case has the ACTION_START_NOTIFICATION_SERVICE action, and should be sent to the ```NotificationEventReceiver```.
+The ```PendingIntent.FLAG_UPDATE_CURRENT``` flag indicates that if a ```PendingIntent``` with the same parameters already exists, it should be updated with the new ```Intent``` data.
+
+The ```PendingIntent``` is then used to set up an alarm with the following parameters:
+- ```AlarmManager.RTC_WAKEUP``` specifies that the alarm should be triggered according to the clock time, rather than time since boot
+- ```new Date().getTime()``` is the current time in milliseconds, and should be used as the start time for the alarm
+- ```NOTIFICATIONS_INTERVAL_IN_MINUTES * 60000``` is the duration between wakeups in milliseconds
+- ```alarmIntent``` is the ```PendingIntent``` which was created with ```getStartPendingIntent```
+
+The ```setInexactRepeating``` has exactly the same parameter signature as ```setRepeating```, but it does not ensure that the alarm will be triggered at exactly at the time specified.
+This allows the system to bundle multiple alarms together, minimising the number of wakeups and any potential wakelocks while having negligible effect on the app as its content does not require highly accurate timing, such as an actual alarm clock app.
+
+When the ```Intent``` is received in ```onReceive``` the action is checked, and if it is ACTION_START_NOTIFICATION_SERVICE a call is made to ```startWakefulService``` with the context and an ```Intent``` from the ```NotificationIntentService``` which adds the ACTION_CHECK action to an ```Intent```.
+
 ### NotificationIntentService
+
+The ```NotificationIntentService``` is where notifications are loaded and device notifications are displayed.
+
+The class extends ```IntentReceiver``` and implements its constructor by passing ```BuildConfig.APPLICATION_ID``` as the service name. This ensure that only one instance of the service is ever running. 
+
+```Intents``` are received through ```onHandleIntent```.
+These intents are of two types, the first are sent from the ```NotificationEventReceiver``` and have the action ACTION_CHECK, to check notifications.
+The second type are sent from the ```NotificationEventReceiver``` itself when a notification has been dismissed.
 
 **NotificationIntentService.java**
 ``` java
@@ -22197,7 +22401,6 @@ public class NotificationIntentService extends IntentService implements Loader.L
     private static final String ACTION_CHECK = "ACTION_CHECK";
     private static final String ACTION_DELETE = "ACTION_DELETE";
 
-    private Loader mLoader;
     private long mLastLoadedSuccessfully = 0;
 
     public NotificationIntentService() {
@@ -22205,7 +22408,7 @@ public class NotificationIntentService extends IntentService implements Loader.L
     }
 
     public static Intent createIntentStartNotificationService(Context context) {
-        Intent intent = new Intent(context, NotificationIntentService.class);
+        final Intent intent = new Intent(context, NotificationIntentService.class);
         intent.setAction(ACTION_CHECK);
         return intent;
     }
@@ -22218,8 +22421,9 @@ public class NotificationIntentService extends IntentService implements Loader.L
             if(ACTION_CHECK.equals(action)) {
                 loadNotifications();
             } else if(ACTION_DELETE.equals(action) && intent.hasExtra("notification")) {
-                markNotificationRead(
-                        ((Notification) intent.getParcelableExtra("notification")).getId());
+                Editor.getEditor(this).markNotificationThreadRead(
+                        ((Notification) intent.getParcelableExtra("notification")).getId()
+                );
             }
         } finally {
             Logger.i(TAG, "onHandleIntent: " + intent.toString());
@@ -22228,14 +22432,9 @@ public class NotificationIntentService extends IntentService implements Loader.L
     }
 
     private void loadNotifications() {
-        if(mLoader == null) mLoader = Loader.getLoader(getApplicationContext());
         Logger.i(TAG, "loadNotifications: Timestamp " + Util
                 .toISO8061FromMilliseconds(mLastLoadedSuccessfully));
-        mLoader.loadNotifications(this, mLastLoadedSuccessfully);
-    }
-
-    private void markNotificationRead(long id) {
-        Editor.getEditor(this).markNotificationThreadRead(id);
+        Loader.getLoader(getApplicationContext()).loadNotifications(this, mLastLoadedSuccessfully);
     }
 
     private android.app.Notification buildNotification(Notification notif) {
@@ -22249,12 +22448,6 @@ public class NotificationIntentService extends IntentService implements Loader.L
                 builder.setSmallIcon(R.drawable.ic_person_white);
                 break;
             case COMMENT:
-                if("issue".equalsIgnoreCase(notif.getType())) {
-                    //TODO Get issue number
-                } else if(notif.getUrl().contains("/commits/")) {
-                    //TODO get commit ref
-                }
-                //else
                 title = String.format(getString(R.string.text_notification_comment),
                         notif.getRepository().getName()
                 );
@@ -22263,7 +22456,7 @@ public class NotificationIntentService extends IntentService implements Loader.L
             case ASSIGN:
                 title = String.format(
                         getString(R.string.text_notification_assign),
-                        "#A number",
+                        "Issue",
                         notif.getRepository().getFullName()
                 );
                 builder.setSmallIcon(R.drawable.ic_person_white);
@@ -22277,7 +22470,6 @@ public class NotificationIntentService extends IntentService implements Loader.L
                         notif.getRepository().getFullName()
                 );
                 builder.setSmallIcon(R.drawable.ic_watchers_white);
-                //TODO get thread
                 break;
             case MENTION:
                 title = getString(R.string.text_notification_mention,
@@ -22304,35 +22496,40 @@ public class NotificationIntentService extends IntentService implements Loader.L
         }
         final TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
         stackBuilder.addParentStack(Interceptor.class);
-        stackBuilder.addNextIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(notif.getUrl())));
+        final Intent launchIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(notif.getUrl()));
+        launchIntent.putExtra("notif", notif);
+        stackBuilder.addNextIntent(launchIntent);
         Logger.i(TAG, "buildNotification: URL " + notif.getUrl());
         builder.setContentIntent(
                 stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT));
         builder.setCategory(android.app.Notification.CATEGORY_MESSAGE);
+        builder.setGroup("GITHUB_GROUP");
         builder.setContentTitle(title);
         builder.setContentText(notif.getTitle());
         builder.setAutoCancel(true);
         builder.setDeleteIntent(generateDismissIntent(notif));
-        builder.setGroup("GITHUB_GROUP");
         return builder.build();
     }
 
     private PendingIntent generateDismissIntent(Notification notif) {
-        final Intent i = new Intent(NotificationIntentService.this,
+        return PendingIntent.getService(this, 0, generateBroadcastDismissIntent(this, notif), PendingIntent.FLAG_ONE_SHOT);
+
+    }
+
+    public static Intent generateBroadcastDismissIntent(Context context, Notification notif) {
+        final Intent i = new Intent(context,
                 NotificationIntentService.class
         );
         i.setAction(ACTION_DELETE);
         i.putExtra("notification", notif);
-        return PendingIntent.getService(this, 53253, i, PendingIntent.FLAG_ONE_SHOT);
-
+        return i;
     }
 
     @Override
     public void listLoadComplete(List<Notification> notifications) {
         Logger.i(TAG, "listLoadComplete: " + notifications.size());
         mLastLoadedSuccessfully = Util.getUTCTimeInMillis();
-        final NotificationManager manager = (NotificationManager) this
-                .getSystemService(Context.NOTIFICATION_SERVICE);
+        final NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         for(Notification n : notifications) {
             manager.notify((int) n.getId(), buildNotification(n));
         }
@@ -22347,6 +22544,48 @@ public class NotificationIntentService extends IntentService implements Loader.L
 }
 
 ```
+
+#### Notification loading and displaying
+
+If the ```Intent``` action is ACTION_CHECK, ```loadNotifications``` is called.
+This uses the ```Loader``` to laod notifications since the last time that notifications were successfully loaded.
+
+When ```listLoadComplete``` is called, mLastLoadedSuccessfully is updated, and the ```NotificationManager``` is used to send a notification for each ```Notification``` loaded.
+
+```buildNotification``` creates an ```android.app.Notification``` (Not a ```Notification``` model).
+ A ```NotificationCompat.Builder``` instance is created to build the notification.
+
+The ```Notification``` reason enum is switched over to format the title of the notification, and set an icon appropriate to its reason for existing. 
+
+Next, a ```TaskStackBuilder``` is created.
+This is used to ensure that the ```Activity``` launched if the ```Notification``` is clicked returns to the application that the user was in when they clicked on the notification, rather than returning to the top ```Activity``` on the stack for this app.
+
+The ```Intent``` for launching the notification is set with the ACTION_VIEW action, and the ```Notification``` URL. The ```Notification``` is then added as an extra, allowing it to be dismissed from ```Interceptor```.
+
+The content intent on the builder is then set to the ```PendingIntent``` generated from the ```TaskStackBuilder```, the category is set to CATEGORY_MESSAGE, the group is set to "GITHUB_GRUOP" which allows notifications to be grouped together, the title is set to the title string created earlier, and the content is set to the title returned by GitHub.
+Auto cancel is set to true, meaning that the notification will be removed when it is launched.
+
+The delete intent is then set on the builder, which is to be calle if the notification is swiped away by the user.
+
+```generateDismissIntent``` creates a ```PendingIntent``` with the FLAG_ONE_SHOT flag, indicating that it can only be used once.
+```gnerateBroadcastDismissIntent``` is used to generate the actual ```Intent```. It creates an ```Intent``` for the ```NotificationIntentService``` class, using ACTION_DELETE, and adding the ```Notification``` as an extra.
+
+Finally, the builder is built and returned as an ```android.app.Notification```.
+
+#### Dismissing notifications
+
+When a notification is dismissed or opened, it should be dismissed so that it is not shown again.
+
+The callback to perform the network request is easily acheivable when the notification is swiped away.
+Calling ```setDeleteIntent``` results in the ```Intent``` being launched when the notification is deleted (who would have thought?).
+
+The delete notification is received in ```onHandleIntent```, and as the action is ACTION_DELETE, the ```Editor``` method ```markNotificationThreadRead``` is called.
+
+Marking notifications read when they are launched is slightly more complicated.
+The ```Intent``` which is fired on click is the ```Intent``` to launch the ```Interceptor```.
+
+In order to call back to the ```NotificationIntentService``` the ```Notification``` is added to the ```Intent```.
+In ```Interceptor```, if the ```Intent``` has a notification extra, ```startService``` is called with ```NotificationIntentService.generateBroadcastDismissIntent``` which will call ```onHandleIntent``` in ```NotificationIntentService``` to mark the notification as read.
 
 <div style="page-break-after: always;"></div>
 

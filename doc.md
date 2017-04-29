@@ -3157,7 +3157,7 @@ If the array is empty, the selection is removed, the touch event is triggered, a
 Within the ```TextView```, ```setSpanHit``` is used to set a flag for triggering click events.
 
 Usually, to handle click events for a ```View```, one would call ```setOnClickListener``` which would then be called when the ```TextView``` is clicked.
-The problem with this is that the ```OnClickListener``` would recieve span click events.
+The problem with this is that the ```OnClickListener``` would receive span click events.
 
 To solve this problem, the ```TextView``` itself implements ```OnClickListener```.
 
@@ -4716,19 +4716,34 @@ The ```Fragment``` is only responsible for creating the layout, handling its own
 
 ### UserGistsFragment
 
-The ```UserGistsFragment``` is also very simple as it only deals with notifying the ```GistsAdapter``` of scroll changes, and opening the ```FileActivity``` when a gist is clicked.
+The ```UserGistsFragment``` is also very simple as it only deals with notifying the ```GistAdapter``` of scroll changes, and opening the ```FileActivity``` when a gist is clicked.
 
 #import "app/src/main/java/com/tpb/projects/user/fragments/UserGistsFragment.java"
 
-#import "app/src/main/java/com/tpb/projects/user/GistsAdapter.java"
+#import "app/src/main/java/com/tpb/projects/user/GistAdapter.java"
 
-### UserFollowingFragment
+The ```GistAdapter``` implements ```Loader.ListLoader<Gist>``` and deals with loading and binding a list of a user's gists.
+
+The adapter inflates the ```viewholder_gist``` layout which contains a ```NetworkImageView``` and two ```TextViews```.
+It then binds the ```Gist``` owners avatar to the ```NetworkImageView```, the ```Gist``` name to the title ```TextView```, and the ```Gist``` description to the second ```TextView``` if the description exists.
+
+When a gist list item is clicked, the ```FileActivity``` is launched to display the gist file.
+
+### UserFollowingFragment and UserFollowersFragment
+
+The two fragments display a list of users that the authenticated user is following or that are following the authenticated user respectively.
+Each list item consists of the user's login and their avatar, as other information is not guaranteed to exist and is superflous.
 
 #import "app/src/main/java/com/tpb/projects/user/fragments/UserFollowingFragment.java"
 
-### UserFollowersFragment
-
 #import "app/src/main/java/com/tpb/projects/user/fragments/UserFollowersFragment.java"
+
+They each inflate the ```fragment_recycler``` layout and when the ```User``` is loaded they pass it to the ```UserAdapter``` which deals with loading and bind data.
+
+#import "app/src/main/java/com/tpb/projects/user/UserAdapter.java"
+
+The two states for the ```UserAdapter``` are showing followers, or showing following.
+If mIsShowingFollowers is true, the ```loadFollowersCall``` is made, otherwise the ```loadFollowing``` call is made. (An amazingly complex piece of logic).
 
 ## Search
 
@@ -4840,17 +4855,109 @@ The ```UserGistsFragment``` is also very simple as it only deals with notifying 
 
 ## Notifications
 
-### NotificationServiceStarterReceiver
+In order to display notifications, the application needs to register a service to run in the background and poll the GitHub API for notifications.
 
-#import "app/src/main/java/com/tpb/projects/notifications/receivers/NotificationServiceStarterReceiver.java"
+There are two ways which the service may be started.
+First, it may be started on boot.
+
+### NotificationServiceStartBroadcastReceiver
+
+This is done by declaring the receiver with a BOOT_COMPLETED action intent filter in the manifest.
+``` XML
+<receiver android:name=".notifications.receivers.NotificationServiceStartBroadcastReceiver">
+    <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED"/>
+        <action android:name="android.intent.action.TIME_SET"/>
+    </intent-filter>
+</receiver>
+```
+
+The ```NotificationServiceStartBroadcastReceiver``` extends ```BroadcastReceiver``` and true to its name, starts the notification service when it receives a broadcast that the device has started.
+
+#import "app/src/main/java/com/tpb/projects/notifications/receivers/NotificationServiceStartBroadcastReceiver.java"
+
+Registering the intent filter for the boot action means that the user will be able to begin receiving notifications immediately.
 
 ### NotificationEventReceiver
 
+The ```NotificationEventReceiver``` extends ```WakefulBroadcastReceiver``` as the device must be awake to make the network request.
+
 #import "app/src/main/java/com/tpb/projects/notifications/receivers/NotificationEventReceiver.java"
+
+The ```NotificationEventReceiver``` contains the private string ACTION_START_NOTIFICATION_SERVICE which is used to ensure that the ```Intent``` received is from an ```Intent``` generated within the class.
+
+In order to start the service, a repeating alarm is created.
+First the system ```AlarmManager``` service is collected from the ```Context```, and then a ```PendingIntent``` is created with ```PendingIntent```.
+
+The particularly perceptive may have already realised that a *Pending* ```Intent``` is not to be launched immediately and is instead used to trigger an action in the future.
+
+The ```PendingIntent.getBroadcast``` method returns a ```PendingIntent``` to trigger a broadcast with the ```Intent``` passed to it, which in this case has the ACTION_START_NOTIFICATION_SERVICE action, and should be sent to the ```NotificationEventReceiver```.
+The ```PendingIntent.FLAG_UPDATE_CURRENT``` flag indicates that if a ```PendingIntent``` with the same parameters already exists, it should be updated with the new ```Intent``` data.
+
+The ```PendingIntent``` is then used to set up an alarm with the following parameters:
+- ```AlarmManager.RTC_WAKEUP``` specifies that the alarm should be triggered according to the clock time, rather than time since boot
+- ```new Date().getTime()``` is the current time in milliseconds, and should be used as the start time for the alarm
+- ```NOTIFICATIONS_INTERVAL_IN_MINUTES * 60000``` is the duration between wakeups in milliseconds
+- ```alarmIntent``` is the ```PendingIntent``` which was created with ```getStartPendingIntent```
+
+The ```setInexactRepeating``` has exactly the same parameter signature as ```setRepeating```, but it does not ensure that the alarm will be triggered at exactly at the time specified.
+This allows the system to bundle multiple alarms together, minimising the number of wakeups and any potential wakelocks while having negligible effect on the app as its content does not require highly accurate timing, such as an actual alarm clock app.
+
+When the ```Intent``` is received in ```onReceive``` the action is checked, and if it is ACTION_START_NOTIFICATION_SERVICE a call is made to ```startWakefulService``` with the context and an ```Intent``` from the ```NotificationIntentService``` which adds the ACTION_CHECK action to an ```Intent```.
 
 ### NotificationIntentService
 
+The ```NotificationIntentService``` is where notifications are loaded and device notifications are displayed.
+
+The class extends ```IntentReceiver``` and implements its constructor by passing ```BuildConfig.APPLICATION_ID``` as the service name. This ensure that only one instance of the service is ever running. 
+
+```Intents``` are received through ```onHandleIntent```.
+These intents are of two types, the first are sent from the ```NotificationEventReceiver``` and have the action ACTION_CHECK, to check notifications.
+The second type are sent from the ```NotificationEventReceiver``` itself when a notification has been dismissed.
+
 #import "app/src/main/java/com/tpb/projects/notifications/NotificationIntentService.java"
+
+#### Notification loading and displaying
+
+If the ```Intent``` action is ACTION_CHECK, ```loadNotifications``` is called.
+This uses the ```Loader``` to laod notifications since the last time that notifications were successfully loaded.
+
+When ```listLoadComplete``` is called, mLastLoadedSuccessfully is updated, and the ```NotificationManager``` is used to send a notification for each ```Notification``` loaded.
+
+```buildNotification``` creates an ```android.app.Notification``` (Not a ```Notification``` model).
+ A ```NotificationCompat.Builder``` instance is created to build the notification.
+
+The ```Notification``` reason enum is switched over to format the title of the notification, and set an icon appropriate to its reason for existing. 
+
+Next, a ```TaskStackBuilder``` is created.
+This is used to ensure that the ```Activity``` launched if the ```Notification``` is clicked returns to the application that the user was in when they clicked on the notification, rather than returning to the top ```Activity``` on the stack for this app.
+
+The ```Intent``` for launching the notification is set with the ACTION_VIEW action, and the ```Notification``` URL. The ```Notification``` is then added as an extra, allowing it to be dismissed from ```Interceptor```.
+
+The content intent on the builder is then set to the ```PendingIntent``` generated from the ```TaskStackBuilder```, the category is set to CATEGORY_MESSAGE, the group is set to "GITHUB_GRUOP" which allows notifications to be grouped together, the title is set to the title string created earlier, and the content is set to the title returned by GitHub.
+Auto cancel is set to true, meaning that the notification will be removed when it is launched.
+
+The delete intent is then set on the builder, which is to be calle if the notification is swiped away by the user.
+
+```generateDismissIntent``` creates a ```PendingIntent``` with the FLAG_ONE_SHOT flag, indicating that it can only be used once.
+```gnerateBroadcastDismissIntent``` is used to generate the actual ```Intent```. It creates an ```Intent``` for the ```NotificationIntentService``` class, using ACTION_DELETE, and adding the ```Notification``` as an extra.
+
+Finally, the builder is built and returned as an ```android.app.Notification```.
+
+#### Dismissing notifications
+
+When a notification is dismissed or opened, it should be dismissed so that it is not shown again.
+
+The callback to perform the network request is easily acheivable when the notification is swiped away.
+Calling ```setDeleteIntent``` results in the ```Intent``` being launched when the notification is deleted (who would have thought?).
+
+The delete notification is received in ```onHandleIntent```, and as the action is ACTION_DELETE, the ```Editor``` method ```markNotificationThreadRead``` is called.
+
+Marking notifications read when they are launched is slightly more complicated.
+The ```Intent``` which is fired on click is the ```Intent``` to launch the ```Interceptor```.
+
+In order to call back to the ```NotificationIntentService``` the ```Notification``` is added to the ```Intent```.
+In ```Interceptor```, if the ```Intent``` has a notification extra, ```startService``` is called with ```NotificationIntentService.generateBroadcastDismissIntent``` which will call ```onHandleIntent``` in ```NotificationIntentService``` to mark the notification as read.
 
 #page
 
