@@ -5589,7 +5589,7 @@ When displayed in a ```MarkdownTextView``` or ```MarkdownEditText``` it should b
 
 The Emoji are displayed as shown below:
 
-| | | 
+| Part 1 | Part 2 | 
 | --- | --- | 
 | ![First section](http://imgur.com/NWrQwLE.png) | ![Second section](http://imgur.com/zhDHYYm.png)
 
@@ -5907,7 +5907,7 @@ It should be self explanatory that the lines which items are expected to be matc
 
 All of the tests were passed as expected:
 
-| Part 1 | Part 2
+| Part 1 | Part 2 |
 | --- | --- | 
 | ![Part 1](http://imgur.com/T8Tf7wc.png) | ![Part 2](http://imgur.com/Ujnnpta.png) |
 
@@ -5942,7 +5942,8 @@ The first is the list of objectives for this project which is declared as HTML a
 Each of the ordered lists has a type specified.
 
 The app handled this as expected, displaying each nested element with the correct indentation and list item styling.
-| Part one | Part 2 |
+
+| Part 1 | Part 2 |
 | --- | --- | 
 | ![One](http://imgur.com/t1hp6of.png) | ![Two](http://imgur.com/dMexwLm.png) |
 
