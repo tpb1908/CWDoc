@@ -4716,7 +4716,11 @@ The ```Fragment``` is only responsible for creating the layout, handling its own
 
 ### UserGistsFragment
 
+The ```UserGistsFragment``` is also very simple as it only deals with notifying the ```GistsAdapter``` of scroll changes, and opening the ```FileActivity``` when a gist is clicked.
+
 #import "app/src/main/java/com/tpb/projects/user/fragments/UserGistsFragment.java"
+
+#import "app/src/main/java/com/tpb/projects/user/GistsAdapter.java"
 
 ### UserFollowingFragment
 
