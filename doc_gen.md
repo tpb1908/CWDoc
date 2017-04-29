@@ -4634,7 +4634,7 @@ public class MDPattern {
                     + "|(?:zara|zip|zone|zuerich|z[amw]))";
 
 
-    private static final Pattern IP_ADDRESS
+    public static final Pattern IP_ADDRESS
             = Pattern.compile(
             "((25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9])\\.(25[0-5]|2[0-4]"
                     + "[0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1]"
@@ -4767,7 +4767,7 @@ public class MDPattern {
      * @hide
      */
     static final Pattern AUTOLINK_WEB_URL = Pattern.compile(
-            "(" + WEB_URL_WITH_PROTOCOL + "|" + WEB_URL_WITHOUT_PROTOCOL + ")($|\\s)");
+            "(^|\\s)(" + WEB_URL_WITH_PROTOCOL + "|" + WEB_URL_WITHOUT_PROTOCOL + ")($|\\s)");
 
     /**
      * Regular expression for valid email characters. Does not include some of the valid characters
@@ -5430,7 +5430,7 @@ public class CleanURLSpan extends URLSpan {
 
         if(MDPattern.AUTOLINK_EMAIL_ADDRESS.matcher(url).matches()) {
             return "mailto:" + url;
-        } else if(!url.startsWith("https://") && !url.startsWith("http://")) {
+        } else if(!MDPattern.IP_ADDRESS.matcher(url).matches() && !url.startsWith("https://") && !url.startsWith("http://")) {
             return "http://" + url;
         }
         return url;
@@ -23030,4 +23030,134 @@ The card is displayed as shown below:
 
 
 
-## 
+### Objective 9.iii: Link handling
+
+#### Part A- Matching URIs
+
+Both URLs and emails should be matched, and converted into ```URLSpans``` to be handled by the Android system, or the app itself.
+
+The following should be matched:
+- URLs without and without a protocol
+- Email addresses
+- IP addreses with and without ports
+
+##### URLs
+
+URLs should be matched regardless of whether they contain the following parts:
+- protocol
+- path
+- file type
+- parameters
+- fragment identifier
+
+A URL containing all of these is `http://www.test.com/dir/filename.jpg?var1=foo#bar`
+
+##### Email addresses
+
+An email address consists of a local part, before the "@" symbol, and a domain after it.
+
+The local part of the address may use the following characters:
+- Alphanumeric
+- Special characters `!#$%&'*+-/=?^_\`{|}~;`
+- Dot "." if it is not the first or last character and does not appear consecutively unless quoted
+- Space and `"(),:;<>@[\]` are allowed but not inside a quoted string
+- Comments can be added at the start or end of the email address within a pair of brackets "()"
+
+The domain part of an email address must match the requiremenets for a hostname:
+- A list of dot separated DNS labels, each limited to 63 characters and consisting of the following characters:
+    - Alphanumeric
+    - Hypen, "-", at any position other than the first or last
+
+The test card for URL, email address, and IP address matching consists of the following:
+
+```
+# Valid URLs:
+
+http://www.test.com/dir/filename.jpg?var1=foo#bar
+
+https://foo.com/blah_blah
+
+http://✪df.ws/123
+
+https://www.example.com/foo/?bar=baz&boz=8&cba
+
+http://➡.ws/䨹
+
+https://foo.com/(something)?after=parens
+
+http://foo.bar/?q=Test%20URL-encoded%20stuff
+
+https://a.b-c.de
+
+# Invalid URLs:
+
+http://
+
+https://.
+
+http://../
+
+https://?
+
+http://??/
+
+https://##/
+
+http://foo.bar?q=Spaces should be encoded
+
+http://-error-.invalid/
+
+https://a.b--c.de/
+
+http://.www.foo.bar./
+
+# Valid IP addresses:
+
+139.130.4.5
+
+140.131.5.6:54
+
+# Invalid IP addresses:
+
+139.130.4.260
+
+1.1.1:52
+
+# Valid email addresses:
+
+singlewordemail@example.com
+
+triple.word.email@example.com
+
+disposable.email.with+symbol@disposable.com
+
+a@b.com
+
+hypenated-email-address@hypenedated-domain.com
+
+email-with-different-domain@test.cymru
+
+# Invalid email addresses:
+
+invalid-email@test..com
+
+emailaddresswithalocalpartwhichismuchtoolongsothatitshouldnotbematched@domain.com
+```
+
+It should be self explanatory that the lines which items are expected to be matched, and which are not.
+
+All of the tests were passed as expected:
+
+| Part 1 | Part 2
+| --- | --- | 
+| ![Part 1] (http://imgur.com/T8Tf7wc.png) | ![Part 2] (http://imgur.com/Ujnnpta.png) |
+
+In this case the app performed better than GitHub's own website, as GitHub matched two the invalid URLs and both of the invalid email addresses:
+
+![Invalid URLs](http://imgur.com/uWctoYj.png)
+
+![Invalid email addresses](http://imgur.com/7jdvOdX.png)
+
+
+#### Part B- Ignoring code
+
