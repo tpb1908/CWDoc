@@ -5317,9 +5317,25 @@ Otherwise, we are deeper in the tree:
 
 ### FileActivity
 
-#import "app/src/main/java/com/tpb/projects/repo/content/FileActivity.java"
+The ```FileActivity``` is used to display a file with proper highlighting using HighlightJS.
 
-#page
+It can be launched with a blob path, a gist URL, or a ```Node```.
+
+When it is launched with a blob path, the repository and blob are split from the full blob path.
+The HighlighJS language is then set based on the blob string.
+
+```getFileType``` first finds the index of the first question mark in the path, which may specify the ref being viewed.
+The substring of the path from the last index of ".", to either the index of the question mark or the length of the string is then returned.
+
+The ```FileLoader``` is then used to load the raw resource.
+
+If the ```FileActivity``` is started with a gist path, the gist path is passed straight to the ```FileLoader```.
+
+Finally, the ```FileActivity``` may have been launched with a ```Node```.
+In this case the ```Node``` encoding is checked. If the encoding exists, the ```Node``` content is decoded and passed to the ```StringRequestListener```.
+Otherwise, the ```FileLoader``` is passed the ```Node``` download URL to download the file.
+
+#import "app/src/main/java/com/tpb/projects/repo/content/FileActivity.java"
 
 #page
 
