@@ -3374,8 +3374,8 @@ public class UI {
     public static Pair<View, String> getSafeNavigationBarTransitionPair(@NonNull Activity activity) {
         final View nav = activity.findViewById(android.R.id.navigationBarBackground);
         return nav == null ?
-                new Pair<>(new View(activity), "not_for_transition") :
-                new Pair<>(nav, Window.NAVIGATION_BAR_BACKGROUND_TRANSITION_NAME);
+                Pair.create(new View(activity), "not_for_transition") :
+                Pair.create(nav, Window.NAVIGATION_BAR_BACKGROUND_TRANSITION_NAME);
     }
 
 
@@ -18505,11 +18505,15 @@ public class CommitDiffAdapter extends RecyclerView.Adapter<CommitDiffAdapter.Di
 
 ### CommitCommentsFragment
 
+The ```CommitCommentsFragment``` inflates the fragment_recycler layout to display a ```RecyclerView``` showing any comments on the commit.
+It also manages launching the ```CommentEditor``` to allow the user to create or edit comments, and then to perform the relevant requests.
+
 **CommitCommentsFragment.java**
 ``` java
 package com.tpb.projects.commits.fragments;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -18517,6 +18521,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -18537,6 +18542,7 @@ import com.tpb.projects.commits.CommitCommentsAdapter;
 import com.tpb.projects.common.FixedLinearLayoutManger;
 import com.tpb.projects.common.fab.FloatingActionButton;
 import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.flow.IntentHandler;
 import com.tpb.projects.util.UI;
 
 import butterknife.BindView;
@@ -18548,7 +18554,6 @@ import butterknife.Unbinder;
  */
 
 public class CommitCommentsFragment extends CommitFragment {
-    private static final String TAG = CommitCommentsFragment.class.getSimpleName();
 
     private Unbinder unbinder;
 
@@ -18585,12 +18590,6 @@ public class CommitCommentsFragment extends CommitFragment {
         if(mAreViewsValid) addListeners();
     }
 
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        if(mFab != null && mAreViewsValid) addListeners();
-    }
-
     private void addListeners() {
         final LinearLayoutManager manager = (LinearLayoutManager) mRecycler.getLayoutManager();
         mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -18612,6 +18611,12 @@ public class CommitCommentsFragment extends CommitFragment {
             UI.setViewPositionForIntent(i, mFab);
             startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
         });
+    }
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        if(mFab != null && mAreViewsValid) addListeners();
     }
 
     @Override
@@ -18639,6 +18644,7 @@ public class CommitCommentsFragment extends CommitFragment {
     }
 
     private void editComment(Comment comment) {
+        mRefresher.setRefreshing(true);
         mEditor.updateCommitComment(new Editor.UpdateListener<Comment>() {
             @Override
             public void updated(Comment comment) {
@@ -18654,19 +18660,27 @@ public class CommitCommentsFragment extends CommitFragment {
     }
 
     void removeComment(Comment comment) {
-        mRefresher.setRefreshing(true);
-        mEditor.deleteCommitComment(new Editor.DeletionListener<Integer>() {
-            @Override
-            public void deleted(Integer id) {
-                mRefresher.setRefreshing(false);
-                mAdapter.removeComment(id);
-            }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle(R.string.title_delete_comment);
+        builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
+            mRefresher.setRefreshing(true);
+            mEditor.deleteCommitComment(new Editor.DeletionListener<Integer>() {
+                @Override
+                public void deleted(Integer id) {
+                    mRefresher.setRefreshing(false);
+                    mAdapter.removeComment(id);
+                }
 
-            @Override
-            public void deletionError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mCommit.getFullRepoName(), comment.getId());
+                @Override
+                public void deletionError(APIHandler.APIError error) {
+                    mRefresher.setRefreshing(false);
+                }
+            }, mCommit.getFullRepoName(), comment.getId());
+        });
+        builder.setNegativeButton(R.string.action_no, null);
+        final Dialog deleteDialog = builder.create();
+        deleteDialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+        deleteDialog.show();
     }
 
     public void displayCommentMenu(View view, Comment comment) {
@@ -18699,6 +18713,11 @@ public class CommitCommentsFragment extends CommitFragment {
                             Toast.LENGTH_SHORT
                     ).show();
                     break;
+                case R.id.menu_fullscreen:
+                    IntentHandler.showFullScreen(getContext(), comment.getBody(),
+                            mCommit.getFullRepoName(), getFragmentManager()
+                    );
+                    break;
             }
             return false;
         });
@@ -18713,7 +18732,6 @@ public class CommitCommentsFragment extends CommitFragment {
             if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
                 createComment(comment);
             } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
-                mRefresher.setRefreshing(true);
                 editComment(comment);
             }
         }
@@ -18728,7 +18746,24 @@ public class CommitCommentsFragment extends CommitFragment {
 
 ```
 
+```displayCommentMenu``` is called from the ```CommitCommentsAdapter``` and inflates a ```PopupMenu``` with options to copy the comment text to the clipboard or show the comment in fullscreen.
+If the authenticated user is the same as the creator of the comment, options are also displayed to edit or deltete the comment.
+
+```removeComment``` is called if the delete option is clicked.
+A confirmation dialog is shown, and if the user confirms their action the comment is deleted and removed from the adapter.
+
+If the edit comment option is selected, the ```CommentEditor``` is created with the REQUEST_CODE_EDIT_COMMENT request code.
+If the result is RESULT_OK ```editComment``` is called, which makes the call to update the comment, and updates the adapter with the new ```Comment```.
+
+```createComment``` is called when a result is returned after the ```CommentEditor``` was launched from the ```FloatingActionButton```.
+It makes a call to ```Editor.createCommitComment```, adds the result to the adapter, and posts to the ```RecyclerView``` to scroll to the bottom.
+
 #### CommitCommentsAdapter
+
+The ```CommitCommentsAdapter``` loads and binds each comment, as well as adding, updating, and removing user created comments.
+
+```onBindViewHolder``` builds the span with information about the comment, such as the commenter, the comment time, whether the comment has been edited, and reactions to the comment.
+The result is then cached with the ```Comment```.
 
 **CommitCommentsAdapter.java**
 ``` java
@@ -18768,7 +18803,6 @@ import butterknife.ButterKnife;
  */
 
 public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
-    private static final String TAG = CommitCommentsAdapter.class.getSimpleName();
 
     private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
     private Commit mCommit;
@@ -18814,7 +18848,7 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
         if(comments.size() > 0) {
             final int oldLength = mComments.size();
             for(Comment c : comments) {
-                mComments.add(new Pair<>(c, null));
+                mComments.add(Pair.create(c, null));
             }
             notifyItemRangeInserted(oldLength, mComments.size());
         } else {
@@ -18845,35 +18879,27 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
     }
 
     public void addComment(Comment comment) {
-        mComments.add(new Pair<>(comment, null));
+        mComments.add(Pair.create(comment, null));
         notifyItemInserted(mComments.size());
     }
 
     public void removeComment(int commentId) {
-        int index = -1;
         for(int i = 0; i < mComments.size(); i++) {
             if(mComments.get(i).first.getId() == commentId) {
-                index = i;
+                mComments.remove(i);
+                notifyItemRemoved(i);
                 break;
             }
-        }
-        if(index != -1) {
-            mComments.remove(index);
-            notifyItemRemoved(index);
         }
     }
 
     public void updateComment(Comment comment) {
-        int index = -1;
         for(int i = 0; i < mComments.size(); i++) {
             if(mComments.get(i).first.getId() == comment.getId()) {
-                index = i;
+                mComments.set(i, Pair.create(comment, null));
+                notifyItemChanged(i);
                 break;
             }
-        }
-        if(index != -1) {
-            mComments.set(index, new Pair<>(comment, null));
-            notifyItemChanged(index);
         }
     }
 
@@ -18888,19 +18914,15 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
 
     @Override
     public void onBindViewHolder(CommentHolder holder, int position) {
-        bindComment(holder);
-    }
-
-    private void bindComment(CommentHolder commentHolder) {
-        final int pos = commentHolder.getAdapterPosition();
+        final int pos = holder.getAdapterPosition();
         final Comment comment = mComments.get(pos).first;
         if(mComments.get(pos).second == null) {
-            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
             final StringBuilder builder = new StringBuilder();
             builder.append(String.format(
-                    commentHolder.itemView.getResources().getString(R.string.text_comment_by),
+                    holder.itemView.getResources().getString(R.string.text_comment_by),
                     String.format(
-                            commentHolder.itemView.getResources().getString(R.string.text_href),
+                            holder.itemView.getResources().getString(R.string.text_href),
                             comment.getUser().getHtmlUrl(),
                             comment.getUser().getLogin()
                     ),
@@ -18908,7 +18930,7 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
             ));
             if(comment.getUpdatedAt() != comment.getCreatedAt()) {
                 builder.append(" • ");
-                builder.append(commentHolder.itemView.getResources()
+                builder.append(holder.itemView.getResources()
                                                      .getString(R.string.text_comment_edited));
             }
             builder.append("<br><br>");
@@ -18918,19 +18940,20 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
                 builder.append(Formatter.reactions(comment.getReaction()));
             }
 
-            commentHolder.mText.setMarkdown(
+            holder.mText.setMarkdown(
                     builder.toString(),
-                    new HttpImageGetter(commentHolder.mText),
+                    new HttpImageGetter(holder.mText),
                     text -> mComments.set(pos, Pair.create(comment, text))
             );
         } else {
-            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
-            commentHolder.mText.setText(mComments.get(pos).second);
+            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            holder.mText.setText(mComments.get(pos).second);
         }
-        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mText);
-        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mAvatar,
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mText);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mAvatar,
                 comment.getUser().getLogin()
         );
+        holder.mMenu.setOnClickListener((v) -> displayMenu(v, holder.getAdapterPosition()));
     }
 
     @Override
@@ -18942,7 +18965,7 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
         mParent.displayCommentMenu(view, mComments.get(pos).first);
     }
 
-    class CommentHolder extends RecyclerView.ViewHolder {
+    static class CommentHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
         @BindView(R.id.comment_text) MarkdownTextView mText;
         @BindView(R.id.comment_menu_button) ImageButton mMenu;
@@ -18950,8 +18973,6 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
         CommentHolder(View view) {
             super(view);
             ButterKnife.bind(this, view);
-            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
-            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
         }
 
     }
@@ -19411,8 +19432,8 @@ public class IssueInfoFragment extends IssueFragment {
                     getActivity().startActivity(us,
                             ActivityOptionsCompat.makeSceneTransitionAnimation(
                                     getActivity(),
-                                    new Pair<>(login, getString(R.string.transition_username)),
-                                    new Pair<>(avatar, getString(R.string.transition_user_image))
+                                    Pair.create(login, getString(R.string.transition_username)),
+                                    Pair.create(avatar, getString(R.string.transition_user_image))
                             ).toBundle()
                     );
                 });
@@ -19807,7 +19828,7 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
             int oldLength = mEvents.size();
             if(mPage == 1) mEvents.clear();
             for(DataModel dm : Util.mergeModels(events, comparator)) {
-                mEvents.add(new Pair<>(dm, null));
+                mEvents.add(Pair.create(dm, null));
             }
             notifyItemRangeInserted(oldLength, mEvents.size());
         } else {
@@ -19879,7 +19900,7 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
     }
 
     void addEvent(IssueEvent event) {
-        mEvents.add(new Pair<>(event, null));
+        mEvents.add(Pair.create(event, null));
         notifyItemInserted(mEvents.size());
     }
 
@@ -20366,6 +20387,7 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
 ``` java
 package com.tpb.projects.issues.fragments;
 
+import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -20373,6 +20395,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -20522,19 +20545,27 @@ public class IssueCommentsFragment extends IssueFragment {
     }
 
     void removeComment(Comment comment) {
-        mRefresher.setRefreshing(true);
-        mEditor.deleteIssueComment(new Editor.DeletionListener<Integer>() {
-            @Override
-            public void deleted(Integer id) {
-                mRefresher.setRefreshing(false);
-                mAdapter.removeComment(id);
-            }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle(R.string.title_delete_comment);
+        builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
+            mRefresher.setRefreshing(true);
+            mEditor.deleteCommitComment(new Editor.DeletionListener<Integer>() {
+                @Override
+                public void deleted(Integer id) {
+                    mRefresher.setRefreshing(false);
+                    mAdapter.removeComment(id);
+                }
 
-            @Override
-            public void deletionError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mIssue.getRepoFullName(), comment.getId());
+                @Override
+                public void deletionError(APIHandler.APIError error) {
+                    mRefresher.setRefreshing(false);
+                }
+            }, mIssue.getRepoFullName(), comment.getId());
+        });
+        builder.setNegativeButton(R.string.action_no, null);
+        final Dialog deleteDialog = builder.create();
+        deleteDialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
+        deleteDialog.show();
     }
 
     public void displayCommentMenu(View view, Comment comment) {
@@ -20683,7 +20714,7 @@ public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdap
         if(data.size() > 0) {
             int oldLength = mComments.size();
             for(Comment c : data) {
-                mComments.add(new Pair<>(c, null));
+                mComments.add(Pair.create(c, null));
             }
             notifyItemRangeInserted(oldLength, mComments.size());
         } else {
@@ -20714,7 +20745,7 @@ public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdap
     }
 
     public void addComment(Comment comment) {
-        mComments.add(new Pair<>(comment, null));
+        mComments.add(Pair.create(comment, null));
         notifyItemInserted(mComments.size());
     }
 
@@ -20741,7 +20772,7 @@ public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdap
             }
         }
         if(index != -1) {
-            mComments.set(index, new Pair<>(comment, null));
+            mComments.set(index, Pair.create(comment, null));
             notifyItemChanged(index);
         }
     }
@@ -22727,7 +22758,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
                 mParent.mParent.notifyFragmentLoaded();
             }
             for(Card c : cards) {
-                mCards.add(new Pair<>(c, null));
+                mCards.add(Pair.create(c, null));
             }
             mParent.mCardCount.setText(String.valueOf(mCards.size()));
             notifyItemRangeInserted(oldLength, mCards.size());
@@ -22747,19 +22778,19 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
     }
 
     void addCard(Card card) {
-        mCards.add(0, new Pair<>(card, null));
+        mCards.add(0, Pair.create(card, null));
         notifyItemInserted(0);
     }
 
     void addCardFromDrag(Card card) {
-        mCards.add(new Pair<>(card, null));
+        mCards.add(Pair.create(card, null));
         notifyItemInserted(mCards.size());
         mEditor.moveCard(null, mColumn, card.getId(), -1);
     }
 
     void addCardFromDrag(int pos, Card card) {
         Logger.i(TAG, "createCard: Card being added to " + pos);
-        mCards.add(pos, new Pair<>(card, null));
+        mCards.add(pos, Pair.create(card, null));
         notifyItemInserted(pos);
         final int id = pos == 0 ? -1 : mCards.get(pos - 1).first.getId();
         mEditor.moveCard(null, mParent.mColumn.getId(), card.getId(), id);
@@ -22768,7 +22799,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
     void updateCard(Card card) {
         final int index = indexOf(card.getId());
         if(index != -1) {
-            mCards.set(index, new Pair<>(card, null));
+            mCards.set(index, Pair.create(card, null));
             notifyItemChanged(index);
         }
     }
@@ -22776,7 +22807,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
     void updateCard(Card card, int oldId) {
         final int index = indexOf(oldId);
         if(index != -1) {
-            mCards.set(index, new Pair<>(card, null));
+            mCards.set(index, Pair.create(card, null));
             notifyItemChanged(index);
         }
     }
@@ -22898,7 +22929,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
                             mParent.mParent.mProject.getRepoPath()
                     ),
                     new HttpImageGetter(holder.mText),
-                    text -> mCards.set(pos, new Pair<>(card, text))
+                    text -> mCards.set(pos, Pair.create(card, text))
             );
         } else {
             holder.mText.setText(mCards.get(pos).second);
@@ -22937,7 +22968,7 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
                             true
                     ).toString(),
                     new HttpImageGetter(holder.mText),
-                    text -> mCards.set(pos, new Pair<>(card, text))
+                    text -> mCards.set(pos, Pair.create(card, text))
             );
         } else {
             holder.mText.setText(mCards.get(pos).second);

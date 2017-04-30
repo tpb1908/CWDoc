@@ -5529,9 +5529,29 @@ The show and hide animations are created using ```ObjectAnimators``` which chang
 
 ### CommitCommentsFragment
 
+The ```CommitCommentsFragment``` inflates the fragment_recycler layout to display a ```RecyclerView``` showing any comments on the commit.
+It also manages launching the ```CommentEditor``` to allow the user to create or edit comments, and then to perform the relevant requests.
+
 #import "app/src/main/java/com/tpb/projects/commits/fragments/CommitCommentsFragment.java"
 
+```displayCommentMenu``` is called from the ```CommitCommentsAdapter``` and inflates a ```PopupMenu``` with options to copy the comment text to the clipboard or show the comment in fullscreen.
+If the authenticated user is the same as the creator of the comment, options are also displayed to edit or deltete the comment.
+
+```removeComment``` is called if the delete option is clicked.
+A confirmation dialog is shown, and if the user confirms their action the comment is deleted and removed from the adapter.
+
+If the edit comment option is selected, the ```CommentEditor``` is created with the REQUEST_CODE_EDIT_COMMENT request code.
+If the result is RESULT_OK ```editComment``` is called, which makes the call to update the comment, and updates the adapter with the new ```Comment```.
+
+```createComment``` is called when a result is returned after the ```CommentEditor``` was launched from the ```FloatingActionButton```.
+It makes a call to ```Editor.createCommitComment```, adds the result to the adapter, and posts to the ```RecyclerView``` to scroll to the bottom.
+
 #### CommitCommentsAdapter
+
+The ```CommitCommentsAdapter``` loads and binds each comment, as well as adding, updating, and removing user created comments.
+
+```onBindViewHolder``` builds the span with information about the comment, such as the commenter, the comment time, whether the comment has been edited, and reactions to the comment.
+The result is then cached with the ```Comment```.
 
 #import "app/src/main/java/com/tpb/projects/commits/CommitCommentsAdapter.java"
 
