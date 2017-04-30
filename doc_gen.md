@@ -11413,15 +11413,14 @@ public class ProjectEditor extends EditorActivity {
 
     @Override
     public void finish() {
-        if(mHasBeenEdited && !mDescriptionEditor.getText().toString().isEmpty() && !mNameEditor.getText()
-                                                                                     .toString()
-                                                                                     .isEmpty()) {
+        if(mHasBeenEdited && !mNameEditor.getText().toString().isEmpty()) {
             final AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle(R.string.title_discard_changes);
             builder.setPositiveButton(R.string.action_yes, (dialogInterface, i) -> {
                 final InputMethodManager imm = (InputMethodManager) getSystemService(
                         Context.INPUT_METHOD_SERVICE);
                 imm.hideSoftInputFromWindow(findViewById(android.R.id.content).getWindowToken(), 0);
+                super.finish();
             });
             builder.setNegativeButton(R.string.action_no, null);
             final Dialog deleteDialog = builder.create();
@@ -15072,6 +15071,11 @@ The ```RepoReadmeFragment``` uses a ```MarkdownWebView``` to display the repsoit
 It first loads the README, and then uses the GitHub markdown API to render the markdown as it would be displayed on GitHub.
 It then fixes the relative links in the rendered HTML, and displays it in the ```MarkdownWebView```.
 
+```RepoReadmeFragment``` uses ```notifyBackPressed``` to set the visibility of the ```MarkdownWebView``` to GONE.
+This is because ```WebView``` extends ```AbsoluteLayout```. As such it is not a transition group, and does not have a background which can be drawn during an animation.
+This would result in the ```WebView``` remaining in place as the rest of the ```Activity``` layout performs an animation.
+This undesirable effect is resolved by hiding the ```WebView``` prior to the animation starting.
+
 **RepoReadmeFragment.java**
 ``` java
 package com.tpb.projects.repo.fragments;
@@ -16561,6 +16565,31 @@ public class RepoProjectsFragment extends RepoFragment {
         startActivityForResult(i, ProjectEditor.REQUEST_CODE_EDIT_PROJECT);
     }
 
+    public void showMenu(View view, Project project) {
+        final PopupMenu pm = new PopupMenu(getContext(), view);
+        pm.inflate(R.menu.menu_project);
+        if(project.getState() == State.OPEN) {
+            pm.getMenu().add(0, R.id.menu_toggle_project_state, 0, R.string.menu_close_project);
+        } else {
+            pm.getMenu().add(0, R.id.menu_toggle_project_state, 0, R.string.menu_reopen_project);
+        }
+        pm.setOnMenuItemClickListener(item -> {
+            switch(item.getItemId()) {
+                case R.id.menu_toggle_project_state:
+                    toggleProjectState(project);
+                    break;
+                case R.id.menu_edit_project:
+                    editProject(project, view);
+                    break;
+                case R.id.menu_delete_project:
+                    deleteProject(project);
+                    break;
+            }
+            return true;
+        });
+        pm.show();
+    }
+
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -16605,31 +16634,6 @@ public class RepoProjectsFragment extends RepoFragment {
         }
     }
 
-    public void showMenu(View view, Project project) {
-        final PopupMenu pm = new PopupMenu(getContext(), view);
-        pm.inflate(R.menu.menu_project);
-        if(project.getState() == State.OPEN) {
-            pm.getMenu().add(0, R.id.menu_toggle_project_state, 0, R.string.menu_close_project);
-        } else {
-            pm.getMenu().add(0, R.id.menu_toggle_project_state, 0, R.string.menu_reopen_project);
-        }
-        pm.setOnMenuItemClickListener(item -> {
-            switch(item.getItemId()) {
-                case R.id.menu_toggle_project_state:
-                    toggleProjectState(project);
-                    break;
-                case R.id.menu_edit_project:
-                    editProject(project, view);
-                    break;
-                case R.id.menu_delete_project:
-                    deleteProject(project);
-                    break;
-            }
-            return true;
-        });
-        pm.show();
-    }
-
     @Override
     public void notifyBackPressed() {
 
@@ -16643,6 +16647,21 @@ public class RepoProjectsFragment extends RepoFragment {
 }
 
 ```
+
+In ```handleFab```, if a ```FabHideScrollListener``` has not already been created, it is created and added to the ```RecyclerView```.
+The ```FloatingActionButton``` ```OnClickListener``` is then set to launch the ```ProjectEditor``` with the REQUEST_CODE_NEW_PROJECT request code.
+
+```showMenu``` displays a ```PopupMenu``` with items for editing deleting and opening or closing a project.
+
+```toggleProjectState``` calls ```Editor.closeProject``` or ```Editor.openProject``` and updates the adapter in the ```UpdateListener``` callback.
+
+```deleteProject``` displays a warning dialog, and if the user confirms their action, it calls ```Editor.deleteProject``` with a callback to remove the project from the adapter.
+
+```editProject``` launches ```ProjectEditor``` with the REQUEST_CODE_EDIT_PROJECT request code.
+
+If a successfull result is returned to ```onActivityResult``` the request code is checked, the project name and body are extracted and either ```createProject``` or ```updateProject``` are called, the latter requiring the id of the pre-existing project.
+
+The ```RepoProjectsAdapter``` manages binding ```Project``` information and passes click events back to the ```RepoProjectsFragment```.
 
 **RepoProjectsAdapter.java**
 ``` java
@@ -16718,7 +16737,7 @@ public class RepoProjectsAdapter extends RecyclerView.Adapter<RepoProjectsAdapte
 
     @Override
     public void listLoadError(APIHandler.APIError error) {
-
+        mRefresher.setRefreshing(false);
     }
 
     public void updateProject(Project project) {
@@ -16810,9 +16829,383 @@ public class RepoProjectsAdapter extends RecyclerView.Adapter<RepoProjectsAdapte
 
 ```
 
+In ```onBindViewHolder``` it sets binds the ```ProjectViewHolder``` ```Views``` with:
+- The name of the project
+- The state drawable for the project
+- The last time that the project was updated
+- The project description if it exists
+
+It then adds an ```OnClickListener``` to the itemView to open the ```ProjectActivity``` with a shared element transition using the project name (Which contains the state drawable).
+The menu button ```OnClickListener``` is set to call ```showMenu``` on the ```RepoProjectsFragment```.
+
 <div style="page-break-after: always;"></div>
 
 ## ContentActivity
+
+The ```ContentActivity``` is used for displaying the content of a repository (whoever would have guessed?).
+
+It uses the same method for displaying a branch ```Spinner``` as the ```RepoCommitsFragment``` except that the default branch HEAD hash comes from one of the ```Nodes``` loaded.
+
+The file data is loaded with the GitHub contents API.
+
+This API returns the contents of a directory within a repository.
+
+If the path is a directory, JSON of the following format is returned:
+
+``` JSON
+[
+  {
+    "type": "file",
+    "size": 625,
+    "name": "octokit.rb",
+    "path": "lib/octokit.rb",
+    "sha": "fff6fe3a23bf1c8ea0692b4a883af99bee26fd3b",
+    "url": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit.rb",
+    "git_url": "https://api.github.com/repos/octokit/octokit.rb/git/blobs/fff6fe3a23bf1c8ea0692b4a883af99bee26fd3b",
+    "html_url": "https://github.com/octokit/octokit.rb/blob/master/lib/octokit.rb",
+    "download_url": "https://raw.githubusercontent.com/octokit/octokit.rb/master/lib/octokit.rb",
+    "_links": {
+      "self": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit.rb",
+      "git": "https://api.github.com/repos/octokit/octokit.rb/git/blobs/fff6fe3a23bf1c8ea0692b4a883af99bee26fd3b",
+      "html": "https://github.com/octokit/octokit.rb/blob/master/lib/octokit.rb"
+    }
+  },
+  {
+    "type": "dir",
+    "size": 0,
+    "name": "octokit",
+    "path": "lib/octokit",
+    "sha": "a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+    "url": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit",
+    "git_url": "https://api.github.com/repos/octokit/octokit.rb/git/trees/a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+    "html_url": "https://github.com/octokit/octokit.rb/tree/master/lib/octokit",
+    "download_url": null,
+    "_links": {
+      "self": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit",
+      "git": "https://api.github.com/repos/octokit/octokit.rb/git/trees/a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+      "html": "https://github.com/octokit/octokit.rb/tree/master/lib/octokit"
+    }
+  }
+]
+```
+
+The array contains a single JSON object for each item in the directory.
+
+The item types can be:
+- File
+- Directory
+- Symbolic link
+- Sum-module
+
+Each item in the JSON is parsed into a ```Node``` model, which is separate from the ```DateModel``` used elsewhere.
+
+**Node.java**
+``` java
+package com.tpb.github.data.models.content;
+
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.support.annotation.NonNull;
+import android.util.Log;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Created by theo on 17/02/17.
+ */
+
+public class Node implements Parcelable {
+
+    private NodeType type;
+    private int size;
+    private String encoding;
+    private String name;
+    private String path;
+    private String content;
+    private String sha;
+    private String url;
+    private String gitUrl;
+    private String htmlUrl;
+    private String downloadUrl;
+    private String submoduleGitUrl;
+
+    private Node parent;
+    private List<Node> children = new ArrayList<>();
+
+    private static final String TYPE_KEY = "type";
+    private static final String SIZE_KEY = "size";
+    private static final String ENCODING_KEY = "encoding";
+    private static final String NAME_KEY = "name";
+    private static final String PATH_KEY = "path";
+    private static final String CONTENT_KEY = "content";
+    private static final String SHA_KEY = "sha";
+    private static final String URL_KEY = "url";
+    private static final String GIT_URL_KEY = "git_url";
+    private static final String HTML_URL_KEY = "html_url";
+    private static final String DOWNLOAD_URL_KEY = "download_url";
+    private static final String SUBMODULE_GIT_URL_KEY = "submodule_git_url";
+
+    public Node(JSONObject obj) {
+        try {
+            type = NodeType.fromString(obj.getString(TYPE_KEY));
+            size = obj.getInt(SIZE_KEY);
+            if(obj.has(ENCODING_KEY)) encoding = obj.getString(ENCODING_KEY);
+            name = obj.getString(NAME_KEY);
+            path = obj.getString(PATH_KEY);
+            if(obj.has(CONTENT_KEY)) content = obj.getString(CONTENT_KEY);
+            sha = obj.getString(SHA_KEY);
+            url = obj.getString(URL_KEY);
+            gitUrl = obj.getString(GIT_URL_KEY);
+            htmlUrl = obj.getString(HTML_URL_KEY);
+            downloadUrl = obj.getString(DOWNLOAD_URL_KEY);
+            if(obj.has(SUBMODULE_GIT_URL_KEY)) {
+                submoduleGitUrl = obj.getString(SUBMODULE_GIT_URL_KEY);
+                type = NodeType.SUBMODULE;
+            }
+            if(isSubmodule(url, gitUrl)) type = NodeType.SUBMODULE;
+        } catch(JSONException jse) {
+            Log.e("Node", "Node: Exception: ", jse);
+        }
+    }
+
+    private boolean isSubmodule(@NonNull String url, @NonNull String gitUrl) {
+        try {
+            int start = url.indexOf("com/") + 4;
+            int repoStart = url.indexOf('/', url.indexOf('/', url.indexOf('/', start + 1) + 1));
+            int repoEnd = url.indexOf('/', repoStart + 1) + 1;
+            final String repo = url.substring(repoStart, repoEnd);
+            start = gitUrl.indexOf("com/") + 4;
+            repoStart = gitUrl
+                    .indexOf('/', gitUrl.indexOf('/', gitUrl.indexOf('/', start + 1) + 1));
+            repoEnd = gitUrl.indexOf('/', repoStart + 1) + 1;
+            return !repo.equals(gitUrl.substring(repoStart, repoEnd));
+        } catch(IndexOutOfBoundsException iob) {
+            return false;
+        }
+    }
+
+    public NodeType getType() {
+        return type;
+    }
+
+    public int getSize() {
+        return size;
+    }
+
+    public String getEncoding() {
+        return encoding;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public String getSha() {
+        return sha;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public String getGitUrl() {
+        return gitUrl;
+    }
+
+    public String getHtmlUrl() {
+        return htmlUrl;
+    }
+
+    public String getDownloadUrl() {
+        return downloadUrl;
+    }
+
+    public String getSubmoduleGitUrl() {
+        return submoduleGitUrl;
+    }
+
+    public Node getParent() {
+        return parent;
+    }
+
+    public List<Node> getChildren() {
+        return children;
+    }
+
+    public String getRef() {
+        if(htmlUrl.contains("/tree/")) {
+            final int index = htmlUrl.indexOf("/tree/") + 6;
+            return htmlUrl.substring(index, htmlUrl.indexOf('/', index));
+        } else {
+            final int index = htmlUrl.indexOf("/blob/") + 6;
+            return htmlUrl.substring(index, htmlUrl.indexOf('/', index));
+        }
+    }
+
+    public void setParent(Node parent) {
+        this.parent = parent;
+    }
+
+    public void setChildren(List<Node> children) {
+        this.children = children;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof Node && sha.equals(((Node) obj).getSha());
+    }
+
+    @Override
+    public String toString() {
+        return "Node{" +
+                "type=" + type +
+                ", size=" + size +
+                ", encoding='" + encoding + '\'' +
+                ", name='" + name + '\'' +
+                ", path='" + path + '\'' +
+                ", content='" + content + '\'' +
+                ", sha='" + sha + '\'' +
+                ", url='" + url + '\'' +
+                ", gitUrl='" + gitUrl + '\'' +
+                ", htmlUrl='" + htmlUrl + '\'' +
+                ", downloadUrl='" + downloadUrl + '\'' +
+                ", submoduleGitUrl='" + submoduleGitUrl + '\'' +
+                '}';
+    }
+
+    public enum NodeType {
+
+        FILE("file"),
+        DIRECTORY("dir"),
+        SYMLINK("symlink"),
+        SUBMODULE("submodule");
+
+        private final String type;
+
+        NodeType(String type) {
+            this.type = type;
+        }
+
+        public static NodeType fromString(String type) {
+            for(NodeType nt : NodeType.values()) {
+                if(nt.type.equals(type)) return nt;
+            }
+            throw new IllegalArgumentException("No NodeType with String value " + type);
+        }
+    }
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeInt(this.type == null ? -1 : this.type.ordinal());
+        dest.writeInt(this.size);
+        dest.writeString(this.encoding);
+        dest.writeString(this.name);
+        dest.writeString(this.path);
+        dest.writeString(this.content);
+        dest.writeString(this.sha);
+        dest.writeString(this.url);
+        dest.writeString(this.gitUrl);
+        dest.writeString(this.htmlUrl);
+        dest.writeString(this.downloadUrl);
+        dest.writeString(this.submoduleGitUrl);
+        dest.writeParcelable(this.parent, flags);
+        dest.writeTypedList(this.children);
+    }
+
+    protected Node(Parcel in) {
+        int tmpType = in.readInt();
+        this.type = tmpType == -1 ? null : NodeType.values()[tmpType];
+        this.size = in.readInt();
+        this.encoding = in.readString();
+        this.name = in.readString();
+        this.path = in.readString();
+        this.content = in.readString();
+        this.sha = in.readString();
+        this.url = in.readString();
+        this.gitUrl = in.readString();
+        this.htmlUrl = in.readString();
+        this.downloadUrl = in.readString();
+        this.submoduleGitUrl = in.readString();
+        this.parent = in.readParcelable(Node.class.getClassLoader());
+        this.children = in.createTypedArrayList(Node.CREATOR);
+    }
+
+    public static final Creator<Node> CREATOR = new Creator<Node>() {
+        @Override
+        public Node createFromParcel(Parcel source) {
+            return new Node(source);
+        }
+
+        @Override
+        public Node[] newArray(int size) {
+            return new Node[size];
+        }
+    };
+}
+
+```
+
+The ```Node```model contains the following:
+- A ```NodeType``` enum which may be FILE, DIRECTORY, SYMLINK, or SUMBODULE
+- The size of the node, if applicable
+- The encoding of the node, if applicable
+- The name of the node
+- The node path
+- The node content, if applicable
+- The SHA hash of the node
+- The node URL, which is the API URL for the node
+- The Git URL, which is the URL to the tree state for this version of the node
+- The HTML URL, which is the URL to view the node online
+- The download url, which is the raw.githubusercontent URL to download the node, if applicable
+- The submodule Git URL, which is the URL to another repository if a submodule has been imported into the repository being viewed
+
+```getRef``` and ```isSubmodule``` use the ```Node``` variables to calculate other information about the ```Node```.
+
+The GitHub API warns that when the contents of a directory are listed, submodules have their type specified as "file" for backwards compatibility purposes.
+
+```isSubmodule``` extracts the repository name from both the url and gitUrl, and compares them.
+
+When the repository used for this documentation is embedded in the project repository, it has the following URL:
+"https://api.github.com/repos/tpb1908/AndroidProjectsClient/contents/CWDoc?ref=master"
+ 
+start is found as the index of "/" in "com/".
+The first index found gives the substring "tpb1908/AndroidProjectsClient/contents/CWDoc?ref=master"
+The second index found gives the substring "/tpb1908/AndroidProjectsClient/contents/CWDoc?ref=master"
+The third index found gives the substring "/AndroidProjectsClient/contents/CWDoc?ref=master"
+
+The end index is the next "/" in the final substring, giving the repository as "/AndroidProjectsClient/".
+
+The gitUrl is "https://api.github.com/repos/tpb1908/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+
+The first index found gives the substring "tpb1908/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+The second index found gives the substring "/tpb1908/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+The third index found gives the substring "/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+
+The repository is then extracted as "/CWDoc/".
+
+As the two repository strings are not equal, ```isSubmodule``` returns true.
+
+```getRef``` is used to extract the SHA hash for the directory or file from its htmlUrl.
+
+If the ```Node``` is a directory, the SHA is between the "/tree/" substring and the next "/".
+Otherwise, the ```Node``` is a file, and the SHA is between the "/blob/" substring and the next "/".
 
 **ContentActivity.java**
 ``` java

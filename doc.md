@@ -4913,6 +4913,11 @@ The ```RepoReadmeFragment``` uses a ```MarkdownWebView``` to display the repsoit
 It first loads the README, and then uses the GitHub markdown API to render the markdown as it would be displayed on GitHub.
 It then fixes the relative links in the rendered HTML, and displays it in the ```MarkdownWebView```.
 
+```RepoReadmeFragment``` uses ```notifyBackPressed``` to set the visibility of the ```MarkdownWebView``` to GONE.
+This is because ```WebView``` extends ```AbsoluteLayout```. As such it is not a transition group, and does not have a background which can be drawn during an animation.
+This would result in the ```WebView``` remaining in place as the rest of the ```Activity``` layout performs an animation.
+This undesirable effect is resolved by hiding the ```WebView``` prior to the animation starting.
+
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoReadmeFragment.java"
 
 ### RepoCommitsFragment
@@ -5071,11 +5076,139 @@ The final ```RepoFragment``` displayed in ```RepoActivity``` is the ```RepoProje
 
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoProjectsFragment.java"
 
+In ```handleFab```, if a ```FabHideScrollListener``` has not already been created, it is created and added to the ```RecyclerView```.
+The ```FloatingActionButton``` ```OnClickListener``` is then set to launch the ```ProjectEditor``` with the REQUEST_CODE_NEW_PROJECT request code.
+
+```showMenu``` displays a ```PopupMenu``` with items for editing deleting and opening or closing a project.
+
+```toggleProjectState``` calls ```Editor.closeProject``` or ```Editor.openProject``` and updates the adapter in the ```UpdateListener``` callback.
+
+```deleteProject``` displays a warning dialog, and if the user confirms their action, it calls ```Editor.deleteProject``` with a callback to remove the project from the adapter.
+
+```editProject``` launches ```ProjectEditor``` with the REQUEST_CODE_EDIT_PROJECT request code.
+
+If a successfull result is returned to ```onActivityResult``` the request code is checked, the project name and body are extracted and either ```createProject``` or ```updateProject``` are called, the latter requiring the id of the pre-existing project.
+
+The ```RepoProjectsAdapter``` manages binding ```Project``` information and passes click events back to the ```RepoProjectsFragment```.
+
 #import "app/src/main/java/com/tpb/projects/repo/RepoProjectsAdapter.java"
+
+In ```onBindViewHolder``` it sets binds the ```ProjectViewHolder``` ```Views``` with:
+- The name of the project
+- The state drawable for the project
+- The last time that the project was updated
+- The project description if it exists
+
+It then adds an ```OnClickListener``` to the itemView to open the ```ProjectActivity``` with a shared element transition using the project name (Which contains the state drawable).
+The menu button ```OnClickListener``` is set to call ```showMenu``` on the ```RepoProjectsFragment```.
 
 #page
 
 ## ContentActivity
+
+The ```ContentActivity``` is used for displaying the content of a repository (whoever would have guessed?).
+
+It uses the same method for displaying a branch ```Spinner``` as the ```RepoCommitsFragment``` except that the default branch HEAD hash comes from one of the ```Nodes``` loaded.
+
+The file data is loaded with the GitHub contents API.
+
+This API returns the contents of a directory within a repository.
+
+If the path is a directory, JSON of the following format is returned:
+
+``` JSON
+[
+  {
+    "type": "file",
+    "size": 625,
+    "name": "octokit.rb",
+    "path": "lib/octokit.rb",
+    "sha": "fff6fe3a23bf1c8ea0692b4a883af99bee26fd3b",
+    "url": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit.rb",
+    "git_url": "https://api.github.com/repos/octokit/octokit.rb/git/blobs/fff6fe3a23bf1c8ea0692b4a883af99bee26fd3b",
+    "html_url": "https://github.com/octokit/octokit.rb/blob/master/lib/octokit.rb",
+    "download_url": "https://raw.githubusercontent.com/octokit/octokit.rb/master/lib/octokit.rb",
+    "_links": {
+      "self": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit.rb",
+      "git": "https://api.github.com/repos/octokit/octokit.rb/git/blobs/fff6fe3a23bf1c8ea0692b4a883af99bee26fd3b",
+      "html": "https://github.com/octokit/octokit.rb/blob/master/lib/octokit.rb"
+    }
+  },
+  {
+    "type": "dir",
+    "size": 0,
+    "name": "octokit",
+    "path": "lib/octokit",
+    "sha": "a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+    "url": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit",
+    "git_url": "https://api.github.com/repos/octokit/octokit.rb/git/trees/a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+    "html_url": "https://github.com/octokit/octokit.rb/tree/master/lib/octokit",
+    "download_url": null,
+    "_links": {
+      "self": "https://api.github.com/repos/octokit/octokit.rb/contents/lib/octokit",
+      "git": "https://api.github.com/repos/octokit/octokit.rb/git/trees/a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d",
+      "html": "https://github.com/octokit/octokit.rb/tree/master/lib/octokit"
+    }
+  }
+]
+```
+
+The array contains a single JSON object for each item in the directory.
+
+The item types can be:
+- File
+- Directory
+- Symbolic link
+- Sum-module
+
+Each item in the JSON is parsed into a ```Node``` model, which is separate from the ```DateModel``` used elsewhere.
+
+#import "gitapi/src/main/java/com/tpb/github/data/models/content/Node.java"
+
+The ```Node```model contains the following:
+- A ```NodeType``` enum which may be FILE, DIRECTORY, SYMLINK, or SUMBODULE
+- The size of the node, if applicable
+- The encoding of the node, if applicable
+- The name of the node
+- The node path
+- The node content, if applicable
+- The SHA hash of the node
+- The node URL, which is the API URL for the node
+- The Git URL, which is the URL to the tree state for this version of the node
+- The HTML URL, which is the URL to view the node online
+- The download url, which is the raw.githubusercontent URL to download the node, if applicable
+- The submodule Git URL, which is the URL to another repository if a submodule has been imported into the repository being viewed
+
+```getRef``` and ```isSubmodule``` use the ```Node``` variables to calculate other information about the ```Node```.
+
+The GitHub API warns that when the contents of a directory are listed, submodules have their type specified as "file" for backwards compatibility purposes.
+
+```isSubmodule``` extracts the repository name from both the url and gitUrl, and compares them.
+
+When the repository used for this documentation is embedded in the project repository, it has the following URL:
+"https://api.github.com/repos/tpb1908/AndroidProjectsClient/contents/CWDoc?ref=master"
+ 
+start is found as the index of "/" in "com/".
+The first index found gives the substring "tpb1908/AndroidProjectsClient/contents/CWDoc?ref=master"
+The second index found gives the substring "/tpb1908/AndroidProjectsClient/contents/CWDoc?ref=master"
+The third index found gives the substring "/AndroidProjectsClient/contents/CWDoc?ref=master"
+
+The end index is the next "/" in the final substring, giving the repository as "/AndroidProjectsClient/".
+
+The gitUrl is "https://api.github.com/repos/tpb1908/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+
+The first index found gives the substring "tpb1908/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+The second index found gives the substring "/tpb1908/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+The third index found gives the substring "/CWDoc/git/trees/9d14a93dbb9592f948bcf29be1a8697c3e3c3395"
+
+The repository is then extracted as "/CWDoc/".
+
+As the two repository strings are not equal, ```isSubmodule``` returns true.
+
+```getRef``` is used to extract the SHA hash for the directory or file from its htmlUrl.
+
+If the ```Node``` is a directory, the SHA is between the "/tree/" substring and the next "/".
+Otherwise, the ```Node``` is a file, and the SHA is between the "/blob/" substring and the next "/".
 
 #import "app/src/main/java/com/tpb/projects/repo/content/ContentActivity.java"
 
