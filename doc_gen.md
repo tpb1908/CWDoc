@@ -2773,7 +2773,7 @@ public class NetworkImageView extends AppCompatImageView {
                 mImageContainer.cancelRequest();
                 mImageContainer = null;
             }
-            setDefaultImage();
+            displayDefaultImage();
             return;
         }
 
@@ -2802,7 +2802,7 @@ public class NetworkImageView extends AppCompatImageView {
                         if(response.getBitmap() != null) {
                             setImageBitmap(response.getBitmap());
                         } else if(mDefaultImageResId != 0) {
-                            setDefaultImage();
+                            displayDefaultImage();
                         }
                     }
 
@@ -2817,7 +2817,12 @@ public class NetworkImageView extends AppCompatImageView {
 
     }
 
-    private void setDefaultImage() {
+    public void resetImage() {
+        setImageDrawable(null);
+        displayDefaultImage();
+    }
+
+    private void displayDefaultImage() {
         if(getDrawable() != null) return; //Drawable has been set manually
         if(mDefaultImageResId != 0) {
             setImageResource(mDefaultImageResId);
@@ -2885,7 +2890,7 @@ private void loadImage(final boolean isInLayoutPass) {
                 mImageContainer.cancelRequest();
                 mImageContainer = null;
             }
-            setDefaultImage();
+            displayDefaultImage();
             return;
         }
 
@@ -2914,7 +2919,7 @@ private void loadImage(final boolean isInLayoutPass) {
                         if(response.getBitmap() != null) {
                             setImageBitmap(response.getBitmap());
                         } else if(mDefaultImageResId != 0) {
-                            setDefaultImage();
+                            displayDefaultImage();
                         }
                     }
 
@@ -10959,21 +10964,21 @@ public class IssueEditor extends EditorActivity {
     @OnClick(R.id.issue_add_assignees_button)
     public void showAssigneesDialog() {
         final ProgressDialog pd = new ProgressDialog(this);
-        pd.setTitle(R.string.text_loading_collaborators);
+        pd.setTitle(R.string.text_loading_contributors);
         pd.setCancelable(false);
         pd.show();
-        Loader.getLoader(this).loadCollaborators(new Loader.ListLoader<User>() {
+        Loader.getLoader(this).loadContributors(new Loader.ListLoader<User>() {
             @Override
-            public void listLoadComplete(List<User> collaborators) {
+            public void listLoadComplete(List<User> contributors) {
                 final MultiChoiceDialog mcd = new MultiChoiceDialog();
                 final Bundle b = new Bundle();
                 b.putInt(getString(R.string.intent_title_res), R.string.title_choose_assignees);
                 mcd.setArguments(b);
 
-                final String[] names = new String[collaborators.size()];
+                final String[] names = new String[contributors.size()];
                 final boolean[] checked = new boolean[names.length];
                 for(int i = 0; i < names.length; i++) {
-                    names[i] = collaborators.get(i).getLogin();
+                    names[i] = contributors.get(i).getLogin();
                     checked[i] = mAssignees.indexOf(names[i]) != -1;
                 }
                 mcd.setChoices(names, checked);
@@ -13231,6 +13236,7 @@ public class RepositoriesAdapter extends RecyclerView.Adapter<RepositoriesAdapte
             holder.mDescription.setVisibility(View.GONE);
         }
         if(mIsShowingStars) {
+            holder.mImage.resetImage();
             holder.mImage.setImageUrl(r.getUserAvatarUrl());
             IntentHandler.addOnClickHandler(mActivity, holder.mImage, r.getUserLogin());
         } else {
@@ -15402,6 +15408,7 @@ import android.support.v4.util.Pair;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.widget.RecyclerView;
 import android.text.SpannableString;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15500,6 +15507,7 @@ public class RepoCommitsAdapter extends RecyclerView.Adapter<RepoCommitsAdapter.
         if(!mParent.areViewsValid()) return;
         mRefresher.setRefreshing(false);
         mIsLoading = false;
+        Log.i("Loading", commits.size() + " Commits finished loading for page " + mPage);
         if(commits.size() > 0) {
             final int oldLength = mCommits.size();
             if(mPage == 1) {
@@ -15508,6 +15516,7 @@ public class RepoCommitsAdapter extends RecyclerView.Adapter<RepoCommitsAdapter.
             for(Commit c : commits) {
                 mCommits.add(Pair.create(c, null));
             }
+            Log.i("Loading", "Commits loaded: " + commits.toString());
             notifyItemRangeInserted(oldLength, mCommits.size());
         } else {
             mMaxPageReached = true;
@@ -15601,7 +15610,16 @@ public class RepoCommitsAdapter extends RecyclerView.Adapter<RepoCommitsAdapter.
 
 ```
 
+The screenshot below shows commits made from my account and the web-flow:
+
+![Commits](http://imgur.com/6diNIks.png)
+
+
+
 ### RepoIssuesFragment
+
+The ```RepoIssuesFragment``` is the first ```RepoFragment``` which actually uses the ```FloatingActionButton```.
+It also manages filtering and searching the ```Issues```.
 
 **RepoIssuesFragment.java**
 ``` java
@@ -15640,6 +15658,7 @@ import com.tpb.projects.common.fab.FloatingActionButton;
 import com.tpb.projects.editors.CommentEditor;
 import com.tpb.projects.editors.IssueEditor;
 import com.tpb.projects.editors.MultiChoiceDialog;
+import com.tpb.projects.flow.IntentHandler;
 import com.tpb.projects.repo.RepoIssuesAdapter;
 import com.tpb.projects.util.UI;
 
@@ -15761,7 +15780,6 @@ public class RepoIssuesFragment extends RepoFragment {
         }
         menu.setOnMenuItemClickListener(menuItem -> {
             switch(menuItem.getItemId()) {
-
                 case R.id.menu_filter_assignees:
                     showAssigneesDialog();
                     break;
@@ -15848,36 +15866,37 @@ public class RepoIssuesFragment extends RepoFragment {
 
     private void showAssigneesDialog() {
         final ProgressDialog pd = new ProgressDialog(getContext());
-        pd.setTitle(R.string.text_loading_collaborators);
+        pd.setTitle(R.string.text_loading_contributors);
         pd.setCancelable(false);
         pd.show();
-        Loader.getLoader(getContext()).loadCollaborators(new Loader.ListLoader<User>() {
+        Loader.getLoader(getContext()).loadContributors(new Loader.ListLoader<User>() {
             @Override
-            public void listLoadComplete(List<User> collaborators) {
-                final String[] collabNames = new String[collaborators.size() + 2];
+            public void listLoadComplete(List<User> contributors) {
+                final String[] collabNames = new String[contributors.size() + 2];
                 collabNames[0] = getString(R.string.text_assignee_all);
                 collabNames[1] = getString(R.string.text_assignee_none);
                 int pos = 0;
                 for(int i = 2; i < collabNames.length; i++) {
-                    collabNames[i] = collaborators.get(i - 2).getLogin();
+                    collabNames[i] = contributors.get(i - 2).getLogin();
                     if(collabNames[i].equals(mAssigneeFilter)) {
                         pos = i;
                     }
                 }
-
+                final String oldAssigneeFilter = mAssigneeFilter;
                 final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                 builder.setTitle(R.string.title_choose_assignee);
                 builder.setSingleChoiceItems(collabNames, pos,
                         (dialogInterface, i) -> mAssigneeFilter = collabNames[i]
                 );
                 builder.setPositiveButton(R.string.action_ok, (dialogInterface, i) -> refresh());
-                builder.setNegativeButton(R.string.action_cancel, null);
+                builder.setNegativeButton(R.string.action_cancel, (d, i) -> mAssigneeFilter = oldAssigneeFilter);
                 builder.create().show();
                 pd.dismiss();
             }
 
             @Override
             public void listLoadError(APIHandler.APIError error) {
+                pd.dismiss();
                 Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
             }
         }, mRepo.getFullName());
@@ -15899,6 +15918,11 @@ public class RepoIssuesFragment extends RepoFragment {
                 case R.id.menu_edit_issue:
                     editIssue(view, issue);
                     break;
+                case R.id.menu_fullscreen:
+                    IntentHandler.showFullScreen(getContext(), issue.getBody(),
+                            issue.getRepoFullName(), getFragmentManager()
+                    );
+                    break;
             }
             return false;
         });
@@ -15911,7 +15935,7 @@ public class RepoIssuesFragment extends RepoFragment {
         intent.putExtra(getString(R.string.parcel_issue), issue);
         final Loader loader = Loader.getLoader(getContext());
         loader.loadLabels(null, issue.getRepoFullName());
-        loader.loadCollaborators(null, issue.getRepoFullName());
+        loader.loadContributors(null, issue.getRepoFullName());
         if(view instanceof MarkdownTextView) {
             UI.setClickPositionForIntent(getActivity(), intent,
                     ((MarkdownTextView) view).getLastClickPosition()
@@ -15934,9 +15958,7 @@ public class RepoIssuesFragment extends RepoFragment {
             @Override
             public void updateError(APIHandler.APIError error) {
                 mRefresher.setRefreshing(false);
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                }
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
             }
         };
 
@@ -15984,51 +16006,9 @@ public class RepoIssuesFragment extends RepoFragment {
             }
             final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
             if(requestCode == IssueEditor.REQUEST_CODE_NEW_ISSUE) {
-
-                mRefresher.setRefreshing(true);
-                mEditor.createIssue(new Editor.CreationListener<Issue>() {
-                    @Override
-                    public void created(Issue issue) {
-                        mRefresher.setRefreshing(false);
-                        mAdapter.addIssue(issue);
-                        mRecyclerView.scrollToPosition(0);
-                    }
-
-                    @Override
-                    public void creationError(APIHandler.APIError error) {
-                        mRefresher.setRefreshing(false);
-                    }
-                }, mRepo.getFullName(), issue.getTitle(), issue.getBody(), assignees, labels);
+                createIssue(issue, assignees, labels);
             } else if(requestCode == IssueEditor.REQUEST_CODE_EDIT_ISSUE) {
-                mRefresher.setRefreshing(true);
-                mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
-                    int issueCreationAttempts = 0;
-
-                    @Override
-                    public void updated(Issue issue) {
-                        mAdapter.updateIssue(issue);
-                        mRefresher.setRefreshing(false);
-                    }
-
-                    @Override
-                    public void updateError(APIHandler.APIError error) {
-                        if(error == APIHandler.APIError.NO_CONNECTION) {
-                            mRefresher.setRefreshing(false);
-                            Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        } else {
-                            if(issueCreationAttempts < 5) {
-                                issueCreationAttempts++;
-                                mEditor.updateIssue(this, mRepo.getFullName(), issue, assignees,
-                                        labels
-                                );
-                            } else {
-                                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT)
-                                     .show();
-                                mRefresher.setRefreshing(false);
-                            }
-                        }
-                    }
-                }, mRepo.getFullName(), issue, assignees, labels);
+               updateIssue(issue, assignees, labels);
             } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
                 final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
                 mEditor.createIssueComment(new Editor.CreationListener<Comment>() {
@@ -16049,6 +16029,55 @@ public class RepoIssuesFragment extends RepoFragment {
         }
     }
 
+    private void createIssue(Issue issue, String[] assignees, String[] labels) {
+        mRefresher.setRefreshing(true);
+        mEditor.createIssue(new Editor.CreationListener<Issue>() {
+            @Override
+            public void created(Issue issue) {
+                mRefresher.setRefreshing(false);
+                mAdapter.addIssue(issue);
+                mRecyclerView.scrollToPosition(0);
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mRepo.getFullName(), issue.getTitle(), issue.getBody(), assignees, labels);
+    }
+
+    private void updateIssue(Issue issue, String[] assignees, String[] labels) {
+        mRefresher.setRefreshing(true);
+        mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
+            int issueCreationAttempts = 0;
+
+            @Override
+            public void updated(Issue issue) {
+                mAdapter.updateIssue(issue);
+                mRefresher.setRefreshing(false);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(issueCreationAttempts < 5) {
+                        issueCreationAttempts++;
+                        mEditor.updateIssue(this, mRepo.getFullName(), issue, assignees,
+                                labels
+                        );
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT)
+                             .show();
+                        mRefresher.setRefreshing(false);
+                    }
+                }
+            }
+        }, mRepo.getFullName(), issue, assignees, labels);
+    }
+
     @Override
     public void notifyBackPressed() {
 
@@ -16063,6 +16092,84 @@ public class RepoIssuesFragment extends RepoFragment {
 }
 
 ```
+
+#### Filtering
+
+Objective 3.v.c is to filter issues by:
+- Their state
+- Their labels
+- The user assigned to them
+
+This is implemented through a filter menu alongside the search bar.
+
+The menu is inflated from the following resource:
+
+``` XML
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/menu_filter_open"
+            android:title="@string/menu_filter_open"/>
+
+        <item
+            android:id="@+id/menu_filter_closed"
+            android:title="@string/menu_filter_closed"/>
+
+        <item
+            android:id="@+id/menu_filter_all"
+            android:title="@string/menu_filter_all"/>
+    </group>
+
+    <item
+        android:id="@+id/menu_filter_labels"
+        android:title="@string/menu_filter_labels"/>
+
+    <item
+        android:id="@+id/menu_filter_assignees"
+        android:title="@string/menu_filter_assignee"/>
+
+</menu>
+```
+
+The first item is a group of radio buttons for the issue state. The second two items are buttons to show dialogs for choosing the labels or assigned user.
+
+In the ```OnClick``` method for the issues filter button, the menu is inflated.
+One of the items in the set of radio buttons is ticked based upon the current filter state.
+The ```OnMenuItemClickListener``` for the ```PopupMenu``` is set, which switches over the item id and either calls a method to show the appropriate dialog, or sets the filter and then calls ```refresh``` to apply the filter to the adapter.
+
+```showLablesDialog``` first creates a ```ProgressDialog``` while the labels are loaded, and then creates a ```MultiChoiceDialog``` with the labels.
+Items are checked when the dialog is shown if they are already present in the mLabelsFilter list.
+
+The ```MultiChoiceDialogListener``` clears the mLabelsFilter list and adds the new labels before calling ```refresh``` to update the adapter.
+
+```showAssigneesDialog``` also displays a ```ProgressDialog``` while it loads the contributors.
+It then shows an ```AlertDialog``` with a set of single choice items.
+When an item is chosen, the mAssigneeFilter is set to this new value. If the positive button is selected, ```refresh``` is called, otherwise the assignee filter is reset to its previous state.
+
+#### Editing
+
+The ```RepoIssuesFragment``` also manages toggling of issue states, as well as creating and updating issues.
+
+```editIssue``` adds the repository name and ```Issue``` to an ```Intent```, pre-loads the labels and collaborators and then launched the ```IssueEditor``` with the REQUEST_CODE_EDIT_ISSUE request code.
+
+If the edited ```Issue``` is returned in ```onActivityResult``` the assignees and labels arrays are extracted from the ```Intent``` and passes to ```updateIssue``` which performs the ```Editor``` call to update the ```Issue```, and then notifies the adapter of the change.
+
+#### Creation
+
+When the ```RepoIssuesFragment``` is passed the ```FloatingActionButton``` it sets the ```OnClickListener``` to open the ```IssueEditor``` with the flag to create a new issue.
+If this issue is returned in ```onActivityResult```, ```createIssue``` is called which performs the ```Editor``` call to create the ```Issue```, notifies the adapter of the change, and scrolls the ```RecyclerView``` to position 0, displaying the new ```Issue```.
+
+#### State changes
+
+When the menu item for opening or closing an issue is selected, ```toggleIssueState``` is called.
+This method first creates the ```Editor.UpdateListener``` which will update the ```Issue``` in the adapter and stop the ```SwipeRefreshLayout```.
+It then shows an ```AlertDialog``` asking the user if the wish to leave a comment explaining why they are opening or closing the issue.
+If the user selects the positive action, the ```CommentEditor``` is shown with the request code REQUEST_CODE_COMMENT_FOR_ISSUE_STATE, and the issue state is changed.
+If the user selects the negative button, the issue state is toggled without showing the ```CommentEditor```.
+If the user selects the third, neutral, option, the dialog is cancelled.
+
 
 **RepoIssuesAdapter.java**
 ``` java

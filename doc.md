@@ -4958,9 +4958,96 @@ Each ```CommitViewHolder``` is bound with the following information:
 
 #import "app/src/main/java/com/tpb/projects/repo/RepoCommitsAdapter.java"
 
+The screenshot below shows commits made from my account and the web-flow:
+
+![Commits](http://imgur.com/6diNIks.png)
+
+
+
 ### RepoIssuesFragment
 
+The ```RepoIssuesFragment``` is the first ```RepoFragment``` which actually uses the ```FloatingActionButton```.
+It also manages filtering and searching the ```Issues```.
+
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoIssuesFragment.java"
+
+#### Filtering
+
+Objective 3.v.c is to filter issues by:
+- Their state
+- Their labels
+- The user assigned to them
+
+This is implemented through a filter menu alongside the search bar.
+
+The menu is inflated from the following resource:
+
+``` XML
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/menu_filter_open"
+            android:title="@string/menu_filter_open"/>
+
+        <item
+            android:id="@+id/menu_filter_closed"
+            android:title="@string/menu_filter_closed"/>
+
+        <item
+            android:id="@+id/menu_filter_all"
+            android:title="@string/menu_filter_all"/>
+    </group>
+
+    <item
+        android:id="@+id/menu_filter_labels"
+        android:title="@string/menu_filter_labels"/>
+
+    <item
+        android:id="@+id/menu_filter_assignees"
+        android:title="@string/menu_filter_assignee"/>
+
+</menu>
+```
+
+The first item is a group of radio buttons for the issue state. The second two items are buttons to show dialogs for choosing the labels or assigned user.
+
+In the ```OnClick``` method for the issues filter button, the menu is inflated.
+One of the items in the set of radio buttons is ticked based upon the current filter state.
+The ```OnMenuItemClickListener``` for the ```PopupMenu``` is set, which switches over the item id and either calls a method to show the appropriate dialog, or sets the filter and then calls ```refresh``` to apply the filter to the adapter.
+
+```showLablesDialog``` first creates a ```ProgressDialog``` while the labels are loaded, and then creates a ```MultiChoiceDialog``` with the labels.
+Items are checked when the dialog is shown if they are already present in the mLabelsFilter list.
+
+The ```MultiChoiceDialogListener``` clears the mLabelsFilter list and adds the new labels before calling ```refresh``` to update the adapter.
+
+```showAssigneesDialog``` also displays a ```ProgressDialog``` while it loads the contributors.
+It then shows an ```AlertDialog``` with a set of single choice items.
+When an item is chosen, the mAssigneeFilter is set to this new value. If the positive button is selected, ```refresh``` is called, otherwise the assignee filter is reset to its previous state.
+
+#### Editing
+
+The ```RepoIssuesFragment``` also manages toggling of issue states, as well as creating and updating issues.
+
+```editIssue``` adds the repository name and ```Issue``` to an ```Intent```, pre-loads the labels and collaborators and then launched the ```IssueEditor``` with the REQUEST_CODE_EDIT_ISSUE request code.
+
+If the edited ```Issue``` is returned in ```onActivityResult``` the assignees and labels arrays are extracted from the ```Intent``` and passes to ```updateIssue``` which performs the ```Editor``` call to update the ```Issue```, and then notifies the adapter of the change.
+
+#### Creation
+
+When the ```RepoIssuesFragment``` is passed the ```FloatingActionButton``` it sets the ```OnClickListener``` to open the ```IssueEditor``` with the flag to create a new issue.
+If this issue is returned in ```onActivityResult```, ```createIssue``` is called which performs the ```Editor``` call to create the ```Issue```, notifies the adapter of the change, and scrolls the ```RecyclerView``` to position 0, displaying the new ```Issue```.
+
+#### State changes
+
+When the menu item for opening or closing an issue is selected, ```toggleIssueState``` is called.
+This method first creates the ```Editor.UpdateListener``` which will update the ```Issue``` in the adapter and stop the ```SwipeRefreshLayout```.
+It then shows an ```AlertDialog``` asking the user if the wish to leave a comment explaining why they are opening or closing the issue.
+If the user selects the positive action, the ```CommentEditor``` is shown with the request code REQUEST_CODE_COMMENT_FOR_ISSUE_STATE, and the issue state is changed.
+If the user selects the negative button, the issue state is toggled without showing the ```CommentEditor```.
+If the user selects the third, neutral, option, the dialog is cancelled.
+
 
 #import "app/src/main/java/com/tpb/projects/repo/RepoIssuesAdapter.java"
 
