@@ -2089,6 +2089,67 @@ The crash information contains the full stack trace as well as information about
 
 #page
 
+### Automated build system
+
+As explained in the analysis section, continuous integration tools are often integrated with GitHub to build projects as they are commited and add statuses to each commit.
+I have used the Travis build system to build the project on each commit and pull request, adding a status to each commit allowing me to see immediately if a build failed.
+
+The system is set up with a configuration file names ".travis.yml".
+
+``` yml 
+language: android
+jdk: oraclejdk8
+
+sudo: true
+
+# Handle git submodules yourself
+git:
+    submodules: false
+# Use sed to replace the SSH URL with the public URL, then initialize submodules
+before_install:
+    - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
+    - git submodule update --init --recursive
+
+android:
+  components:
+
+    - platform-tools
+    - tools
+
+    # The BuildTools version
+    - build-tools-25.0.2
+
+    # The SDK version
+    - android-25
+
+    # Additional components
+    - extra-google-m2repository
+    - extra-android-m2repository
+    - addon-google_apis-google-25
+
+    - sys-img-armeabi-v7a-android-23
+
+  licenses:
+        - 'android-sdk-preview-license-.+'
+        - 'android-sdk-license-.+'
+        - 'google-gdk-license-.+'
+        - ".+"
+
+script: ./gradlew build
+
+cache:
+  directories:
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
+    - $HOME/.android/build-cache
+
+
+```
+
+This config file updates any included Git submodules, installs the correct build tools and SDK version, and then runs a gradle build before caching the gradle cache.
+
+#page
+
 ## Link handling
 
 In order to receieve ```Intents``` when a user attempts to open a link to GitHub, the application must register an intent filter in its manifest.
@@ -5315,6 +5376,10 @@ Otherwise, we are deeper in the tree:
 
 ```notifyDataSetChanged``` is then called.
 
+When displaying the root of the repository for this project, the ```ContentActivity``` appears as shown below:
+
+![Content activity](http://imgur.com/h70abOo.png)
+
 ### FileActivity
 
 The ```FileActivity``` is used to display a file with proper highlighting using HighlightJS.
@@ -5337,19 +5402,130 @@ Otherwise, the ```FileLoader``` is passed the ```Node``` download URL to downloa
 
 #import "app/src/main/java/com/tpb/projects/repo/content/FileActivity.java"
 
+
 #page
 
 ## CommitActivity
+
+The ```CommitActivity``` is used to show detailed information about a commit, as well as handling displaying and commenting upon the commit.
+
+Most of the logic is within the two ```Fragments``` used. 
+The ```CommitActivity``` itself deals only with the intial loading of the ```Commit```, which comes either from a ```Commit``` parceled with the launch ```Intent```, or a ```Commit``` loaded from a repository and a hash.
+
+The ```CommitActivity``` also manages showing and hiding the ```FloatingActionButton``` used when adding comments.
+
+The actual displaying of information is handled by two ```Fragments```, the ```CommitInfoFragment``` and the ```CommitCommentsFragment```.
+
+The ```CommitInfoFragment``` displays the information which is stored in the ```Commit``` model.
+A small problem is faced here, as not all ```Commit``` objects are created equal.
+Those loaded in an array within the ```RepoCommitsAdapter``` do not contain information about the changes that were made during the commit.
+To access this information, the ```Commit``` must be re-loaded whereever it originated from.
 
 #import "app/src/main/java/com/tpb/projects/commits/CommitActivity.java"
 
 ### CommitInfoFragment
 
+When a ```Commit``` is loaded, the ```CommitInfoFragment``` displays the ```Commit``` title, and commiter information.
+If the ```Commit``` contains a list of files, the number of additions and deletions are also displayed, and the files are passed to the ```CommitDiffAdapter```.
+
+#### Statuses
+
+If an integration is present for a repository, the status of a commit can be loaded and displayed.
+
+The ```CompleteStatus``` model incorporates an overall state, and the individual states of the multiple systems which may exist.
+When a non-empty model is returned the status image is set to reflect whether the integrations were successfull, unsuccessfull, or are still working.
+The overall status text is set, and the description is built from each of the individual statuses of the different integrations.
+
 #import "app/src/main/java/com/tpb/projects/commits/fragments/CommitInfoFragment.java"
+
+The primary body of information about a commit may appear as shown below:
+
+![Commit info](http://imgur.com/JhXZJHr.png)
 
 #### CommitDiffAdapter
 
+The ```CommitDiffAdapter``` is used to display the actual changes made by a ```Commit```.
+
+Unlike other adapters, it does not have to deal with repeatedly loading new data, or even caching intensive work, as the information displayed is relatively simple.
+
+Each ```DiffFile``` model contains a file name, and information about the changes.
+This information includes:
+- The status of the change; whether the file was created, updated, or deleted
+- The number of lines added
+- The number of lines removed
+
+The ```DiffFile``` also contains a patch string which displays the changed lines.
+These strings can be quite large, and as such it would not make sense to display the entire string immediately.
+Instead, only the first 3 lines are shown by default and the rest of the patch string can be shown or hidden by clicking on the list item.
+
+The span is built in the ```Formatter``` class in ```buildDiffSpan```.
+
+``` java
+public static SpannableStringBuilder buildDiffSpan(@NonNull String diff) {
+    final SpannableStringBuilder builder = new SpannableStringBuilder();
+
+    int oldLength = 0;
+    for(String line : diff.split("\n")) {
+        oldLength = builder.length();
+        if(line.startsWith("+")) {
+            builder.append(line);
+            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#8BC34A")),
+                    oldLength, builder.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        } else if(line.startsWith("-")) {
+            builder.append(line);
+            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#F44336")),
+                    oldLength, builder.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        } else {
+            builder.append(line);
+            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#9E9E9E")),
+                    oldLength, builder.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+        builder.append("\n");
+    }
+    builder.setSpan(new TypefaceSpan("monospace"), 0, builder.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+    );
+    return builder;
+}
+```
+This splits the string into individual lines and colours each line depending on whether it begins with a "+" or a "-".
+
+The ```FullWidthBackgroundColorSpan``` used is not part of the the markdown package as it is only used here.
+It extends ```LineBackgroundSpan``` and draws an opaque rectangle across the entire line.
+
+``` java
+private static class FullWidthBackgroundColorSpan implements LineBackgroundSpan {
+    private final int color;
+
+    FullWidthBackgroundColorSpan(int color) {
+        this.color = color;
+    }
+
+    @Override
+    public void drawBackground(Canvas c, Paint p, int left, int right, int top, int baseline,
+                                int bottom, CharSequence text, int start, int end, int lnum) {
+        final int paintColor = p.getColor();
+        p.setColor(color);
+        p.setAlpha(128);
+        c.drawRect(new Rect(left, top, right, bottom), p);
+        p.setColor(paintColor);
+    }
+}
+```
+
+The show and hide animations are created using ```ObjectAnimators``` which change the maxLines attribute of the ```TextViews``` displaying the patch strings.
+
 #import "app/src/main/java/com/tpb/projects/commits/CommitDiffAdapter.java"
+
+| Short span | Expanded span |
+| --- | --- | 
+| ![Short span](http://imgur.com/RDCgsT6.png) | ![Large span](http://imgur.com/UsJ5x80.png) |
 
 ### CommitCommentsFragment
 
