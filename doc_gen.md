@@ -17246,7 +17246,6 @@ import butterknife.ButterKnife;
  */
 
 public class ContentActivity extends BaseActivity implements Loader.ListLoader<Pair<String, String>> {
-    private static final String TAG = ContentActivity.class.getSimpleName();
 
     @BindView(R.id.content_title) TextView mTitle;
     @BindView(R.id.content_ribbon_scrollview) HorizontalScrollView mRibbonScrollView;
@@ -17392,7 +17391,32 @@ public class ContentActivity extends BaseActivity implements Loader.ListLoader<P
 
 ```
 
+```initRibbon```, ```addRibbonItem```, and ```onBackPressed``` deal with navigation through the path.
+
+The ```Activity``` layout contains the title bar, the branch ```Spinner```, and below both of these the path ribbon.
+
+![ContentActivity](http://imgur.com/Mlyy3sb.png)
+
+```initRibbon``` adds the base item to the ribbon.
+Each item in the ribbon ```HorizontalScrollView``` is a ```TextView``` with a chevron at the end.
+The text of the root item is a "/", indicating the base of the path.
+
+The ```OnClickListener``` for this ```TextView``` removes all of the ```Views``` from the ```LinearLayout```, re-adds the base item, and calls ```moveToStart``` on the adapter.
+
+```addRibbonItem``` is used to add a new item to the ribbon when a directory is entered.
+The method takes a ```Node``` as a parameter, adds the new ```TextView``` with an ```OnClickListener``` to save all of the ```TextViews``` upto the clicked ```TextView```, and remove everything else before calling ```moveTo``` on the adapter.
+
+A post call is made to scroll the ```HorizontalScrollView``` to the right once the ```TextView``` has been added.
+
+When viewing the content directory in this project, the header appears as below:
+
+![Header](http://imgur.com/c7pswDn.png)
+
 ### ContentAdapter
+
+The ```ContentAdapter``` manages loading and traversing the repository file tree.
+
+It stores ```Lists``` of the root ```Nodes```, the current ```Nodes```, and a single ```Node``` which was the last ```Node``` to be opened.
 
 **ContentAdapter.java**
 ``` java
@@ -17469,7 +17493,7 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
                     .setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_folder, 0, 0, 0);
             holder.mSize.setText("");
         }
-
+        holder.itemView.setOnClickListener((v) -> loadNode(holder.getAdapterPosition()));
     }
 
     void setRef(String ref) {
@@ -17480,8 +17504,6 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
             mPreviousNode = null;
             reload();
         }
-
-
     }
 
     void reload() {
@@ -17513,15 +17535,13 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
         If we are further down, both mPreviousNode and its parent are non null
          */
         if(mPreviousNode != null) {
+            mPreviousNode = mPreviousNode.getParent();
             if(mPreviousNode.getParent() == null) {
-                mPreviousNode = mPreviousNode.getParent();
                 mCurrentNodes = mRootNodes;
-                notifyDataSetChanged();
             } else {
-                mCurrentNodes = mPreviousNode.getParent().getChildren();
-                mPreviousNode = mPreviousNode.getParent();
-                notifyDataSetChanged();
+                mCurrentNodes = mPreviousNode.getChildren();
             }
+            notifyDataSetChanged();
         }
 
     }
@@ -17547,7 +17567,6 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
             if(node.getChildren().size() == 0) {
                 mLoader.loadDirectory(this, mRepo, node.getPath(), node, mRef);
             } else {
-                mParent.mRefresher.setRefreshing(true);
                 listLoadComplete(node.getChildren());
             }
         }
@@ -17575,8 +17594,9 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
                         if(parent.equals(child)) {
                             parent.setChildren(directory);
                             return;
+                        } else if(child.getType() == Node.NodeType.DIRECTORY) {
+                            stack.push(child);
                         }
-                        stack.push(child);
                     }
                 }
             }
@@ -17593,7 +17613,6 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
         if(mPreviousNode == null) { //We are at the root
             mRootNodes = directory;
             mCurrentNodes = directory;
-            mPreviousNode = null;
             notifyItemRangeInserted(0, mCurrentNodes.size());
             if(mCurrentNodes.size() > 0) mParent.setDefaultRef(mCurrentNodes.get(0).getRef());
         } else {
@@ -17621,7 +17640,7 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
         return mCurrentNodes.size();
     }
 
-    class NodeViewHolder extends RecyclerView.ViewHolder {
+    static class NodeViewHolder extends RecyclerView.ViewHolder {
 
         @BindView(R.id.node_text) TextView mText;
         @BindView(R.id.node_size) TextView mSize;
@@ -17629,13 +17648,86 @@ public class ContentAdapter extends RecyclerView.Adapter<ContentAdapter.NodeView
         NodeViewHolder(View itemView) {
             super(itemView);
             ButterKnife.bind(this, itemView);
-            itemView.setOnClickListener((v) -> loadNode(getAdapterPosition()));
         }
     }
 
 }
 
 ```
+
+When ```loadNode``` is called the ```Node``` type is checked.
+
+#### Loading files
+If it is a file, ```ContentActivity.mLaunchNode``` is set to the clicked ```Node```.
+This may appear strange, given that everywhere else throughout the application, data has been sent between ```Activities``` as extras on an ```Intent```.
+The problem with this is that ```Intents``` have a size limit.
+
+The limit has remained nearly constant for the last 6 years, decreasing from around 518600 bytes in Android Gingerbread (API 10) to 517700 bytes in Android Marshmallow.
+
+The GitHub API states that content up to 1MB in size may be included in the JSON, which cannot be passed through an ```Intent```.
+
+The ```Node``` is therefore passed through a public static member on the ```FileActivity```.
+
+This is unlikely to occur anyway, as when a FILE ```Node``` is loaded as part of a directory, its content is not included.
+It will only be loaded as a full FILE ```Node``` if it is loaded separately, which may happen if it is pre-loaded.
+
+#### Loading submodule
+
+If a SUBMODULE ```Node``` is clicked, the repository that the submodule refers to is launched.
+
+#### Loading directories
+
+When a DIRECTORY ```Node``` is clicked, the ```Node``` is added to the ribbon, and mPreviousNode is set to the ```Node```.
+
+The ```Node``` children may already have been loaded, in which case ```listLoadComplete``` is called directly with the children.
+Otherwise, ```Loader.loadDirectory``` is called with the ```ContentAdapter```, repository, node path, the node itself, and the current HEAD reference.
+
+When ```listLoadComplete``` is called, there are two possible states:
+
+First, this we may be at the root of the file tree. 
+In this case mPreviousNode is null.
+mRootNodes and mCurrentNodes are set to the loaded ```List```.
+```notifyItemRangeInserted``` is then called, and the ```setDefaultRef``` is called on the ```ContentActivity```.
+
+Second, we are somewhere else in the tree.
+In this case, the children of mPreviousNode are set, and mCurrentNodes is set before ```notifyDataSetChanged``` is called.
+
+The loading state is then reset, and background loading begins:
+For each ```Node``` in the new directory, we check that the ```Node``` is a DIRECTORY ```Node```, and that it has no children.
+If so, ```Loader.loadDirectory``` is called, with the backgroundLoader, an instance of ```ListLoader<Node>``` which deals with inserting children in the background.
+
+##### Background loading
+
+When ```listLoadComplete``` is called on the backgroundLoader, it first checks each of the current ```Nodes```, as the network calls generally return fast enough that the user is yet to navigate to another directory.
+If one of the current ```Nodes``` is the parent of the first ```Node``` in the new directory, its children are set to the new directory and ```listLoadComplete``` returns.
+
+Otherwise, the tree must be traversed to find the parent ```Node```.
+A ```Stack``` is created, and each of the ```Nodes``` in mRootNodes are traversed:
+- Each ```Node``` is added to the ```Stack```.
+- While the ```Stack``` is not empty, the top ```Node``` is popped.
+- For each child of the popped ```Node```:
+    - If the child is the parent, its children are set and ```listLoadComplete``` returns
+    - Otherwise the if ```Node``` is a directory it is pushed to the stack
+
+This background-loading generally ensures that the next level of a directory is loaded before the user clicks on an item.
+
+#### Moving to and from nodes
+
+The purposes ```moveToStart```, ```moveTo```, and ```moveBack```  are hopefully evident from their names.
+
+```moveToStart``` sets mCurrentNodes to mRootNodes, sets mPreviousNode to null, and calls ```notifyDataSetChange```, reseting the adapter to its original state.
+
+```moveTo``` sets ```mPreviousNode``` to the ```Node``` passed to it, mCurrentNodes to the children of the ```Node``` passed, and then calls ```NotifyDataSetChanged```.
+
+```moveBack``` is slightly more complex, as it has to deal with a greater number of states.
+If mPreviousNode is null, we are already at the root and there is nowhere to move to.
+Otherwise, mPreviousNode is set to its own parent.
+If the parent of mPreviousNode is null, we are one step away from the root:
+- mCurrentNodes is set to mRootNodes
+Otherwise, we are deeper in the tree:
+- mCurrentNodes is set to the children of mPreviousNode (Which currently refers to the parent of the ```Node``` which was mPreviousNode at the start of the method)
+
+```notifyDataSetChanged``` is then called.
 
 ### FileActivity
 
@@ -17646,6 +17738,8 @@ package com.tpb.projects.repo.content;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -17668,8 +17762,6 @@ import butterknife.ButterKnife;
  */
 
 public class FileActivity extends AppCompatActivity {
-    private static final String TAG = FileActivity.class.getSimpleName();
-
     @BindView(R.id.file_name) TextView mName;
     @BindView(R.id.file_webview) HighlightJsView mWebView;
     @BindView(R.id.file_loading_spinner) ProgressBar mSpinner;
@@ -17723,7 +17815,11 @@ public class FileActivity extends AppCompatActivity {
             final Node node = ContentActivity.mLaunchNode;
             mName.setText(node.getName());
             mWebView.setHighlightLanguage(getLanguage(getFileType(node.getUrl())));
-            new FileLoader(this).loadRawFile(fileLoadListener, node.getDownloadUrl());
+            if("base64".equals(node.getEncoding())) {
+                fileLoadListener.onResponse(new String(Base64.decode(node.getContent(), Base64.DEFAULT)));
+            } else {
+                new FileLoader(this).loadRawFile(fileLoadListener, node.getDownloadUrl());
+            }
         } else {
             finish();
         }

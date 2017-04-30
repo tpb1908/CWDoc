@@ -5212,9 +5212,108 @@ Otherwise, the ```Node``` is a file, and the SHA is between the "/blob/" substri
 
 #import "app/src/main/java/com/tpb/projects/repo/content/ContentActivity.java"
 
+```initRibbon```, ```addRibbonItem```, and ```onBackPressed``` deal with navigation through the path.
+
+The ```Activity``` layout contains the title bar, the branch ```Spinner```, and below both of these the path ribbon.
+
+![ContentActivity](http://imgur.com/Mlyy3sb.png)
+
+```initRibbon``` adds the base item to the ribbon.
+Each item in the ribbon ```HorizontalScrollView``` is a ```TextView``` with a chevron at the end.
+The text of the root item is a "/", indicating the base of the path.
+
+The ```OnClickListener``` for this ```TextView``` removes all of the ```Views``` from the ```LinearLayout```, re-adds the base item, and calls ```moveToStart``` on the adapter.
+
+```addRibbonItem``` is used to add a new item to the ribbon when a directory is entered.
+The method takes a ```Node``` as a parameter, adds the new ```TextView``` with an ```OnClickListener``` to save all of the ```TextViews``` upto the clicked ```TextView```, and remove everything else before calling ```moveTo``` on the adapter.
+
+A post call is made to scroll the ```HorizontalScrollView``` to the right once the ```TextView``` has been added.
+
+When viewing the content directory in this project, the header appears as below:
+
+![Header](http://imgur.com/c7pswDn.png)
+
 ### ContentAdapter
 
+The ```ContentAdapter``` manages loading and traversing the repository file tree.
+
+It stores ```Lists``` of the root ```Nodes```, the current ```Nodes```, and a single ```Node``` which was the last ```Node``` to be opened.
+
 #import "app/src/main/java/com/tpb/projects/repo/content/ContentAdapter.java"
+
+When ```loadNode``` is called the ```Node``` type is checked.
+
+#### Loading files
+If it is a file, ```ContentActivity.mLaunchNode``` is set to the clicked ```Node```.
+This may appear strange, given that everywhere else throughout the application, data has been sent between ```Activities``` as extras on an ```Intent```.
+The problem with this is that ```Intents``` have a size limit.
+
+The limit has remained nearly constant for the last 6 years, decreasing from around 518600 bytes in Android Gingerbread (API 10) to 517700 bytes in Android Marshmallow.
+
+The GitHub API states that content up to 1MB in size may be included in the JSON, which cannot be passed through an ```Intent```.
+
+The ```Node``` is therefore passed through a public static member on the ```FileActivity```.
+
+This is unlikely to occur anyway, as when a FILE ```Node``` is loaded as part of a directory, its content is not included.
+It will only be loaded as a full FILE ```Node``` if it is loaded separately, which may happen if it is pre-loaded.
+
+#### Loading submodule
+
+If a SUBMODULE ```Node``` is clicked, the repository that the submodule refers to is launched.
+
+#### Loading directories
+
+When a DIRECTORY ```Node``` is clicked, the ```Node``` is added to the ribbon, and mPreviousNode is set to the ```Node```.
+
+The ```Node``` children may already have been loaded, in which case ```listLoadComplete``` is called directly with the children.
+Otherwise, ```Loader.loadDirectory``` is called with the ```ContentAdapter```, repository, node path, the node itself, and the current HEAD reference.
+
+When ```listLoadComplete``` is called, there are two possible states:
+
+First, this we may be at the root of the file tree. 
+In this case mPreviousNode is null.
+mRootNodes and mCurrentNodes are set to the loaded ```List```.
+```notifyItemRangeInserted``` is then called, and the ```setDefaultRef``` is called on the ```ContentActivity```.
+
+Second, we are somewhere else in the tree.
+In this case, the children of mPreviousNode are set, and mCurrentNodes is set before ```notifyDataSetChanged``` is called.
+
+The loading state is then reset, and background loading begins:
+For each ```Node``` in the new directory, we check that the ```Node``` is a DIRECTORY ```Node```, and that it has no children.
+If so, ```Loader.loadDirectory``` is called, with the backgroundLoader, an instance of ```ListLoader<Node>``` which deals with inserting children in the background.
+
+##### Background loading
+
+When ```listLoadComplete``` is called on the backgroundLoader, it first checks each of the current ```Nodes```, as the network calls generally return fast enough that the user is yet to navigate to another directory.
+If one of the current ```Nodes``` is the parent of the first ```Node``` in the new directory, its children are set to the new directory and ```listLoadComplete``` returns.
+
+Otherwise, the tree must be traversed to find the parent ```Node```.
+A ```Stack``` is created, and each of the ```Nodes``` in mRootNodes are traversed:
+- Each ```Node``` is added to the ```Stack```.
+- While the ```Stack``` is not empty, the top ```Node``` is popped.
+- For each child of the popped ```Node```:
+    - If the child is the parent, its children are set and ```listLoadComplete``` returns
+    - Otherwise the if ```Node``` is a directory it is pushed to the stack
+
+This background-loading generally ensures that the next level of a directory is loaded before the user clicks on an item.
+
+#### Moving to and from nodes
+
+The purposes ```moveToStart```, ```moveTo```, and ```moveBack```  are hopefully evident from their names.
+
+```moveToStart``` sets mCurrentNodes to mRootNodes, sets mPreviousNode to null, and calls ```notifyDataSetChange```, reseting the adapter to its original state.
+
+```moveTo``` sets ```mPreviousNode``` to the ```Node``` passed to it, mCurrentNodes to the children of the ```Node``` passed, and then calls ```NotifyDataSetChanged```.
+
+```moveBack``` is slightly more complex, as it has to deal with a greater number of states.
+If mPreviousNode is null, we are already at the root and there is nowhere to move to.
+Otherwise, mPreviousNode is set to its own parent.
+If the parent of mPreviousNode is null, we are one step away from the root:
+- mCurrentNodes is set to mRootNodes
+Otherwise, we are deeper in the tree:
+- mCurrentNodes is set to the children of mPreviousNode (Which currently refers to the parent of the ```Node``` which was mPreviousNode at the start of the method)
+
+```notifyDataSetChanged``` is then called.
 
 ### FileActivity
 
