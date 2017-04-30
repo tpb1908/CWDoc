@@ -4856,21 +4856,105 @@ The ```ArrayFilter``` is a generic class used to filter a list for an ```ArrayAd
 
 It uses the ```FuzzyStringSearcher``` to match a set of positions, and then creates the ```FilterResults``` object with the filtered items and their size.
 
+#page
+
 ## RepoActivity
+
+The ```RepoActivity``` displays the ```Fragments``` showing information about a repository.
+It manages loading the ```Repository``` and attaching and re-attaching the ```Fragments``` on state changes such as rotation, as well as navigating to a particular ```Fragment``` if a page is included in the launch ```Intent```.
 
 #import "app/src/main/java/com/tpb/projects/repo/RepoActivity.java"
 
+### RepoFragment
+
+The ```RepoFragment``` methods deal with loading the ```Repository```, saving the ```Repository``` state, checking view validity, handling the click listener for the ```FloatingActionButton```, and being notified of the back button being pressed.
+
+#import "app/src/main/java/com/tpb/projects/repo/fragments/RepoFragment.java"
+
 ### RepoInfoFragment
+
+The ```RepoInfoFragment``` binds a set of information about the ```Repository```:
+- Owner username
+- Owner avatar
+- Number of issues
+- Number of forks
+- Size
+- Number of starts
+- Description
+- License
+
+Much of this information is just text, and is handled in ```repoLoaded``` when the ```Views``` are valid.
+
+```loadReleveantUsers``` is used to load the contributors and collaborators on a repository.
+Each of the ```ListLoaders``` then call either ```displayCollaborators``` or ```displayContributors``` which each fill a ```HorizontalScrollView``` with links to the users. The contributors list also includes the number of contributions.
+
+When displayed the two lists look as shown below:
+
+![User lists](http://imgur.com/Gq7XCKG.png)
+
+The collaborators can only be loaded by a user who are themselves a collaborator, so this layout will often be hidden.
+
+The ```FloatingActionButton``` is handled by hiding it, as the ```RepoInfoFragment``` does not have any use for it.
+
+The final three methods are ```showLicense```, ```openuser```, and ```showFiles```:
+
+```showLicense``` first creates a ```ProgressDialog``` and shows it before loading the license body for the repository license type.
+When the license is loaded, the ```ProgressDialog``` is dismissed, and an ```AlertDialog``` is displayed containing the license body.
+
+```openUser``` is called when the repository owner username or avatar is clicked. It launches the ```UserActivity``` using the username and avatar ```Views``` in the transition.
+
+```showFiles``` is called when the show files button is clicked. It launched the ```ContentActivity``` to display the files in the repository.
 
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoInfoFragment.java"
 
 ### RepoReadmeFragment
 
+The ```RepoReadmeFragment``` uses a ```MarkdownWebView``` to display the repsoitory README.
+It first loads the README, and then uses the GitHub markdown API to render the markdown as it would be displayed on GitHub.
+It then fixes the relative links in the rendered HTML, and displays it in the ```MarkdownWebView```.
+
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoReadmeFragment.java"
 
 ### RepoCommitsFragment
 
+The ```RepoCommitsFragment``` primarily deals with the ```RepoCommitsAdapter```, but it also manages the ```Spinner``` which is used to choose the branch to display commits for.
+
+#### Branch loading
+
+The branches must be loaded separately from the repository.
+Unfortunately, the API returns the branches in the order that they were last commited to, and does not indicate which branch is the default.
+Although most repository's default branch is named "master", this is not guaranteed and even if a "master" branch is present it still may not be the default branch.
+
+However, the API call to load the branches for a repository also returns the SHA hash of the last commit to each branch.
+This means that when the API call to load commits (which returns commits on the default branch unless a branch is specified) returns, the hash of the first commit in the list can be checked against the hashes returned with the branches in order to determine the default branch.
+
+Branch loading is managed in the same way as ```Repository``` loading, in order to fit the ```Fragment``` lifecycle.
+
+When the ```CommitsAdapter``` finishes loading its commits, it calls ```setLatestSHA``` in the ```RepoCommitsFragment``` which stores the hash.
+If the branches have already been loaded, ```bindBranches``` is calle.
+If the branches have not been loaded, and they are not being loaded, the call is made to load the branches.
+
+```bindBranches``` iterates through each ```Pair``` of branch name and hash, either adding the branch name to the start a list if its hash is equal to the latest hash, or adding it to the end of the list.
+An ```ArrayAdapter``` is then created to display the list of strings in the ```Spinner```.
+Finally, the ```ArrayAdapter``` is attached to the ```Spinner``` and an ```OnItemSelectedListener``` is added to it to notify the adapter when the branch is changed.
+
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoCommitsFragment.java"
+
+The ```RepoCommitsAdapter``` manages its page as it is notified of new scroll positions and uses the ```SpanCache``` interface to cache ```SpannableStrings``` with their respective commits as they are created.
+
+When ```setBranch```is called, if the branch is not the current branch there are two possibilities:
+The branch is being set for the first time after the default branch has been chosen (mBranch is null), in this case the branch is saved, but the content is not re-loaded as it is already displayed.
+Otherwise, the branch is set, mCommits is cleared, ```notifyDataSetChanged``` is called, and ```loadCommits``` is called to reset the page and reload the commits.
+
+#### Binding
+
+Each ```CommitViewHolder``` is bound with the following information:
+
+- The commiter avatar (If the commiter is an actual user and not automated)
+- The commit message
+- The commit information (Commiter username, short hash, and date)
+
+```OnClickListeners``` are then added to the avatar, title, and info ```Views``` to launch either the ```UserActivity``` or ```CommitActivity```.
 
 #import "app/src/main/java/com/tpb/projects/repo/RepoCommitsAdapter.java"
 
@@ -4886,6 +4970,8 @@ It uses the ```FuzzyStringSearcher``` to match a set of positions, and then crea
 
 #import "app/src/main/java/com/tpb/projects/repo/RepoProjectsAdapter.java"
 
+#page
+
 ## ContentActivity
 
 #import "app/src/main/java/com/tpb/projects/repo/content/ContentActivity.java"
@@ -4898,25 +4984,9 @@ It uses the ```FuzzyStringSearcher``` to match a set of positions, and then crea
 
 #import "app/src/main/java/com/tpb/projects/repo/content/FileActivity.java"
 
-## ProjectActivity
+#page
 
-#import "app/src/main/java/com/tpb/projects/project/ProjectActivity.java"
-
-### ColumnFragment
-
-#import "app/src/main/java/com/tpb/projects/project/ColumnFragment.java"
-
-#### CardAdapter
-
-#import "app/src/main/java/com/tpb/projects/project/CardAdapter.java"
-
-#### CardDragListener
-
-#import "app/src/main/java/com/tpb/projects/project/CardDragListener.java"
-
-#### ProjectSearchAdapter
-
-#import "app/src/main/java/com/tpb/projects/project/ProjectSearchAdapter.java"
+#page
 
 ## CommitActivity
 
@@ -4938,6 +5008,8 @@ It uses the ```FuzzyStringSearcher``` to match a set of positions, and then crea
 
 #import "app/src/main/java/com/tpb/projects/commits/CommitCommentsAdapter.java"
 
+#page
+
 ## IssueActivity
 
 #import "app/src/main/java/com/tpb/projects/issues/IssueActivity.java"
@@ -4957,6 +5029,30 @@ It uses the ```FuzzyStringSearcher``` to match a set of positions, and then crea
 #### IssueCommentsAdapter
 
 #import "app/src/main/java/com/tpb/projects/issues/IssueCommentsAdapter.java"
+
+#page
+
+## ProjectActivity
+
+#import "app/src/main/java/com/tpb/projects/project/ProjectActivity.java"
+
+### ColumnFragment
+
+#import "app/src/main/java/com/tpb/projects/project/ColumnFragment.java"
+
+#### CardAdapter
+
+#import "app/src/main/java/com/tpb/projects/project/CardAdapter.java"
+
+#### CardDragListener
+
+#import "app/src/main/java/com/tpb/projects/project/CardDragListener.java"
+
+#### ProjectSearchAdapter
+
+#import "app/src/main/java/com/tpb/projects/project/ProjectSearchAdapter.java"
+
+
 
 ## Notifications
 

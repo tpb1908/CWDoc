@@ -14445,7 +14445,12 @@ public class ArrayFilter<T> extends Filter {
 
 It uses the ```FuzzyStringSearcher``` to match a set of positions, and then creates the ```FilterResults``` object with the filtered items and their size.
 
+<div style="page-break-after: always;"></div>
+
 ## RepoActivity
+
+The ```RepoActivity``` displays the ```Fragments``` showing information about a repository.
+It manages loading the ```Repository``` and attaching and re-attaching the ```Fragments``` on state changes such as rotation, as well as navigating to a particular ```Fragment``` if a page is included in the launch ```Intent```.
 
 **RepoActivity.java**
 ``` java
@@ -14547,7 +14552,6 @@ public class RepoActivity extends BaseActivity implements Loader.ItemLoader<Repo
         } else {
             if(launchIntent.hasExtra(getString(R.string.intent_pager_page))) {
                 mLaunchPage = launchIntent.getIntExtra(getString(R.string.intent_pager_page), 0);
-
             }
             loader.loadRepository(this,
                     launchIntent.getStringExtra(getString(R.string.intent_repo))
@@ -14673,7 +14677,98 @@ public class RepoActivity extends BaseActivity implements Loader.ItemLoader<Repo
 
 ```
 
+### RepoFragment
+
+The ```RepoFragment``` methods deal with loading the ```Repository```, saving the ```Repository``` state, checking view validity, handling the click listener for the ```FloatingActionButton```, and being notified of the back button being pressed.
+
+**RepoFragment.java**
+``` java
+package com.tpb.projects.repo.fragments;
+
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.ViewSafeFragment;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.repo.RepoActivity;
+
+/**
+ * Created by theo on 25/03/17.
+ */
+
+public abstract class RepoFragment extends ViewSafeFragment {
+
+    protected Repository mRepo;
+
+    public abstract void repoLoaded(Repository repo);
+
+    public abstract void handleFab(FloatingActionButton fab);
+
+    public abstract void notifyBackPressed();
+
+    public boolean areViewsValid() {
+        return mAreViewsValid;
+    }
+
+    @Override
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        if(savedInstanceState != null && savedInstanceState
+                .containsKey(getString(R.string.intent_repo))) {
+            mRepo = savedInstanceState.getParcelable(getString(R.string.intent_repo));
+            repoLoaded(mRepo);
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putParcelable(getString(R.string.intent_repo), mRepo);
+    }
+
+    protected RepoActivity getParent() {
+        return (RepoActivity) getActivity();
+    }
+
+}
+
+```
+
 ### RepoInfoFragment
+
+The ```RepoInfoFragment``` binds a set of information about the ```Repository```:
+- Owner username
+- Owner avatar
+- Number of issues
+- Number of forks
+- Size
+- Number of starts
+- Description
+- License
+
+Much of this information is just text, and is handled in ```repoLoaded``` when the ```Views``` are valid.
+
+```loadReleveantUsers``` is used to load the contributors and collaborators on a repository.
+Each of the ```ListLoaders``` then call either ```displayCollaborators``` or ```displayContributors``` which each fill a ```HorizontalScrollView``` with links to the users. The contributors list also includes the number of contributions.
+
+When displayed the two lists look as shown below:
+
+![User lists](http://imgur.com/Gq7XCKG.png)
+
+The collaborators can only be loaded by a user who are themselves a collaborator, so this layout will often be hidden.
+
+The ```FloatingActionButton``` is handled by hiding it, as the ```RepoInfoFragment``` does not have any use for it.
+
+The final three methods are ```showLicense```, ```openuser```, and ```showFiles```:
+
+```showLicense``` first creates a ```ProgressDialog``` and shows it before loading the license body for the repository license type.
+When the license is loaded, the ```ProgressDialog``` is dismissed, and an ```AlertDialog``` is displayed containing the license body.
+
+```openUser``` is called when the repository owner username or avatar is clicked. It launches the ```UserActivity``` using the username and avatar ```Views``` in the transition.
+
+```showFiles``` is called when the show files button is clicked. It launched the ```ContentActivity``` to display the files in the repository.
 
 **RepoInfoFragment.java**
 ``` java
@@ -14697,7 +14792,6 @@ import android.widget.Toast;
 
 import com.tpb.github.data.APIHandler;
 import com.tpb.github.data.Loader;
-import com.tpb.github.data.models.Page;
 import com.tpb.github.data.models.Repository;
 import com.tpb.github.data.models.User;
 import com.tpb.mdtext.Markdown;
@@ -14707,7 +14801,6 @@ import com.tpb.projects.common.NetworkImageView;
 import com.tpb.projects.common.fab.FloatingActionButton;
 import com.tpb.projects.repo.content.ContentActivity;
 import com.tpb.projects.user.UserActivity;
-import com.tpb.projects.util.Logger;
 import com.tpb.projects.util.UI;
 import com.tpb.projects.util.Util;
 
@@ -14764,7 +14857,7 @@ public class RepoInfoFragment extends RepoFragment {
 
                 @Override
                 public void loadError(APIHandler.APIError error) {
-
+                    mRefresher.setRefreshing(false);
                 }
             }, mRepo.getFullName());
         });
@@ -14785,8 +14878,10 @@ public class RepoInfoFragment extends RepoFragment {
         mStars.setText(String.valueOf(repo.getStarGazers()));
         if(Util.isNotNullOrEmpty(mRepo.getDescription())) {
             mDescription.setVisibility(View.VISIBLE);
-            mDescription
-                    .setMarkdown(Markdown.formatMD(mRepo.getDescription(), mRepo.getFullName()));
+            mDescription.setMarkdown(Markdown.formatMD(
+                    mRepo.getDescription(),
+                    mRepo.getFullName())
+            );
         } else {
             mDescription.setVisibility(View.GONE);
         }
@@ -14795,17 +14890,6 @@ public class RepoInfoFragment extends RepoFragment {
         } else {
             mLicense.setText(R.string.text_no_license);
         }
-        Loader.getLoader(getContext()).loadPage(new Loader.ItemLoader<Page>() {
-            @Override
-            public void loadComplete(Page data) {
-                Logger.i(TAG, "loadComplete: " + data.toString());
-            }
-
-            @Override
-            public void loadError(APIHandler.APIError error) {
-                Logger.i(TAG, "loadError: " + error.toString());
-            }
-        }, mRepo.getFullName());
         loadRelevantUsers();
     }
 
@@ -14960,7 +15044,6 @@ public class RepoInfoFragment extends RepoFragment {
             i.putExtra(getString(R.string.intent_repo), mRepo.getFullName());
             startActivity(i);
         }
-
     }
 
     @Override
@@ -14978,6 +15061,10 @@ public class RepoInfoFragment extends RepoFragment {
 ```
 
 ### RepoReadmeFragment
+
+The ```RepoReadmeFragment``` uses a ```MarkdownWebView``` to display the repsoitory README.
+It first loads the README, and then uses the GitHub markdown API to render the markdown as it would be displayed on GitHub.
+It then fixes the relative links in the rendered HTML, and displays it in the ```MarkdownWebView```.
 
 **RepoReadmeFragment.java**
 ``` java
@@ -14998,7 +15085,6 @@ import com.tpb.mdtext.Markdown;
 import com.tpb.mdtext.webview.MarkdownWebView;
 import com.tpb.projects.R;
 import com.tpb.projects.common.fab.FloatingActionButton;
-import com.tpb.projects.util.Logger;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -15042,8 +15128,8 @@ public class RepoReadmeFragment extends RepoFragment {
                 }
             }, mRepo.getFullName());
         });
-        if(mRepo != null) repoLoaded(mRepo);
         mReadme.enableDarkTheme();
+        if(mRepo != null) repoLoaded(mRepo);
         return view;
     }
 
@@ -15108,6 +15194,27 @@ public class RepoReadmeFragment extends RepoFragment {
 ```
 
 ### RepoCommitsFragment
+
+The ```RepoCommitsFragment``` primarily deals with the ```RepoCommitsAdapter```, but it also manages the ```Spinner``` which is used to choose the branch to display commits for.
+
+#### Branch loading
+
+The branches must be loaded separately from the repository.
+Unfortunately, the API returns the branches in the order that they were last commited to, and does not indicate which branch is the default.
+Although most repository's default branch is named "master", this is not guaranteed and even if a "master" branch is present it still may not be the default branch.
+
+However, the API call to load the branches for a repository also returns the SHA hash of the last commit to each branch.
+This means that when the API call to load commits (which returns commits on the default branch unless a branch is specified) returns, the hash of the first commit in the list can be checked against the hashes returned with the branches in order to determine the default branch.
+
+Branch loading is managed in the same way as ```Repository``` loading, in order to fit the ```Fragment``` lifecycle.
+
+When the ```CommitsAdapter``` finishes loading its commits, it calls ```setLatestSHA``` in the ```RepoCommitsFragment``` which stores the hash.
+If the branches have already been loaded, ```bindBranches``` is calle.
+If the branches have not been loaded, and they are not being loaded, the call is made to load the branches.
+
+```bindBranches``` iterates through each ```Pair``` of branch name and hash, either adding the branch name to the start a list if its hash is equal to the latest hash, or adding it to the end of the list.
+An ```ArrayAdapter``` is then created to display the list of strings in the ```Spinner```.
+Finally, the ```ArrayAdapter``` is attached to the ```Spinner``` and an ```OnItemSelectedListener``` is added to it to notify the adapter when the branch is changed.
 
 **RepoCommitsFragment.java**
 ``` java
@@ -15270,6 +15377,22 @@ public class RepoCommitsFragment extends RepoFragment implements Loader.ListLoad
 
 ```
 
+The ```RepoCommitsAdapter``` manages its page as it is notified of new scroll positions and uses the ```SpanCache``` interface to cache ```SpannableStrings``` with their respective commits as they are created.
+
+When ```setBranch```is called, if the branch is not the current branch there are two possibilities:
+The branch is being set for the first time after the default branch has been chosen (mBranch is null), in this case the branch is saved, but the content is not re-loaded as it is already displayed.
+Otherwise, the branch is set, mCommits is cleared, ```notifyDataSetChanged``` is called, and ```loadCommits``` is called to reset the page and reload the commits.
+
+#### Binding
+
+Each ```CommitViewHolder``` is bound with the following information:
+
+- The commiter avatar (If the commiter is an actual user and not automated)
+- The commit message
+- The commit information (Commiter username, short hash, and date)
+
+```OnClickListeners``` are then added to the avatar, title, and info ```Views``` to launch either the ```UserActivity``` or ```CommitActivity```.
+
 **RepoCommitsAdapter.java**
 ``` java
 package com.tpb.projects.repo;
@@ -15428,7 +15551,7 @@ public class RepoCommitsAdapter extends RecyclerView.Adapter<RepoCommitsAdapter.
 
             builder.append(
                     String.format(
-                            res.getString(R.string.text_committed_by_with_has),
+                            res.getString(R.string.text_committed_by_hash_at),
                             String.format(
                                     res.getString(R.string.text_md_link),
                                     userName,
@@ -15444,9 +15567,10 @@ public class RepoCommitsAdapter extends RecyclerView.Adapter<RepoCommitsAdapter.
                             )
                     )
             );
-            holder.mInfo
-                    .setMarkdown(Markdown.formatMD(builder.toString(), mRepo.getFullName()), null,
-                            text -> mCommits.set(position, Pair.create(c, text))
+            holder.mInfo.setMarkdown(
+                    Markdown.formatMD(builder.toString(), mRepo.getFullName()),
+                    null,
+                    text -> mCommits.set(position, Pair.create(c, text))
                     );
         } else {
             holder.mInfo.setText(mCommits.get(position).second);
@@ -16581,6 +16705,8 @@ public class RepoProjectsAdapter extends RecyclerView.Adapter<RepoProjectsAdapte
 
 ```
 
+<div style="page-break-after: always;"></div>
+
 ## ContentActivity
 
 **ContentActivity.java**
@@ -17124,6 +17250,2804 @@ public class FileActivity extends AppCompatActivity {
 }
 
 ```
+
+<div style="page-break-after: always;"></div>
+
+<div style="page-break-after: always;"></div>
+
+## CommitActivity
+
+**CommitActivity.java**
+``` java
+package com.tpb.projects.commits;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.view.ViewPager;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Commit;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.fragments.CommitCommentsFragment;
+import com.tpb.projects.commits.fragments.CommitInfoFragment;
+import com.tpb.projects.common.CircularRevealActivity;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+
+/**
+ * Created by theo on 30/03/17.
+ */
+
+public class CommitActivity extends CircularRevealActivity implements Loader.ItemLoader<Commit> {
+    private static final String TAG = CommitActivity.class.getSimpleName();
+
+    @BindView(R.id.commit_hash) TextView mHash;
+    @BindView(R.id.commit_comment_fab) FloatingActionButton mFab;
+    @BindView(R.id.commit_fragment_tabs) TabLayout mTabs;
+    @BindView(R.id.commit_content_viewpager) ViewPager mPager;
+
+    private CommitPagerAdapter mAdapter;
+
+    private Commit mCommit;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_commit);
+        ButterKnife.bind(this);
+
+        mAdapter = new CommitPagerAdapter(getSupportFragmentManager());
+
+        mPager.setOffscreenPageLimit(2);
+        mPager.setAdapter(mAdapter);
+        mTabs.setupWithViewPager(mPager);
+        mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                if(position == 1) {
+                    mFab.show(true);
+                } else {
+                    mFab.hide(true);
+                }
+            }
+        });
+
+        final Intent launchIntent = getIntent();
+        if(launchIntent.hasExtra(getString(R.string.transition_card))) {
+            postponeEnterTransition();
+        }
+        if(launchIntent.hasExtra(getString(R.string.parcel_commit))) {
+            mCommit = launchIntent.getParcelableExtra(getString(R.string.parcel_commit));
+            loadComplete(mCommit);
+            Loader.getLoader(this).loadCommit(this, mCommit.getFullRepoName(), mCommit.getSha());
+        } else if(launchIntent.hasExtra(getString(R.string.intent_commit_sha))) {
+            Loader.getLoader(this).loadCommit(this,
+                    launchIntent.getStringExtra(getString(R.string.intent_repo)),
+                    launchIntent.getStringExtra(getString(R.string.intent_commit_sha))
+            );
+        }
+
+    }
+
+    @Override
+    public void loadComplete(Commit data) {
+        mCommit = data;
+        mHash.setText(com.tpb.github.data.Util.shortenSha(mCommit.getSha()));
+        mAdapter.notifyCommitLoaded();
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
+
+    }
+
+    private class CommitPagerAdapter extends FragmentPagerAdapter {
+
+        private CommitInfoFragment mInfoFragment;
+        private CommitCommentsFragment mCommentsFragment;
+
+        CommitPagerAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            if(position == 0) {
+                mInfoFragment = CommitInfoFragment.getInstance();
+                return mInfoFragment;
+            } else {
+                mCommentsFragment = CommitCommentsFragment.getInstance();
+                if(mFab != null) mCommentsFragment.setFab(mFab);
+                return mCommentsFragment;
+            }
+        }
+
+        void attachFragment(Fragment fragment) {
+            if(fragment instanceof CommitInfoFragment)
+                mInfoFragment = (CommitInfoFragment) fragment;
+            if(fragment instanceof CommitCommentsFragment)
+                mCommentsFragment = (CommitCommentsFragment) fragment;
+        }
+
+        void notifyCommitLoaded() {
+            if(mInfoFragment != null) mInfoFragment.commitLoaded(mCommit);
+            if(mCommentsFragment != null) mCommentsFragment.commitLoaded(mCommit);
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            if(position == 0) {
+                return getString(R.string.title_commit_info);
+            } else {
+                return getString(R.string.title_commit_comments);
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 2;
+        }
+    }
+
+}
+
+```
+
+### CommitInfoFragment
+
+**CommitInfoFragment.java**
+``` java
+package com.tpb.projects.commits.fragments;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.NestedScrollView;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.TextView;
+
+import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Commit;
+import com.tpb.github.data.models.CompleteStatus;
+import com.tpb.github.data.models.Status;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.CommitDiffAdapter;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.util.Util;
+
+import java.util.Date;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 30/03/17.
+ */
+
+public class CommitInfoFragment extends CommitFragment {
+    private static final String TAG = CommitInfoFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.commit_header_card) View mHeader;
+    @BindView(R.id.commit_title) MarkdownTextView mTitle;
+    @BindView(R.id.commit_user_avatar) NetworkImageView mAvatar;
+    @BindView(R.id.commit_info) MarkdownTextView mInfo;
+    @BindView(R.id.commit_info_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.commit_info_scrollview) NestedScrollView mScrollView;
+    @BindView(R.id.commit_diff_recycler) AnimatingRecyclerView mRecyclerView;
+
+    private CommitDiffAdapter mAdapter;
+
+    public static CommitInfoFragment getInstance() {
+        return new CommitInfoFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_commit_info, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mRefresher.setRefreshing(true);
+        mAdapter = new CommitDiffAdapter();
+        mRecyclerView.setLayoutManager(new FixedLinearLayoutManger(getContext()));
+        mRecyclerView.setAdapter(mAdapter);
+        mRefresher.setOnRefreshListener(() -> {
+            ButterKnife.findById(getActivity(), R.id.commit_status).setVisibility(View.GONE);
+            mAdapter.clear();
+            Loader.getLoader(getContext()).loadCommit(new Loader.ItemLoader<Commit>() {
+                @Override
+                public void loadComplete(Commit commit) {
+                    commitLoaded(commit);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+                    mRefresher.setRefreshing(false);
+                }
+            }, mCommit.getFullRepoName(), mCommit.getSha());
+        });
+        checkSharedElementEntry();
+        mAreViewsValid = true;
+        if(mCommit != null) commitLoaded(mCommit);
+        return view;
+    }
+
+    @Override
+    public void commitLoaded(Commit commit) {
+        mCommit = commit;
+        if(!areViewsValid()) return;
+        mTitle.setMarkdown(Formatter.bold(mCommit.getMessage()));
+        final String user;
+        if(mCommit.getCommitter() != null) {
+            mAvatar.setImageUrl(mCommit.getCommitter().getAvatarUrl());
+            IntentHandler
+                    .addOnClickHandler(getActivity(), mAvatar, mCommit.getCommitter().getLogin());
+            user = String.format(getString(R.string.text_md_link),
+                    mCommit.getCommitter().getLogin(),
+                    mCommit.getCommitter().getHtmlUrl()
+            );
+        } else {
+            user = mCommit.getCommitterName();
+            IntentHandler.addOnClickHandler(getActivity(), mAvatar, user);
+        }
+        if(mCommit.getFiles() != null) {
+            final String commitText =
+                    "<br>" +
+                            getResources()
+                                    .getQuantityString(R.plurals.text_commit_additions,
+                                            mCommit.getAdditions(),
+                                            mCommit.getAdditions()
+                                    ) +
+                            "<br>" +
+                            getResources().getQuantityString(R.plurals.text_commit_deletions,
+                                    mCommit.getDeletions(), mCommit.getDeletions()
+                            ) +
+                            "<br><br>" +
+                            String.format(
+                                    getString(R.string.text_committed_by),
+                                    user,
+                                    Util.formatDateLocally(getContext(),
+                                            new Date(mCommit.getCreatedAt())
+                                    )
+                            );
+            mInfo.setMarkdown(Markdown.formatMD(commitText, mCommit.getFullRepoName()));
+            mRefresher.setRefreshing(false);
+            mAdapter.setDiffs(mCommit.getFiles());
+        }
+        Loader.getLoader(getContext()).loadCommitStatuses(new Loader.ItemLoader<CompleteStatus>() {
+            @Override
+            public void loadComplete(CompleteStatus data) {
+                if(data.getTotalCount() == 0) return; //We don't care if there is no integration
+                ButterKnife.findById(getActivity(), R.id.commit_status).setVisibility(View.VISIBLE);
+                final NetworkImageView niv = ButterKnife.findById(getActivity(), R.id.status_image);
+                final TextView status = ButterKnife.findById(getActivity(), R.id.status_state);
+                final TextView desc = ButterKnife.findById(getActivity(), R.id.status_context);
+                if("success".equals(data.getState())) {
+                    niv.setImageResource(R.drawable.ic_check);
+                } else if("pending".equals(data.getState())) {
+                    niv.setImageResource(R.drawable.ic_loading);
+                } else {
+                    niv.setImageResource(R.drawable.ic_failure);
+                }
+                status.setText(String.format(getString(R.string.text_ci_status), data.getState()));
+                final StringBuilder builder = new StringBuilder();
+                if(data.getStatuses() != null) {
+                    for(Status s : data.getStatuses()) {
+                        builder.append(
+                                String.format(getString(R.string.text_ci_info),
+                                        s.getContext(),
+                                        s.getDescription()
+                                )
+                        );
+                        builder.append('\n');
+                    }
+                }
+                desc.setText(builder.toString());
+            }
+
+            @Override
+            public void loadError(APIHandler.APIError error) {
+
+            }
+        }, mCommit.getFullRepoName(), mCommit.getSha());
+    }
+
+    private void checkSharedElementEntry() {
+        final Intent i = getActivity().getIntent();
+        if(i.hasExtra(getString(R.string.transition_card))) {
+            mHeader.getViewTreeObserver()
+                   .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                       @Override
+                       public boolean onPreDraw() {
+                           mHeader.getViewTreeObserver().removeOnPreDrawListener(this);
+                           if(i.hasExtra(getString(R.string.intent_drawable))) {
+                               mAvatar.setImageBitmap(
+                                       i.getParcelableExtra(getString(R.string.intent_drawable)));
+                           }
+                           getActivity().startPostponedEnterTransition();
+                           return true;
+                       }
+                   });
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### CommitDiffAdapter
+
+**CommitDiffAdapter.java**
+``` java
+package com.tpb.projects.commits;
+
+import android.animation.ObjectAnimator;
+import android.content.res.Resources;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import com.tpb.github.data.models.DiffFile;
+import com.tpb.projects.R;
+import com.tpb.projects.markdown.Formatter;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 01/04/17.
+ */
+
+public class CommitDiffAdapter extends RecyclerView.Adapter<CommitDiffAdapter.DiffHolder> {
+
+    private DiffFile[] mDiffs = new DiffFile[0];
+
+    public void setDiffs(DiffFile[] diffs) {
+        mDiffs = diffs;
+        notifyItemRangeInserted(0, mDiffs.length);
+    }
+
+    public void clear() {
+        final int size = mDiffs.length;
+        mDiffs = new DiffFile[0];
+        notifyItemRangeRemoved(0, size);
+    }
+
+    @Override
+    public DiffHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new DiffHolder(LayoutInflater.from(parent.getContext())
+                                            .inflate(R.layout.viewholder_diff, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(DiffHolder holder, int position) {
+        holder.mFileName.setText(mDiffs[position].getFileName());
+        final Resources res = holder.itemView.getResources();
+        holder.mInfo.setText(
+                String.format(
+                        res.getString(R.string.text_diff_changes),
+                        mDiffs[position].getStatus(),
+                        res.getQuantityString(R.plurals.text_commit_additions,
+                                mDiffs[position].getAdditions(), mDiffs[position].getAdditions()
+                        ),
+                        res.getQuantityString(R.plurals.text_commit_deletions,
+                                mDiffs[position].getDeletions(), mDiffs[position].getDeletions()
+                        )
+                )
+        );
+        if(mDiffs[position].getPatch() != null) {
+            holder.mDiff.setVisibility(View.VISIBLE);
+            holder.mDiff.setText(Formatter.buildDiffSpan(mDiffs[position].getPatch()));
+            holder.mDiff.post(() -> {
+                final int maxLines = holder.mDiff.getLineCount();
+                holder.mDiff.setMaxLines(3);
+                holder.itemView.setOnClickListener(v -> {
+                    if(holder.mDiff.getLineCount() < maxLines) {
+                        ObjectAnimator.ofInt(
+                                holder.mDiff,
+                                "maxLines",
+                                3,
+                                maxLines
+                        ).setDuration(res.getInteger(android.R.integer.config_mediumAnimTime))
+                                      .start();
+                    } else {
+                        ObjectAnimator.ofInt(
+                                holder.mDiff,
+                                "maxLines",
+                                maxLines,
+                                3
+                        ).setDuration(res.getInteger(android.R.integer.config_mediumAnimTime))
+                                      .start();
+                    }
+                });
+            });
+
+
+        } else {
+            holder.mDiff.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return mDiffs.length;
+    }
+
+    class DiffHolder extends RecyclerView.ViewHolder {
+
+        @BindView(R.id.diff_filename) TextView mFileName;
+        @BindView(R.id.diff_info) TextView mInfo;
+        @BindView(R.id.diff_diff) TextView mDiff;
+
+        DiffHolder(View itemView) {
+            super(itemView);
+            ButterKnife.bind(this, itemView);
+        }
+    }
+
+}
+
+```
+
+### CommitCommentsFragment
+
+**CommitCommentsFragment.java**
+``` java
+package com.tpb.projects.commits.fragments;
+
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.PopupMenu;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Commit;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.CommitCommentsAdapter;
+import com.tpb.projects.common.FixedLinearLayoutManger;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 30/03/17.
+ */
+
+public class CommitCommentsFragment extends CommitFragment {
+    private static final String TAG = CommitCommentsFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_recycler) RecyclerView mRecycler;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    private FloatingActionButton mFab;
+
+    private Editor mEditor;
+
+    private CommitCommentsAdapter mAdapter;
+
+    public static CommitCommentsFragment getInstance() {
+        return new CommitCommentsFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mEditor = Editor.getEditor(getContext());
+        mAdapter = new CommitCommentsAdapter(this, mRefresher);
+        mRecycler.setLayoutManager(new FixedLinearLayoutManger(getContext()));
+        mRecycler.setAdapter(mAdapter);
+
+        mAreViewsValid = true;
+        if(mFab != null) addListeners();
+        if(mCommit != null) commitLoaded(mCommit);
+        return view;
+    }
+
+    public void setFab(FloatingActionButton fab) {
+        mFab = fab;
+        if(mAreViewsValid) addListeners();
+    }
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        if(mFab != null && mAreViewsValid) addListeners();
+    }
+
+    private void addListeners() {
+        final LinearLayoutManager manager = (LinearLayoutManager) mRecycler.getLayoutManager();
+        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+                if(dy > 10) {
+                    mFab.hide(true);
+                } else if(dy < -10) {
+                    mFab.show(true);
+                }
+            }
+        });
+        mFab.setOnClickListener(v -> {
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            UI.setViewPositionForIntent(i, mFab);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
+        });
+    }
+
+    @Override
+    public void commitLoaded(Commit commit) {
+        mCommit = commit;
+        if(!areViewsValid()) return;
+        mAdapter.setCommit(mCommit);
+    }
+
+    private void createComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.createCommitComment(new Editor.CreationListener<Comment>() {
+            @Override
+            public void created(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.addComment(comment);
+                mRecycler.post(() -> mRecycler.smoothScrollToPosition(mAdapter.getItemCount()));
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mCommit.getFullRepoName(), mCommit.getSha(), comment.getBody());
+    }
+
+    private void editComment(Comment comment) {
+        mEditor.updateCommitComment(new Editor.UpdateListener<Comment>() {
+            @Override
+            public void updated(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.updateComment(comment);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mCommit.getFullRepoName(), comment.getId(), comment.getBody());
+    }
+
+    void removeComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.deleteCommitComment(new Editor.DeletionListener<Integer>() {
+            @Override
+            public void deleted(Integer id) {
+                mRefresher.setRefreshing(false);
+                mAdapter.removeComment(id);
+            }
+
+            @Override
+            public void deletionError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mCommit.getFullRepoName(), comment.getId());
+    }
+
+    public void displayCommentMenu(View view, Comment comment) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_comment);
+        if(comment.getUser().getLogin().equals(
+                GitHubSession.getSession(getContext()).getUserLogin())) {
+            menu.getMenu()
+                .add(0, R.id.menu_edit_comment, Menu.NONE, getString(R.string.menu_edit_comment));
+            menu.getMenu().add(0, R.id.menu_delete_comment, Menu.NONE,
+                    getString(R.string.menu_delete_comment)
+            );
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case R.id.menu_edit_comment:
+                    final Intent i = new Intent(getContext(), CommentEditor.class);
+                    i.putExtra(getString(R.string.parcel_comment), comment);
+                    UI.setViewPositionForIntent(i, view);
+                    startActivityForResult(i, CommentEditor.REQUEST_CODE_EDIT_COMMENT);
+                    break;
+                case R.id.menu_delete_comment:
+                    removeComment(comment);
+                    break;
+                case R.id.menu_copy_comment_text:
+                    final ClipboardManager cm = (ClipboardManager) getActivity().getSystemService(
+                            Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(ClipData.newPlainText("Comment", comment.getBody()));
+                    Toast.makeText(getContext(), getString(R.string.text_copied_to_board),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
+            if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
+                createComment(comment);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
+                mRefresher.setRefreshing(true);
+                editComment(comment);
+            }
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### CommitCommentsAdapter
+
+**CommitCommentsAdapter.java**
+``` java
+package com.tpb.projects.commits;
+
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Commit;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.commits.fragments.CommitCommentsFragment;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.markdown.Formatter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 01/04/17.
+ */
+
+public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
+    private static final String TAG = CommitCommentsAdapter.class.getSimpleName();
+
+    private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
+    private Commit mCommit;
+    private final CommitCommentsFragment mParent;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public CommitCommentsAdapter(CommitCommentsFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mRefresher = refresher;
+        mLoader = Loader.getLoader(mParent.getContext());
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            clear();
+            loadComments(true);
+        });
+    }
+
+
+    public void clear() {
+        final int oldSize = mComments.size();
+        mComments.clear();
+        notifyItemRangeRemoved(0, oldSize);
+    }
+
+    public void setCommit(Commit commit) {
+        mCommit = commit;
+        clear();
+        mPage = 1;
+        mLoader.loadCommitComments(this, mCommit.getFullRepoName(), mCommit.getSha(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<Comment> comments) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(comments.size() > 0) {
+            final int oldLength = mComments.size();
+            for(Comment c : comments) {
+                mComments.add(new Pair<>(c, null));
+            }
+            notifyItemRangeInserted(oldLength, mComments.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+        mRefresher.setRefreshing(false);
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadComments(false);
+        }
+    }
+
+    private void loadComments(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadCommitComments(this, mCommit.getFullRepoName(), mCommit.getSha(), mPage);
+    }
+
+    public void addComment(Comment comment) {
+        mComments.add(new Pair<>(comment, null));
+        notifyItemInserted(mComments.size());
+    }
+
+    public void removeComment(int commentId) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == commentId) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.remove(index);
+            notifyItemRemoved(index);
+        }
+    }
+
+    public void updateComment(Comment comment) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == comment.getId()) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.set(index, new Pair<>(comment, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    @Override
+    public CommentHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new CommentHolder(LayoutInflater.from(parent.getContext())
+                                               .inflate(R.layout.viewholder_comment, parent,
+                                                       false
+                                               ));
+
+    }
+
+    @Override
+    public void onBindViewHolder(CommentHolder holder, int position) {
+        bindComment(holder);
+    }
+
+    private void bindComment(CommentHolder commentHolder) {
+        final int pos = commentHolder.getAdapterPosition();
+        final Comment comment = mComments.get(pos).first;
+        if(mComments.get(pos).second == null) {
+            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            final StringBuilder builder = new StringBuilder();
+            builder.append(String.format(
+                    commentHolder.itemView.getResources().getString(R.string.text_comment_by),
+                    String.format(
+                            commentHolder.itemView.getResources().getString(R.string.text_href),
+                            comment.getUser().getHtmlUrl(),
+                            comment.getUser().getLogin()
+                    ),
+                    DateUtils.getRelativeTimeSpanString(comment.getCreatedAt())
+            ));
+            if(comment.getUpdatedAt() != comment.getCreatedAt()) {
+                builder.append(" • ");
+                builder.append(commentHolder.itemView.getResources()
+                                                     .getString(R.string.text_comment_edited));
+            }
+            builder.append("<br><br>");
+            builder.append(Markdown.formatMD(comment.getBody(), mCommit.getFullRepoName()));
+            if(comment.getReaction().hasReaction()) {
+                builder.append("\n");
+                builder.append(Formatter.reactions(comment.getReaction()));
+            }
+
+            commentHolder.mText.setMarkdown(
+                    builder.toString(),
+                    new HttpImageGetter(commentHolder.mText),
+                    text -> mComments.set(pos, Pair.create(comment, text))
+            );
+        } else {
+            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            commentHolder.mText.setText(mComments.get(pos).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mText);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mAvatar,
+                comment.getUser().getLogin()
+        );
+    }
+
+    @Override
+    public int getItemCount() {
+        return mComments.size();
+    }
+
+    private void displayMenu(View view, int pos) {
+        mParent.displayCommentMenu(view, mComments.get(pos).first);
+    }
+
+    class CommentHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
+        @BindView(R.id.comment_text) MarkdownTextView mText;
+        @BindView(R.id.comment_menu_button) ImageButton mMenu;
+
+        CommentHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
+            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
+        }
+
+    }
+}
+
+```
+
+<div style="page-break-after: always;"></div>
+
+## IssueActivity
+
+**IssueActivity.java**
+``` java
+package com.tpb.projects.issues;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.AppBarLayout;
+import android.support.design.widget.TabLayout;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentPagerAdapter;
+import android.support.v4.view.ViewPager;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.TextView;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.CircularRevealActivity;
+import com.tpb.projects.common.LockableViewPager;
+import com.tpb.projects.common.ShortcutDialog;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.issues.fragments.IssueCommentsFragment;
+import com.tpb.projects.issues.fragments.IssueInfoFragment;
+import com.tpb.projects.util.SettingsActivity;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 15/03/17.
+ */
+
+public class IssueActivity extends CircularRevealActivity implements Loader.ItemLoader<Issue>{
+    private static final String TAG = IssueActivity.class.getSimpleName();
+    private static final String URL = "https://raw.githubusercontent.com/tpb1908/AndroidProjectsClient/master/app/src/main/java/com/tpb/projects/issues/IssueActivity.java";
+
+
+    @BindView(R.id.issue_appbar) AppBarLayout mAppbar;
+    @BindView(R.id.issue_toolbar) Toolbar mToolbar;
+    @BindView(R.id.issue_content_viewpager) LockableViewPager mPager;
+    @BindView(R.id.issue_fragment_tabs) TabLayout mTabs;
+    @BindView(R.id.issue_number) TextView mNumber;
+    @BindView(R.id.issue_comment_fab) FloatingActionButton mFab;
+
+    private Loader mLoader;
+
+    private IssueFragmentAdapter mAdapter;
+
+    private Issue mIssue;
+    public Repository.AccessLevel mAccessLevel = Repository.AccessLevel.NONE;
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
+                .getPreferences(this);
+        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
+        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
+        setContentView(R.layout.activity_issue);
+        ButterKnife.bind(this);
+        setSupportActionBar(mToolbar);
+        getSupportActionBar().setDisplayShowTitleEnabled(false);
+
+        mLoader = Loader.getLoader(this);
+        mAdapter = new IssueFragmentAdapter(getSupportFragmentManager());
+        final Intent launchIntent = getIntent();
+        if(launchIntent.hasExtra(getString(R.string.transition_card))) {
+            postponeEnterTransition();
+        }
+        if(launchIntent.getExtras() != null && launchIntent.getExtras().containsKey(
+                getString(R.string.parcel_issue))) {
+            mIssue = launchIntent.getExtras().getParcelable(getString(R.string.parcel_issue));
+
+            loadComplete(mIssue);
+        } else {
+            final int issueNumber = launchIntent
+                    .getIntExtra(getString(R.string.intent_issue_number), -1);
+            final String fullRepoName = launchIntent
+                    .getStringExtra(getString(R.string.intent_repo));
+            mLoader.loadIssue(this, fullRepoName, issueNumber, true);
+        }
+
+        mPager.setOffscreenPageLimit(2);
+        mPager.setAdapter(mAdapter);
+        mTabs.setupWithViewPager(mPager);
+        mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
+            @Override
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                if(position == 1 && mIssue != null && !mIssue.isLocked()) {
+                    mFab.show(true);
+                } else {
+                    mFab.hide(true);
+                }
+            }
+        });
+    }
+
+    @Override
+    public void loadComplete(Issue issue) {
+        mIssue = issue;
+        mNumber.setText(String.format("#%1$s", issue.getNumber()));
+        final String login = GitHubSession.getSession(IssueActivity.this).getUserLogin();
+        if(mIssue.getOpenedBy().getLogin().equals(login)) {
+            mAccessLevel = Repository.AccessLevel.ADMIN;
+            if(mAdapter.mInfoFragment != null) mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
+        } else {
+            mLoader.checkIfCollaborator(new Loader.ItemLoader<Repository.AccessLevel>() {
+                @Override
+                public void loadComplete(Repository.AccessLevel data) {
+                    mAccessLevel = data;
+                    if(mAdapter.mInfoFragment != null)
+                        mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, GitHubSession.getSession(this).getUserLogin(), mIssue.getRepoFullName());
+        }
+
+        mAdapter.setIssue();
+    }
+
+    @Override
+    public void loadError(APIHandler.APIError error) {
+
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
+                mAdapter.mCommentsFragment.createCommentForState(
+                        data.getParcelableExtra(
+                                getString(R.string.parcel_comment)
+                        )
+                );
+            }
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_activity, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch(item.getItemId()) {
+            case R.id.menu_settings:
+                startActivity(new Intent(IssueActivity.this, SettingsActivity.class));
+                break;
+            case R.id.menu_source:
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
+                break;
+            case R.id.menu_share:
+                if(mIssue != null) {
+                    final Intent share = new Intent();
+                    share.setAction(Intent.ACTION_SEND);
+                    share.putExtra(Intent.EXTRA_TEXT,
+                            "https://github.com/" + mIssue.getRepoFullName() + "/issues/" + mIssue
+                                    .getNumber()
+                    );
+                    share.setType("text/plain");
+                    startActivity(share);
+                }
+                break;
+            case R.id.menu_save_to_homescreen:
+                final ShortcutDialog dialog = new ShortcutDialog();
+                final Bundle args = new Bundle();
+                args.putInt(getString(R.string.intent_title_res),
+                        R.string.title_save_issue_shortcut
+                );
+                args.putBoolean(getString(R.string.intent_drawable), false);
+                args.putString(getString(R.string.intent_name), "#" + mIssue.getNumber());
+
+                dialog.setArguments(args);
+                dialog.setListener((name, iconFlag) -> {
+                    final Intent i = new Intent(getApplicationContext(), IssueActivity.class);
+                    i.putExtra(getString(R.string.intent_repo), mIssue.getRepoFullName());
+                    i.putExtra(getString(R.string.intent_issue_number), mIssue.getNumber());
+
+                    final Intent add = new Intent();
+                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
+                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource
+                            .fromContext(getApplicationContext(), R.mipmap.ic_launcher));
+                    add.putExtra("duplicate", false);
+                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
+                    getApplicationContext().sendBroadcast(add);
+                });
+                dialog.show(getSupportFragmentManager(), TAG);
+                break;
+        }
+        return true;
+    }
+
+    @Override
+    public void onBackPressed() {
+        mAdapter.mInfoFragment.checkSharedElementExit();
+        super.onBackPressed();
+    }
+
+
+    private class IssueFragmentAdapter extends FragmentPagerAdapter {
+
+        IssueCommentsFragment mCommentsFragment;
+        IssueInfoFragment mInfoFragment;
+
+        IssueFragmentAdapter(FragmentManager fm) {
+            super(fm);
+        }
+
+        @Override
+        public Fragment getItem(int position) {
+            if(position == 0) {
+                mInfoFragment = IssueInfoFragment.getInstance();
+                if(mIssue != null) mInfoFragment.issueLoaded(mIssue);
+                return mInfoFragment;
+            } else {
+                mCommentsFragment = IssueCommentsFragment.getInstance(mFab);
+                if(mIssue != null) mCommentsFragment.issueLoaded(mIssue);
+                return mCommentsFragment;
+            }
+        }
+
+        void setIssue() {
+            if(mCommentsFragment != null) mCommentsFragment.issueLoaded(mIssue);
+            if(mInfoFragment != null) mInfoFragment.issueLoaded(mIssue);
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            if(position == 0) {
+                return getString(R.string.title_issue_info_fragment);
+            } else {
+                return getString(R.string.title_issue_comments_fragment);
+            }
+        }
+
+        @Override
+        public int getCount() {
+            return 2;
+        }
+    }
+}
+
+```
+
+### IssueInfoFragment
+
+**IssueInfoFragment.java**
+``` java
+package com.tpb.projects.issues.fragments;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityOptionsCompat;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.CardView;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.PopupMenu;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Milestone;
+import com.tpb.github.data.models.Repository;
+import com.tpb.github.data.models.State;
+import com.tpb.github.data.models.User;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.editors.IssueEditor;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.IssueActivity;
+import com.tpb.projects.issues.IssueEventsAdapter;
+import com.tpb.projects.markdown.Formatter;
+import com.tpb.projects.user.UserActivity;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 14/03/17.
+ */
+
+public class IssueInfoFragment extends IssueFragment {
+
+    private static final String TAG = IssueInfoFragment.class.getSimpleName();
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.issue_header_card) CardView mHeader;
+    @BindView(R.id.issue_events_recycler) RecyclerView mRecycler;
+    @BindView(R.id.issue_assignees) LinearLayout mAssigneesLayout;
+    @BindView(R.id.text_issue_assignees) View mAssigneesTitle;
+    @BindView(R.id.issue_menu_button) ImageButton mOverflowButton;
+    @BindView(R.id.issue_user_avatar) NetworkImageView mUserAvatar;
+    @BindView(R.id.issue_state) ImageView mImageState;
+    @BindView(R.id.issue_title) MarkdownTextView mTitle;
+    @BindView(R.id.issue_info) MarkdownTextView mInfo;
+    @BindView(R.id.issue_events_refresher) SwipeRefreshLayout mRefresher;
+    @BindView(R.id.viewholder_milestone_card) CardView mMilestoneCard;
+
+    private Issue mIssue;
+
+    private Repository.AccessLevel mAccessLevel = Repository.AccessLevel.NONE;
+    private Editor mEditor;
+
+    private IssueEventsAdapter mAdapter;
+
+    public static IssueInfoFragment getInstance() {
+        return new IssueInfoFragment();
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_issue_info, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        mAccessLevel = ((IssueActivity) getActivity()).mAccessLevel;
+        mEditor = Editor.getEditor(getContext());
+        mAdapter = new IssueEventsAdapter(this, mRefresher);
+        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+            }
+        });
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setLayoutManager(manager);
+
+
+        mRefresher.setOnRefreshListener(() -> {
+            mAdapter.clear();
+            Loader.getLoader(getContext()).loadIssue(new Loader.ItemLoader<Issue>() {
+                @Override
+                public void loadComplete(Issue issue) {
+                    issueLoaded(issue);
+                }
+
+                @Override
+                public void loadError(APIHandler.APIError error) {
+
+                }
+            }, mIssue.getRepoFullName(), mIssue.getNumber(), true);
+        });
+        checkSharedElementEntry();
+        if(mIssue != null) issueLoaded(mIssue);
+        return view;
+    }
+
+    private void displayIssue(Issue issue) {
+        mTitle.setMarkdown(Formatter.header(issue.getTitle(), 1));
+        mInfo.setMarkdown(
+                Formatter.buildIssueSpan(
+                        getContext(),
+                        issue,
+                        false, //Header title
+                        false, //No numbered link
+                        false, //No assignees
+                        true, //Closed at
+                        false //No comment count
+                ).toString(),
+                new HttpImageGetter(mInfo), null
+        );
+        mUserAvatar.setOnClickListener(v -> IntentHandler
+                .openUser(getActivity(), mUserAvatar, issue.getOpenedBy().getLogin()));
+        mUserAvatar.setImageUrl(issue.getOpenedBy().getAvatarUrl());
+        mImageState.setOnClickListener(v -> toggleIssueState());
+        if(issue.isClosed()) {
+            mImageState.setImageResource(R.drawable.ic_state_closed);
+        } else {
+            mImageState.setImageResource(R.drawable.ic_state_open);
+        }
+    }
+
+    private void displayAssignees(Issue issue) {
+        mAssigneesLayout.removeAllViews();
+        if(issue != null && issue.getAssignees() != null && issue.getAssignees().length > 0) {
+            mAssigneesLayout.setVisibility(View.VISIBLE);
+            mAssigneesTitle.setVisibility(View.VISIBLE);
+            for(User u : issue.getAssignees()) {
+                final LinearLayout user = (LinearLayout) getActivity().getLayoutInflater()
+                                                                      .inflate(R.layout.shard_user,
+                                                                              mAssigneesLayout,
+                                                                              false
+                                                                      );
+                user.setId(View.generateViewId());
+                mAssigneesLayout.addView(user);
+                final NetworkImageView avatar = ButterKnife.findById(user, R.id.user_avatar);
+                avatar.setId(View.generateViewId());
+                avatar.setImageUrl(u.getAvatarUrl());
+                avatar.setScaleType(ImageView.ScaleType.FIT_XY);
+                final TextView login = ButterKnife.findById(user, R.id.user_login);
+                login.setId(View.generateViewId()); //Max 10 assignees
+                login.setText(u.getLogin());
+                user.setOnClickListener((v) -> {
+                    final Intent us = new Intent(getActivity(), UserActivity.class);
+                    us.putExtra(getString(R.string.intent_username), u.getLogin());
+                    UI.setDrawableForIntent(avatar, us);
+                    getActivity().startActivity(us,
+                            ActivityOptionsCompat.makeSceneTransitionAnimation(
+                                    getActivity(),
+                                    new Pair<>(login, getString(R.string.transition_username)),
+                                    new Pair<>(avatar, getString(R.string.transition_user_image))
+                            ).toBundle()
+                    );
+                });
+            }
+        } else {
+            mAssigneesLayout.setVisibility(View.GONE);
+            mAssigneesTitle.setVisibility(View.GONE);
+        }
+    }
+
+    private void displayMilestone() {
+        if(mIssue.getMilestone() != null) {
+            mMilestoneCard.setVisibility(View.VISIBLE);
+            final Milestone milestone = mIssue.getMilestone();
+            final MarkdownTextView tv = ButterKnife
+                    .findById(mMilestoneCard, R.id.milestone_content_markdown);
+            final ImageView status = ButterKnife.findById(mMilestoneCard, R.id.milestone_drawable);
+            final NetworkImageView user = ButterKnife
+                    .findById(mMilestoneCard, R.id.milestone_user_avatar);
+            IntentHandler
+                    .addOnClickHandler(getActivity(), tv, user, milestone.getCreator().getLogin());
+            IntentHandler.addOnClickHandler(getActivity(), user, milestone.getCreator().getLogin());
+            status.setImageResource(milestone
+                    .getState() == State.OPEN ? R.drawable.ic_state_open : R.drawable.ic_state_closed);
+            user.setImageUrl(milestone.getCreator().getAvatarUrl());
+
+            final StringBuilder builder = new StringBuilder();
+
+            builder.append("<b>");
+            builder.append(Markdown.escape(milestone.getTitle()));
+            builder.append("</b>");
+            builder.append("<br>");
+            if(milestone.getOpenIssues() > 0 || milestone.getClosedIssues() > 0) {
+                builder.append("<br>");
+                builder.append(String.format(getString(R.string.text_milestone_completion),
+                        milestone.getOpenIssues(),
+                        milestone.getClosedIssues(),
+                        Math.round(100f * milestone.getClosedIssues() / (milestone
+                                .getOpenIssues() + milestone.getClosedIssues()))
+                        )
+                );
+            }
+            builder.append("<br>");
+            builder.append(
+                    String.format(
+                            getString(R.string.text_milestone_opened_by),
+                            String.format(getString(R.string.text_href),
+                                    "https://github.com/" + mIssue.getMilestone().getCreator()
+                                                                  .getLogin(),
+                                    mIssue.getMilestone().getCreator().getLogin()
+                            ),
+                            DateUtils.getRelativeTimeSpanString(milestone.getCreatedAt())
+                    )
+            );
+            if(milestone.getUpdatedAt() != milestone.getCreatedAt()) {
+                builder.append("<br>");
+                builder.append(
+                        String.format(
+                                getString(R.string.text_last_updated),
+                                DateUtils.getRelativeTimeSpanString(milestone.getUpdatedAt())
+                        )
+                );
+            }
+            if(milestone.getClosedAt() > 0) {
+                builder.append("<br>");
+                builder.append(
+                        String.format(
+                                getString(R.string.text_milestone_closed_at),
+                                DateUtils.getRelativeTimeSpanString(milestone.getClosedAt())
+                        )
+                );
+            }
+            if(milestone.getDueOn() > 0) {
+                builder.append("<br>");
+                if(System.currentTimeMillis() < milestone.getDueOn() ||
+                        (milestone.getClosedAt() != 0 && milestone.getClosedAt() < milestone
+                                .getDueOn())) {
+                    builder.append(
+                            String.format(
+                                    getString(R.string.text_milestone_due_on),
+                                    DateUtils.getRelativeTimeSpanString(milestone.getDueOn())
+                            )
+                    );
+                } else {
+                    builder.append("<font color=\"");
+                    builder.append(String.format("#%06X", (0xFFFFFF & Color.RED)));
+                    builder.append("\">");
+                    builder.append(
+                            String.format(
+                                    getString(R.string.text_milestone_due_on),
+                                    DateUtils.getRelativeTimeSpanString(milestone.getDueOn())
+                            )
+                    );
+                    builder.append("</font>");
+                }
+            }
+            tv.setMarkdown(Markdown.formatMD(builder.toString(), mIssue.getRepoFullName()));
+
+        } else {
+            mMilestoneCard.setVisibility(View.GONE);
+        }
+    }
+
+    public void updateIssue(Issue issue, String[] assignees, String[] labels) {
+        mRefresher.setRefreshing(true);
+        mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
+            int issueCreationAttempts = 0;
+
+            @Override
+            public void updated(Issue issue) {
+                int matchCount = 0;
+                if(mIssue.getAssignees() != null && issue.getAssignees() != null) {
+                    for(User u : mIssue.getAssignees()) {
+                        for(User v : mIssue.getAssignees()) {
+                            if(u.equals(v)) matchCount++;
+                        }
+                    }
+                    if(matchCount != mIssue.getAssignees().length || matchCount != issue
+                            .getAssignees().length) {
+                        displayAssignees(issue);
+                    }
+                }
+                mIssue = issue;
+                displayIssue(mIssue);
+                mRefresher.setRefreshing(false);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                } else {
+                    if(issueCreationAttempts < 5) {
+                        issueCreationAttempts++;
+                        mEditor.updateIssue(this, mIssue.getRepoFullName(), issue, assignees,
+                                labels
+                        );
+                    } else {
+                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                        mRefresher.setRefreshing(false);
+                    }
+                }
+            }
+        }, mIssue.getRepoFullName(), issue, assignees, labels);
+    }
+
+    private void editIssue(View view) {
+        final Intent i = new Intent(getContext(), IssueEditor.class);
+        i.putExtra(getString(R.string.intent_repo), mIssue.getRepoFullName());
+        i.putExtra(getString(R.string.parcel_issue), mIssue);
+        UI.setViewPositionForIntent(i, view);
+        startActivityForResult(i, IssueEditor.REQUEST_CODE_EDIT_ISSUE);
+    }
+
+    private void toggleIssueState() {
+        if(mIssue == null || mAccessLevel != Repository.AccessLevel.ADMIN) return;
+        final Editor.UpdateListener<Issue> listener = new Editor.UpdateListener<Issue>() {
+            @Override
+            public void updated(Issue issue) {
+                mIssue = issue;
+                mImageState.setImageResource(
+                        mIssue.isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+                if(error == APIHandler.APIError.NO_CONNECTION) {
+                    mRefresher.setRefreshing(false);
+                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                }
+            }
+        };
+
+        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle(R.string.title_state_change_comment);
+        builder.setPositiveButton(R.string.action_ok, (dialog, which) -> {
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE);
+            mRefresher.setRefreshing(true);
+            if(mIssue.isClosed()) {
+                mEditor.openIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            } else {
+                mEditor.closeIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            }
+        });
+        builder.setNeutralButton(R.string.action_no, (dialog, which) -> {
+            mRefresher.setRefreshing(true);
+            if(mIssue.isClosed()) {
+                mEditor.openIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            } else {
+                mEditor.closeIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
+            }
+        });
+        builder.setNegativeButton(R.string.action_cancel, null);
+        builder.create().show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == Activity.RESULT_OK) {
+            if(requestCode == IssueEditor.REQUEST_CODE_EDIT_ISSUE) {
+                final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
+                final String[] assignees;
+                final String[] labels;
+                if(data.hasExtra(getString(R.string.intent_issue_assignees))) {
+                    assignees = data
+                            .getStringArrayExtra(getString(R.string.intent_issue_assignees));
+                } else {
+                    assignees = null;
+                }
+                if(data.hasExtra(getString(R.string.intent_issue_labels))) {
+                    labels = data.getStringArrayExtra(getString(R.string.intent_issue_labels));
+                } else {
+                    labels = null;
+                }
+                updateIssue(issue, assignees, labels);
+            }
+        }
+    }
+
+    @OnClick({R.id.issue_header_card, R.id.issue_info, R.id.issue_title})
+    void onHeaderClick() {
+        if(mIssue != null && mAccessLevel == Repository.AccessLevel.ADMIN) editIssue(mInfo);
+    }
+
+    @OnClick(R.id.issue_menu_button)
+    public void displayIssueMenu(View view) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_issue);
+        if(mAccessLevel == Repository.AccessLevel.ADMIN) {
+            menu.getMenu().add(0, 1, Menu.NONE,
+                    mIssue.isClosed() ? R.string.menu_reopen_issue : R.string.menu_close_issue
+            );
+            menu.getMenu().add(0, 2, Menu.NONE, R.string.menu_edit_issue);
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case 1:
+                    toggleIssueState();
+                    break;
+                case 2:
+                    editIssue(view);
+                    break;
+                case R.id.menu_fullscreen:
+                    IntentHandler.showFullScreen(getContext(), mIssue.getBody(),
+                            mIssue.getRepoFullName(), getFragmentManager()
+                    );
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    @Override
+    public void setAccessLevel(Repository.AccessLevel level) {
+        mAccessLevel = level;
+    }
+
+    @Override
+    public void issueLoaded(Issue issue) {
+        mIssue = issue;
+        if(mAdapter != null) {
+            mAdapter.setIssue(issue);
+            displayIssue(mIssue);
+            displayAssignees(mIssue);
+            displayMilestone();
+        }
+    }
+
+    private void checkSharedElementEntry() {
+        final Intent i = getActivity().getIntent();
+        if(i.hasExtra(getString(R.string.transition_card))) {
+            mHeader.getViewTreeObserver()
+                   .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                       @Override
+                       public boolean onPreDraw() {
+                           mHeader.getViewTreeObserver().removeOnPreDrawListener(this);
+                           if(i.hasExtra(getString(R.string.intent_drawable))) {
+                               mUserAvatar.setImageBitmap(
+                                       i.getParcelableExtra(getString(R.string.intent_drawable)));
+                           }
+                           getActivity().startPostponedEnterTransition();
+                           return true;
+                       }
+                   });
+        }
+    }
+
+    public void checkSharedElementExit() {
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### IssueEventsAdapter
+
+**IssueEventsAdapter.java**
+``` java
+package com.tpb.projects.issues;
+
+import android.content.res.Resources;
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.Util;
+import com.tpb.github.data.models.DataModel;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.IssueEvent;
+import com.tpb.github.data.models.MergedModel;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.BuildConfig;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.fragments.IssueInfoFragment;
+import com.tpb.projects.markdown.Formatter;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 15/03/17.
+ */
+
+public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.EventHolder> implements Loader.ListLoader<IssueEvent> {
+    private static final String TAG = IssueEventsAdapter.class.getSimpleName();
+
+    private final ArrayList<Pair<DataModel, SpannableString>> mEvents = new ArrayList<>();
+    private Issue mIssue;
+    private final IssueInfoFragment mParent;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public IssueEventsAdapter(IssueInfoFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mLoader = Loader.getLoader(parent.getContext());
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            notifyDataSetChanged();
+            loadEvents(true);
+        });
+    }
+
+    public void clear() {
+        mEvents.clear();
+        notifyDataSetChanged();
+    }
+
+    public void setIssue(Issue issue) {
+        mIssue = issue;
+        mEvents.clear();
+        mPage = 1;
+        mLoader.loadEvents(this, issue.getRepoFullName(), issue.getNumber(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<IssueEvent> events) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(events.size() > 0) {
+            int oldLength = mEvents.size();
+            if(mPage == 1) mEvents.clear();
+            for(DataModel dm : Util.mergeModels(events, comparator)) {
+                mEvents.add(new Pair<>(dm, null));
+            }
+            notifyItemRangeInserted(oldLength, mEvents.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    private static Comparator<DataModel> comparator = (o1, o2) ->
+            o1 instanceof IssueEvent &&
+                    o2 instanceof IssueEvent &&
+                    o1.getCreatedAt() == o2.getCreatedAt() &&
+                    ((IssueEvent) o1).getEvent() == ((IssueEvent) o2).getEvent()
+                    ? 0 : -1;
+
+
+    private ArrayList<DataModel> mergeEvents(List<IssueEvent> events) {
+        final ArrayList<DataModel> merged = new ArrayList<>();
+        ArrayList<IssueEvent> toMerge = new ArrayList<>();
+        IssueEvent last = new IssueEvent();
+        for(int i = 0; i < events.size(); i++) {
+            //If we have two of the same event, happening at the same time
+            if(events.get(i).getCreatedAt() == last.getCreatedAt() && events.get(i)
+                                                                            .getEvent() == last
+                    .getEvent()) {
+                /*If multiple events (labels or assignees) were added as the first event,
+                * then we need to stop the first item being duplicated
+                 */
+                if(merged.size() == 1 && merged.get(0).equals(events.get(i - 1))) merged.remove(0);
+                toMerge.add(events.get(i - 1)); //Add the previous event
+                int j = i;
+                //Loop until we find an event which shouldn't be merged
+                while(j < events.size() && events.get(j).getCreatedAt() == last
+                        .getCreatedAt() && events.get(j).getEvent() == last.getEvent()) {
+                    toMerge.add(events.get(j++));
+                }
+                i = j - 1; //Jump to the end of the merged positions
+                merged.add(new MergedModel<IssueEvent>(toMerge));
+                toMerge = new ArrayList<>(); //Reset the list of merged events
+            } else {
+                merged.add(events.get(i));
+            }
+            last = events.get(i); //Set the last event
+        }
+        return merged;
+
+    }
+
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadEvents(false);
+        }
+    }
+
+    private void loadEvents(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadEvents(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
+    }
+
+    void addEvent(IssueEvent event) {
+        mEvents.add(new Pair<>(event, null));
+        notifyItemInserted(mEvents.size());
+    }
+
+    @Override
+    public EventHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new EventHolder(LayoutInflater.from(parent.getContext())
+                                             .inflate(R.layout.viewholder_event, parent, false));
+    }
+
+    @Override
+    public void onBindViewHolder(EventHolder holder, int position) {
+        if(mEvents.get(position).first instanceof IssueEvent) {
+            bindEvent(holder, (IssueEvent) mEvents.get(position).first);
+        } else if(mEvents.get(position).first instanceof MergedModel) {
+            bindMergedEvent(holder, (MergedModel<IssueEvent>) mEvents.get(position).first);
+        }
+    }
+
+    private void bindMergedEvent(EventHolder eventHolder, MergedModel<IssueEvent> me) {
+        String text;
+        final Resources res = eventHolder.itemView.getResources();
+        switch(me.getData().get(0).getEvent()) {
+            case ASSIGNED:
+                final StringBuilder assignees = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    assignees.append(String.format(res.getString(R.string.text_href),
+                            e.getActor().getHtmlUrl(),
+                            e.getActor().getLogin()
+                    ));
+                    assignees.append(", ");
+                }
+                assignees.setLength(assignees.length() - 2); //Remove final comma
+                text = String.format(res.getString(R.string.text_event_assigned_multiple),
+                        assignees.toString()
+                );
+                break;
+            case UNASSIGNED:
+                final StringBuilder unassignees = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    unassignees.append(String.format(res.getString(R.string.text_href),
+                            e.getActor().getHtmlUrl(),
+                            e.getActor().getLogin()
+                    ));
+                    unassignees.append(", ");
+                }
+                unassignees.setLength(unassignees.length() - 2); //Remove final comma
+                text = String.format(res.getString(R.string.text_event_unassigned_multiple),
+                        unassignees.toString()
+                );
+                break;
+            case REVIEW_REQUESTED:
+                final StringBuilder requested = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    requested.append(String.format(res.getString(R.string.text_href),
+                            e.getRequestedReviewer().getHtmlUrl(),
+                            e.getRequestedReviewer().getLogin()
+                    ));
+                    requested.append(", ");
+                }
+                requested.setLength(requested.length() - 2); //Remove final comma
+                text = String.format(res.getString(R.string.text_event_review_requested_multiple),
+                        String.format(res.getString(R.string.text_href),
+                                me.getData().get(0).getReviewRequester().getHtmlUrl(),
+                                me.getData().get(0).getReviewRequester().getLogin()
+                        ),
+                        requested.toString()
+                );
+                break;
+            case REVIEW_REQUEST_REMOVED:
+                final StringBuilder derequested = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    derequested.append(String.format(res.getString(R.string.text_href),
+                            e.getReviewRequester().getHtmlUrl(),
+                            e.getReviewRequester().getLogin()
+                    ));
+                    derequested.append(", ");
+                }
+                derequested.setLength(derequested.length() - 2); //Remove final comma
+                text = String
+                        .format(res.getString(R.string.text_event_review_request_removed_multiple),
+                                String.format(res.getString(R.string.text_href),
+                                        me.getData().get(0).getActor().getHtmlUrl(),
+                                        me.getData().get(0).getActor().getLogin()
+                                ),
+                                derequested.toString()
+                        );
+                break;
+            case LABELED:
+                final StringBuilder labels = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    labels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
+                    labels.append("&nbsp;");
+                }
+                labels.setLength(labels.length() - "&nbsp;".length());
+                text = String.format(
+                        res.getString(R.string.text_event_labels_added),
+                        String.format(res.getString(R.string.text_href),
+                                me.getData().get(0).getActor().getHtmlUrl(),
+                                me.getData().get(0).getActor().getLogin()
+                        ),
+                        labels.toString()
+                );
+                break;
+            case UNLABELED:
+                final StringBuilder unlabels = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    unlabels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
+                    unlabels.append("&nbsp;");
+                }
+                unlabels.setLength(unlabels.length() - 2);
+                text = String.format(res.getString(R.string.text_event_labels_removed),
+                        String.format(res.getString(R.string.text_href),
+                                me.getData().get(0).getActor().getHtmlUrl(),
+                                me.getData().get(0).getActor().getLogin()
+                        ),
+                        unlabels.toString()
+                );
+                break;
+            case CLOSED:
+                //Duplicate close events seem to happen
+                bindEvent(eventHolder, me.getData().get(0));
+                return;
+            case REFERENCED:
+                final StringBuilder commits = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    commits.append("<br>");
+                    commits.append(String.format(res.getString(R.string.text_href),
+                            "https://github.com/" + mIssue.getRepoFullName() + "/commit/" + e
+                                    .getCommitId(),
+                            String.format(res.getString(R.string.text_commit), e.getShortCommitId())
+                    ));
+                }
+                commits.append("<br>");
+                text = String.format(res.getString(R.string.text_event_referenced_multiple),
+                        commits.toString()
+                );
+                break;
+            case MENTIONED:
+                final StringBuilder mentioned = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    mentioned.append("<br>");
+                    mentioned.append(String.format(res.getString(R.string.text_href),
+                            e.getActor().getHtmlUrl(),
+                            e.getActor().getLogin()
+                    ));
+                }
+                text = String.format(res.getString(R.string.text_event_mentioned_multiple),
+                        mentioned.toString()
+                );
+                break;
+            case RENAMED:
+                final StringBuilder named = new StringBuilder();
+                for(IssueEvent e : me.getData()) {
+                    named.append("<br>");
+                    named.append(
+                            String.format(
+                                    res.getString(R.string.text_event_rename_multiple),
+                                    e.getRenameFrom(),
+                                    e.getRenameTo()
+                            )
+                    );
+                }
+                text = String.format(res.getString(R.string.text_event_renamed_multiple),
+                        named.toString()
+                );
+                break;
+            case MOVED_COLUMNS_IN_PROJECT:
+                text = res.getString(R.string.text_event_moved_columns_in_project_multiple);
+                break;
+            default:
+                bindEvent(eventHolder, me.getData().get(0));
+                return;
+        }
+        text += " • " + DateUtils.getRelativeTimeSpanString(me.getCreatedAt());
+        eventHolder.mText.setMarkdown(
+                text,
+                new HttpImageGetter(eventHolder.mText),
+                null
+        );
+        if(me.getData().get(0).getActor() != null) {
+            eventHolder.mAvatar.setVisibility(View.VISIBLE);
+            eventHolder.mAvatar.setImageUrl(me.getData().get(0).getActor().getAvatarUrl());
+            IntentHandler.addOnClickHandler(
+                    mParent.getActivity(),
+                    eventHolder.mAvatar, me.getData().get(0).getActor().getLogin()
+            );
+            IntentHandler.addOnClickHandler(mParent.getActivity(),
+                    eventHolder.mText,
+                    eventHolder.mAvatar,
+                    me.getData().get(0).getActor().getLogin()
+            );
+        } else {
+            eventHolder.mAvatar.setVisibility(View.GONE);
+        }
+    }
+
+    private void bindEvent(EventHolder eventHolder, IssueEvent event) {
+        String text;
+        final Resources res = eventHolder.itemView.getResources();
+        switch(event.getEvent()) {
+            case CLOSED:
+                if(event.getShortCommitId() != null) {
+                    text = String.format(res.getString(R.string.text_event_closed_in),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            ),
+                            String.format(res.getString(R.string.text_href),
+                                    "https://github.com/" + mIssue
+                                            .getRepoFullName() + "/commit/" + event.getCommitId(),
+                                    String.format(res.getString(R.string.text_commit),
+                                            event.getShortCommitId()
+                                    )
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_closed),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                }
+                break;
+            case REOPENED:
+                text = String.format(res.getString(R.string.text_event_reopened),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case SUBSCRIBED:
+                text = String.format(res.getString(R.string.text_event_subscribed),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case MERGED:
+                text = String.format(res.getString(R.string.text_event_merged),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        String.format(res.getString(R.string.text_href),
+                                "https://github.com/" + mIssue
+                                        .getRepoFullName() + "/commit/" + event.getCommitId(),
+                                String.format(res.getString(R.string.text_commit),
+                                        event.getShortCommitId()
+                                )
+                        )
+                );
+                break;
+            case REFERENCED:
+                text = String.format(res.getString(R.string.text_event_referenced),
+                        String.format(res.getString(R.string.text_href),
+                                "https://github.com/" + mIssue
+                                        .getRepoFullName() + "/commit/" + event.getCommitId(),
+                                String.format(res.getString(R.string.text_commit),
+                                        event.getShortCommitId()
+                                )
+                        )
+                );
+                break;
+            case MENTIONED:
+                text = String.format(res.getString(R.string.text_event_mentioned),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case ASSIGNED:
+                if(event.getAssignee() != null && event.getActor().equals(event.getAssignee())) {
+                    text = String.format(res.getString(R.string.text_event_assigned_themselves),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_assigned),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                }
+                break;
+            case UNASSIGNED:
+                if(event.getAssignee() != null && event.getActor().equals(event.getAssignee())) {
+                    text = String.format(res.getString(R.string.text_event_unassigned_themselves),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_unassigned),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            )
+                    );
+                }
+                break;
+            case LABELED:
+                text = String.format(res.getString(R.string.text_event_labeled),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        Formatter.getLabelString(event.getLabelName(), event.getLabelColor())
+                );
+                break;
+            case UNLABELED:
+                text = String.format(res.getString(R.string.text_event_unlabeled),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        Formatter.getLabelString(event.getLabelName(), event.getLabelColor())
+                );
+                break;
+            case MILESTONED:
+                text = "Milestoned"; //TODO
+                break;
+            case DEMILESTONED:
+                text = "De-milestoned"; //TODO
+                break;
+            case RENAMED:
+                text = String.format(res.getString(R.string.text_event_renamed),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        ),
+                        event.getRenameFrom(),
+                        event.getRenameTo()
+                );
+                break;
+            case LOCKED:
+                text = String.format(res.getString(R.string.text_event_locked),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case UNLOCKED:
+                text = String.format(res.getString(R.string.text_event_unlocked),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case HEAD_REF_DELETED:
+                text = res.getString(R.string.text_event_head_ref_deleted);
+                break;
+            case HEAD_REF_RESTORED:
+                text = res.getString(R.string.text_event_head_ref_restored);
+                break;
+            case REVIEW_DISMISSED:
+                text = String.format(res.getString(R.string.text_event_review_dismissed),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case REVIEW_REQUESTED:
+                if(event.getReviewRequester().getId() == event.getRequestedReviewer().getId()) {
+                    text = String.format(res.getString(R.string.text_event_own_review_request),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getReviewRequester().getHtmlUrl(),
+                                    event.getReviewRequester().getLogin()
+                            )
+                    );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_review_requested),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getReviewRequester().getHtmlUrl(),
+                                    event.getReviewRequester().getLogin()
+                            ),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getRequestedReviewer().getHtmlUrl(),
+                                    event.getRequestedReviewer().getLogin()
+                            )
+                    );
+                }
+                break;
+            case REVIEW_REQUEST_REMOVED:
+                if(event.getReviewRequester().getId() == event.getRequestedReviewer().getId()) {
+                    text = String
+                            .format(res.getString(R.string.text_event_removed_own_review_request),
+                                    String.format(res.getString(R.string.text_href),
+                                            event.getReviewRequester().getHtmlUrl(),
+                                            event.getReviewRequester().getLogin()
+                                    )
+                            );
+                } else {
+                    text = String.format(res.getString(R.string.text_event_review_request_removed),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getActor().getHtmlUrl(),
+                                    event.getActor().getLogin()
+                            ),
+                            String.format(res.getString(R.string.text_href),
+                                    event.getRequestedReviewer().getHtmlUrl(),
+                                    event.getRequestedReviewer().getLogin()
+                            )
+                    );
+                }
+                break;
+            case REMOVED_FROM_PROJECT:
+                text = String.format(res.getString(R.string.text_event_removed_from_project),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case ADDED_TO_PROJECT:
+                text = String.format(res.getString(R.string.text_event_added_to_project),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
+                break;
+            case MOVED_COLUMNS_IN_PROJECT:
+                text = res.getString(R.string.text_event_moved_columns_in_project);
+                break;
+            default:
+                text = "An event type hasn't been implemented " + event.getEvent();
+                text += "\nTell me here " + BuildConfig.BUG_EMAIL;
+        }
+        text += " • " + DateUtils.getRelativeTimeSpanString(event.getCreatedAt());
+        eventHolder.mText.setMarkdown(
+                text,
+                new HttpImageGetter(eventHolder.mText),
+                null
+        );
+        if(event.getActor() != null) {
+            eventHolder.mAvatar.setVisibility(View.VISIBLE);
+            eventHolder.mAvatar.setImageUrl(event.getActor().getAvatarUrl());
+            IntentHandler.addOnClickHandler(mParent.getActivity(), eventHolder.mAvatar,
+                    event.getActor().getLogin()
+            );
+            IntentHandler.addOnClickHandler(mParent.getActivity(), eventHolder.mText,
+                    eventHolder.mAvatar, event.getActor().getLogin()
+            );
+        } else {
+            eventHolder.mAvatar.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return mEvents.size();
+    }
+
+
+    class EventHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.event_text) MarkdownTextView mText;
+        @BindView(R.id.event_user_avatar) NetworkImageView mAvatar;
+
+        EventHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+        }
+
+    }
+
+
+}
+
+```
+
+### IssueCommentsFragment
+
+**IssueCommentsFragment.java**
+``` java
+package com.tpb.projects.issues.fragments;
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.PopupMenu;
+import android.widget.Toast;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Editor;
+import com.tpb.github.data.auth.GitHubSession;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.github.data.models.Repository;
+import com.tpb.projects.R;
+import com.tpb.projects.common.fab.FloatingActionButton;
+import com.tpb.projects.editors.CommentEditor;
+import com.tpb.projects.issues.IssueCommentsAdapter;
+import com.tpb.projects.util.UI;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
+
+/**
+ * Created by theo on 14/03/17.
+ */
+
+public class IssueCommentsFragment extends IssueFragment {
+
+    private Unbinder unbinder;
+
+    @BindView(R.id.fragment_recycler) RecyclerView mRecycler;
+    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
+    private FloatingActionButton mFab;
+
+    private IssueCommentsAdapter mAdapter;
+
+    private Editor mEditor;
+
+    private Repository.AccessLevel mAccessLevel;
+    private Issue mIssue;
+
+    public static IssueCommentsFragment getInstance(FloatingActionButton fab) {
+        final IssueCommentsFragment frag = new IssueCommentsFragment();
+        frag.mFab = fab;
+        return frag;
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mEditor = Editor.getEditor(getContext());
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
+        unbinder = ButterKnife.bind(this, view);
+        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
+                    mAdapter.notifyBottomReached();
+                }
+                if(dy > 10) {
+                    mFab.hide(true);
+                } else if(dy < -10 && mIssue != null && !mIssue.isLocked()) {
+                    mFab.show(true);
+                }
+            }
+        });
+        mFab.setOnClickListener(v -> {
+            final Intent i = new Intent(getContext(), CommentEditor.class);
+            UI.setViewPositionForIntent(i, mFab);
+            startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
+        });
+        mAdapter = new IssueCommentsAdapter(this, mRefresher);
+        if(mIssue != null) mAdapter.setIssue(mIssue);
+        if(mAccessLevel != null && mAccessLevel == Repository.AccessLevel.ADMIN) {
+            mFab.setVisibility(View.VISIBLE);
+        }
+        mRecycler.setAdapter(mAdapter);
+        mRecycler.setLayoutManager(manager);
+        mRefresher.setOnRefreshListener(() -> {
+            mAdapter.clear();
+            mAdapter.setIssue(mIssue);
+        });
+
+        return view;
+    }
+
+    @Override
+    public void issueLoaded(Issue issue) {
+        mIssue = issue;
+        if(mAdapter != null) mAdapter.setIssue(issue);
+    }
+
+    @Override
+    public void setAccessLevel(Repository.AccessLevel level) {
+        mAccessLevel = level;
+        if(mAccessLevel == Repository.AccessLevel.ADMIN && mIssue != null && !mIssue.isLocked()) {
+            mFab.setVisibility(View.VISIBLE);
+            mFab.show(true);
+        }
+    }
+
+    private void createComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.createIssueComment(new Editor.CreationListener<Comment>() {
+            @Override
+            public void created(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.addComment(comment);
+                mRecycler.post(() -> mRecycler.smoothScrollToPosition(mAdapter.getItemCount()));
+            }
+
+            @Override
+            public void creationError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mIssue.getRepoFullName(), mIssue.getNumber(), comment.getBody());
+    }
+
+    public void createCommentForState(Comment comment) {
+        createComment(comment);
+    }
+
+    private void editComment(Comment comment) {
+        mEditor.updateIssueComment(new Editor.UpdateListener<Comment>() {
+            @Override
+            public void updated(Comment comment) {
+                mRefresher.setRefreshing(false);
+                mAdapter.updateComment(comment);
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mIssue.getRepoFullName(), comment.getId(), comment.getBody());
+    }
+
+    void removeComment(Comment comment) {
+        mRefresher.setRefreshing(true);
+        mEditor.deleteIssueComment(new Editor.DeletionListener<Integer>() {
+            @Override
+            public void deleted(Integer id) {
+                mRefresher.setRefreshing(false);
+                mAdapter.removeComment(id);
+            }
+
+            @Override
+            public void deletionError(APIHandler.APIError error) {
+                mRefresher.setRefreshing(false);
+            }
+        }, mIssue.getRepoFullName(), comment.getId());
+    }
+
+    public void displayCommentMenu(View view, Comment comment) {
+        final PopupMenu menu = new PopupMenu(getContext(), view);
+        menu.inflate(R.menu.menu_comment);
+        if(comment.getUser().getLogin().equals(
+                GitHubSession.getSession(getContext()).getUserLogin()) && !mIssue.isLocked()) {
+            menu.getMenu()
+                .add(0, R.id.menu_edit_comment, Menu.NONE, getString(R.string.menu_edit_comment));
+            menu.getMenu().add(0, R.id.menu_delete_comment, Menu.NONE,
+                    getString(R.string.menu_delete_comment)
+            );
+        }
+        menu.setOnMenuItemClickListener(menuItem -> {
+            switch(menuItem.getItemId()) {
+                case R.id.menu_edit_comment:
+                    final Intent i = new Intent(getContext(), CommentEditor.class);
+                    i.putExtra(getString(R.string.parcel_comment), comment);
+                    UI.setViewPositionForIntent(i, view);
+                    startActivityForResult(i, CommentEditor.REQUEST_CODE_EDIT_COMMENT);
+                    break;
+                case R.id.menu_delete_comment:
+                    removeComment(comment);
+                    break;
+                case R.id.menu_copy_comment_text:
+                    final ClipboardManager cm = (ClipboardManager) getActivity()
+                            .getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(ClipData.newPlainText("Comment", comment.getBody()));
+                    Toast.makeText(getContext(), getString(R.string.text_copied_to_board),
+                            Toast.LENGTH_SHORT
+                    ).show();
+                    break;
+            }
+            return false;
+        });
+        menu.show();
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(resultCode == AppCompatActivity.RESULT_OK) {
+            final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
+            if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
+                createComment(comment);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
+                mRefresher.setRefreshing(true);
+                editComment(comment);
+            } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
+                createCommentForState(comment);
+            }
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        unbinder.unbind();
+    }
+}
+
+```
+
+#### IssueCommentsAdapter
+
+**IssueCommentsAdapter.java**
+``` java
+package com.tpb.projects.issues;
+
+import android.support.v4.util.Pair;
+import android.support.v4.widget.SwipeRefreshLayout;
+import android.support.v7.widget.RecyclerView;
+import android.text.SpannableString;
+import android.text.format.DateUtils;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageButton;
+
+import com.tpb.github.data.APIHandler;
+import com.tpb.github.data.Loader;
+import com.tpb.github.data.models.Comment;
+import com.tpb.github.data.models.Issue;
+import com.tpb.mdtext.Markdown;
+import com.tpb.mdtext.imagegetter.HttpImageGetter;
+import com.tpb.mdtext.views.MarkdownTextView;
+import com.tpb.projects.R;
+import com.tpb.projects.common.NetworkImageView;
+import com.tpb.projects.flow.IntentHandler;
+import com.tpb.projects.issues.fragments.IssueCommentsFragment;
+import com.tpb.projects.markdown.Formatter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+/**
+ * Created by theo on 14/03/17.
+ */
+
+public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
+
+    private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
+    private Issue mIssue;
+    private final IssueCommentsFragment mParent;
+
+    private int mPage = 1;
+    private boolean mIsLoading = false;
+    private boolean mMaxPageReached = false;
+
+    private SwipeRefreshLayout mRefresher;
+    private Loader mLoader;
+
+    public IssueCommentsAdapter(IssueCommentsFragment parent, SwipeRefreshLayout refresher) {
+        mParent = parent;
+        mLoader = Loader.getLoader(parent.getContext());
+        mRefresher = refresher;
+        mRefresher.setRefreshing(true);
+        mRefresher.setOnRefreshListener(() -> {
+            mPage = 1;
+            mMaxPageReached = false;
+            clear();
+            loadComments(true);
+        });
+    }
+
+    public void clear() {
+        final int oldSize = mComments.size();
+        mComments.clear();
+        notifyItemRangeRemoved(0, oldSize);
+    }
+
+    public void setIssue(Issue issue) {
+        mIssue = issue;
+        clear();
+        mPage = 1;
+        mLoader.loadIssueComments(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
+    }
+
+    @Override
+    public void listLoadComplete(List<Comment> data) {
+        mRefresher.setRefreshing(false);
+        mIsLoading = false;
+        if(data.size() > 0) {
+            int oldLength = mComments.size();
+            for(Comment c : data) {
+                mComments.add(new Pair<>(c, null));
+            }
+            notifyItemRangeInserted(oldLength, mComments.size());
+        } else {
+            mMaxPageReached = true;
+        }
+    }
+
+    @Override
+    public void listLoadError(APIHandler.APIError error) {
+
+    }
+
+    public void notifyBottomReached() {
+        if(!mIsLoading && !mMaxPageReached) {
+            mPage++;
+            loadComments(false);
+        }
+    }
+
+    private void loadComments(boolean resetPage) {
+        mIsLoading = true;
+        mRefresher.setRefreshing(true);
+        if(resetPage) {
+            mPage = 1;
+            mMaxPageReached = false;
+        }
+        mLoader.loadIssueComments(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
+    }
+
+    public void addComment(Comment comment) {
+        mComments.add(new Pair<>(comment, null));
+        notifyItemInserted(mComments.size());
+    }
+
+    public void removeComment(int commentId) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == commentId) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.remove(index);
+            notifyItemRemoved(index);
+        }
+    }
+
+    public void updateComment(Comment comment) {
+        int index = -1;
+        for(int i = 0; i < mComments.size(); i++) {
+            if(mComments.get(i).first.getId() == comment.getId()) {
+                index = i;
+                break;
+            }
+        }
+        if(index != -1) {
+            mComments.set(index, new Pair<>(comment, null));
+            notifyItemChanged(index);
+        }
+    }
+
+    @Override
+    public CommentHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        return new CommentHolder(LayoutInflater.from(parent.getContext())
+                                               .inflate(R.layout.viewholder_comment, parent,
+                                                       false
+                                               ));
+
+    }
+
+    @Override
+    public void onBindViewHolder(CommentHolder holder, int position) {
+        final int pos = holder.getAdapterPosition();
+        final Comment comment = mComments.get(pos).first;
+        if(mComments.get(pos).second == null) {
+            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            final StringBuilder builder = new StringBuilder();
+            builder.append(String.format(
+                    holder.itemView.getResources().getString(R.string.text_comment_by),
+                    String.format(
+                            holder.itemView.getResources().getString(R.string.text_href),
+                            comment.getUser().getHtmlUrl(),
+                            comment.getUser().getLogin()
+                    ),
+                    DateUtils.getRelativeTimeSpanString(comment.getCreatedAt())
+            ));
+            if(comment.getUpdatedAt() != comment.getCreatedAt()) {
+                builder.append(" • ");
+                builder.append(holder.itemView.getResources()
+                                                     .getString(R.string.text_comment_edited));
+            }
+            builder.append("<br><br>");
+            builder.append(Markdown.formatMD(comment.getBody(), mIssue.getRepoFullName()));
+            if(comment.hasReaction()) {
+                builder.append("\n");
+                builder.append(Formatter.reactions(comment.getReaction()));
+            }
+
+            holder.mText.setMarkdown(
+                    builder.toString(),
+                    new HttpImageGetter(holder.mText),
+                    text -> mComments.set(pos, Pair.create(comment, text))
+            );
+        } else {
+            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
+            holder.mText.setText(mComments.get(pos).second);
+        }
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mText);
+        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mAvatar,
+                comment.getUser().getLogin()
+        );
+    }
+
+    @Override
+    public int getItemCount() {
+        return mComments.size();
+    }
+
+    private void displayMenu(View view, int pos) {
+        mParent.displayCommentMenu(view, mComments.get(pos).first);
+    }
+
+    class CommentHolder extends RecyclerView.ViewHolder {
+        @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
+        @BindView(R.id.comment_text) MarkdownTextView mText;
+        @BindView(R.id.comment_menu_button) ImageButton mMenu;
+
+        CommentHolder(View view) {
+            super(view);
+            ButterKnife.bind(this, view);
+            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
+            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
+        }
+
+    }
+}
+
+```
+
+<div style="page-break-after: always;"></div>
 
 ## ProjectActivity
 
@@ -19520,2795 +22444,7 @@ class ProjectSearchAdapter extends ArrayAdapter<Card> {
 }
 ```
 
-## CommitActivity
 
-**CommitActivity.java**
-``` java
-package com.tpb.projects.commits;
-
-import android.content.Intent;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.design.widget.TabLayout;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.widget.TextView;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.models.Commit;
-import com.tpb.projects.R;
-import com.tpb.projects.commits.fragments.CommitCommentsFragment;
-import com.tpb.projects.commits.fragments.CommitInfoFragment;
-import com.tpb.projects.common.CircularRevealActivity;
-import com.tpb.projects.common.fab.FloatingActionButton;
-import com.tpb.projects.util.SettingsActivity;
-import com.tpb.projects.util.UI;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-
-/**
- * Created by theo on 30/03/17.
- */
-
-public class CommitActivity extends CircularRevealActivity implements Loader.ItemLoader<Commit> {
-    private static final String TAG = CommitActivity.class.getSimpleName();
-
-    @BindView(R.id.commit_hash) TextView mHash;
-    @BindView(R.id.commit_comment_fab) FloatingActionButton mFab;
-    @BindView(R.id.commit_fragment_tabs) TabLayout mTabs;
-    @BindView(R.id.commit_content_viewpager) ViewPager mPager;
-
-    private CommitPagerAdapter mAdapter;
-
-    private Commit mCommit;
-
-    @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
-                .getPreferences(this);
-        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
-        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
-        setContentView(R.layout.activity_commit);
-        ButterKnife.bind(this);
-
-        mAdapter = new CommitPagerAdapter(getSupportFragmentManager());
-
-        mPager.setOffscreenPageLimit(2);
-        mPager.setAdapter(mAdapter);
-        mTabs.setupWithViewPager(mPager);
-        mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
-            @Override
-            public void onPageSelected(int position) {
-                super.onPageSelected(position);
-                if(position == 1) {
-                    mFab.show(true);
-                } else {
-                    mFab.hide(true);
-                }
-            }
-        });
-
-        final Intent launchIntent = getIntent();
-        if(launchIntent.hasExtra(getString(R.string.transition_card))) {
-            postponeEnterTransition();
-        }
-        if(launchIntent.hasExtra(getString(R.string.parcel_commit))) {
-            mCommit = launchIntent.getParcelableExtra(getString(R.string.parcel_commit));
-            loadComplete(mCommit);
-            Loader.getLoader(this).loadCommit(this, mCommit.getFullRepoName(), mCommit.getSha());
-        } else if(launchIntent.hasExtra(getString(R.string.intent_commit_sha))) {
-            Loader.getLoader(this).loadCommit(this,
-                    launchIntent.getStringExtra(getString(R.string.intent_repo)),
-                    launchIntent.getStringExtra(getString(R.string.intent_commit_sha))
-            );
-        }
-
-    }
-
-    @Override
-    public void loadComplete(Commit data) {
-        mCommit = data;
-        mHash.setText(com.tpb.github.data.Util.shortenSha(mCommit.getSha()));
-        mAdapter.notifyCommitLoaded();
-    }
-
-    @Override
-    public void loadError(APIHandler.APIError error) {
-
-    }
-
-    private class CommitPagerAdapter extends FragmentPagerAdapter {
-
-        private CommitInfoFragment mInfoFragment;
-        private CommitCommentsFragment mCommentsFragment;
-
-        CommitPagerAdapter(FragmentManager fm) {
-            super(fm);
-        }
-
-        @Override
-        public Fragment getItem(int position) {
-            if(position == 0) {
-                mInfoFragment = CommitInfoFragment.getInstance();
-                return mInfoFragment;
-            } else {
-                mCommentsFragment = CommitCommentsFragment.getInstance();
-                if(mFab != null) mCommentsFragment.setFab(mFab);
-                return mCommentsFragment;
-            }
-        }
-
-        void attachFragment(Fragment fragment) {
-            if(fragment instanceof CommitInfoFragment)
-                mInfoFragment = (CommitInfoFragment) fragment;
-            if(fragment instanceof CommitCommentsFragment)
-                mCommentsFragment = (CommitCommentsFragment) fragment;
-        }
-
-        void notifyCommitLoaded() {
-            if(mInfoFragment != null) mInfoFragment.commitLoaded(mCommit);
-            if(mCommentsFragment != null) mCommentsFragment.commitLoaded(mCommit);
-        }
-
-        @Override
-        public CharSequence getPageTitle(int position) {
-            if(position == 0) {
-                return getString(R.string.title_commit_info);
-            } else {
-                return getString(R.string.title_commit_comments);
-            }
-        }
-
-        @Override
-        public int getCount() {
-            return 2;
-        }
-    }
-
-}
-
-```
-
-### CommitInfoFragment
-
-**CommitInfoFragment.java**
-``` java
-package com.tpb.projects.commits.fragments;
-
-import android.content.Intent;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.widget.NestedScrollView;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
-import android.widget.TextView;
-
-import com.tpb.animatingrecyclerview.AnimatingRecyclerView;
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.models.Commit;
-import com.tpb.github.data.models.CompleteStatus;
-import com.tpb.github.data.models.Status;
-import com.tpb.mdtext.Markdown;
-import com.tpb.mdtext.views.MarkdownTextView;
-import com.tpb.projects.R;
-import com.tpb.projects.commits.CommitDiffAdapter;
-import com.tpb.projects.common.FixedLinearLayoutManger;
-import com.tpb.projects.common.NetworkImageView;
-import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.markdown.Formatter;
-import com.tpb.projects.util.Util;
-
-import java.util.Date;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.Unbinder;
-
-/**
- * Created by theo on 30/03/17.
- */
-
-public class CommitInfoFragment extends CommitFragment {
-    private static final String TAG = CommitInfoFragment.class.getSimpleName();
-
-    private Unbinder unbinder;
-
-    @BindView(R.id.commit_header_card) View mHeader;
-    @BindView(R.id.commit_title) MarkdownTextView mTitle;
-    @BindView(R.id.commit_user_avatar) NetworkImageView mAvatar;
-    @BindView(R.id.commit_info) MarkdownTextView mInfo;
-    @BindView(R.id.commit_info_refresher) SwipeRefreshLayout mRefresher;
-    @BindView(R.id.commit_info_scrollview) NestedScrollView mScrollView;
-    @BindView(R.id.commit_diff_recycler) AnimatingRecyclerView mRecyclerView;
-
-    private CommitDiffAdapter mAdapter;
-
-    public static CommitInfoFragment getInstance() {
-        return new CommitInfoFragment();
-    }
-
-    @Nullable
-    @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.fragment_commit_info, container, false);
-        unbinder = ButterKnife.bind(this, view);
-        mRefresher.setRefreshing(true);
-        mAdapter = new CommitDiffAdapter();
-        mRecyclerView.setLayoutManager(new FixedLinearLayoutManger(getContext()));
-        mRecyclerView.setAdapter(mAdapter);
-        mRefresher.setOnRefreshListener(() -> {
-            ButterKnife.findById(getActivity(), R.id.commit_status).setVisibility(View.GONE);
-            mAdapter.clear();
-            Loader.getLoader(getContext()).loadCommit(new Loader.ItemLoader<Commit>() {
-                @Override
-                public void loadComplete(Commit commit) {
-                    commitLoaded(commit);
-                }
-
-                @Override
-                public void loadError(APIHandler.APIError error) {
-                    mRefresher.setRefreshing(false);
-                }
-            }, mCommit.getFullRepoName(), mCommit.getSha());
-        });
-        checkSharedElementEntry();
-        mAreViewsValid = true;
-        if(mCommit != null) commitLoaded(mCommit);
-        return view;
-    }
-
-    @Override
-    public void commitLoaded(Commit commit) {
-        mCommit = commit;
-        if(!areViewsValid()) return;
-        mTitle.setMarkdown(Formatter.bold(mCommit.getMessage()));
-        final String user;
-        if(mCommit.getCommitter() != null) {
-            mAvatar.setImageUrl(mCommit.getCommitter().getAvatarUrl());
-            IntentHandler
-                    .addOnClickHandler(getActivity(), mAvatar, mCommit.getCommitter().getLogin());
-            user = String.format(getString(R.string.text_md_link),
-                    mCommit.getCommitter().getLogin(),
-                    mCommit.getCommitter().getHtmlUrl()
-            );
-        } else {
-            user = mCommit.getCommitterName();
-            IntentHandler.addOnClickHandler(getActivity(), mAvatar, user);
-        }
-        if(mCommit.getFiles() != null) {
-            final String commitText =
-                    "<br>" +
-                            getResources()
-                                    .getQuantityString(R.plurals.text_commit_additions,
-                                            mCommit.getAdditions(),
-                                            mCommit.getAdditions()
-                                    ) +
-                            "<br>" +
-                            getResources().getQuantityString(R.plurals.text_commit_deletions,
-                                    mCommit.getDeletions(), mCommit.getDeletions()
-                            ) +
-                            "<br><br>" +
-                            String.format(
-                                    getString(R.string.text_committed_by),
-                                    user,
-                                    Util.formatDateLocally(getContext(),
-                                            new Date(mCommit.getCreatedAt())
-                                    )
-                            );
-            mInfo.setMarkdown(Markdown.formatMD(commitText, mCommit.getFullRepoName()));
-            mRefresher.setRefreshing(false);
-            mAdapter.setDiffs(mCommit.getFiles());
-        }
-        Loader.getLoader(getContext()).loadCommitStatuses(new Loader.ItemLoader<CompleteStatus>() {
-            @Override
-            public void loadComplete(CompleteStatus data) {
-                if(data.getTotalCount() == 0) return; //We don't care if there is no integration
-                ButterKnife.findById(getActivity(), R.id.commit_status).setVisibility(View.VISIBLE);
-                final NetworkImageView niv = ButterKnife.findById(getActivity(), R.id.status_image);
-                final TextView status = ButterKnife.findById(getActivity(), R.id.status_state);
-                final TextView desc = ButterKnife.findById(getActivity(), R.id.status_context);
-                if("success".equals(data.getState())) {
-                    niv.setImageResource(R.drawable.ic_check);
-                } else if("pending".equals(data.getState())) {
-                    niv.setImageResource(R.drawable.ic_loading);
-                } else {
-                    niv.setImageResource(R.drawable.ic_failure);
-                }
-                status.setText(String.format(getString(R.string.text_ci_status), data.getState()));
-                final StringBuilder builder = new StringBuilder();
-                if(data.getStatuses() != null) {
-                    for(Status s : data.getStatuses()) {
-                        builder.append(
-                                String.format(getString(R.string.text_ci_info),
-                                        s.getContext(),
-                                        s.getDescription()
-                                )
-                        );
-                        builder.append('\n');
-                    }
-                }
-                desc.setText(builder.toString());
-            }
-
-            @Override
-            public void loadError(APIHandler.APIError error) {
-
-            }
-        }, mCommit.getFullRepoName(), mCommit.getSha());
-    }
-
-    private void checkSharedElementEntry() {
-        final Intent i = getActivity().getIntent();
-        if(i.hasExtra(getString(R.string.transition_card))) {
-            mHeader.getViewTreeObserver()
-                   .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-                       @Override
-                       public boolean onPreDraw() {
-                           mHeader.getViewTreeObserver().removeOnPreDrawListener(this);
-                           if(i.hasExtra(getString(R.string.intent_drawable))) {
-                               mAvatar.setImageBitmap(
-                                       i.getParcelableExtra(getString(R.string.intent_drawable)));
-                           }
-                           getActivity().startPostponedEnterTransition();
-                           return true;
-                       }
-                   });
-        }
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        unbinder.unbind();
-    }
-}
-
-```
-
-#### CommitDiffAdapter
-
-**CommitDiffAdapter.java**
-``` java
-package com.tpb.projects.commits;
-
-import android.animation.ObjectAnimator;
-import android.content.res.Resources;
-import android.support.v7.widget.RecyclerView;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.TextView;
-
-import com.tpb.github.data.models.DiffFile;
-import com.tpb.projects.R;
-import com.tpb.projects.markdown.Formatter;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * Created by theo on 01/04/17.
- */
-
-public class CommitDiffAdapter extends RecyclerView.Adapter<CommitDiffAdapter.DiffHolder> {
-
-    private DiffFile[] mDiffs = new DiffFile[0];
-
-    public void setDiffs(DiffFile[] diffs) {
-        mDiffs = diffs;
-        notifyItemRangeInserted(0, mDiffs.length);
-    }
-
-    public void clear() {
-        final int size = mDiffs.length;
-        mDiffs = new DiffFile[0];
-        notifyItemRangeRemoved(0, size);
-    }
-
-    @Override
-    public DiffHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        return new DiffHolder(LayoutInflater.from(parent.getContext())
-                                            .inflate(R.layout.viewholder_diff, parent, false));
-    }
-
-    @Override
-    public void onBindViewHolder(DiffHolder holder, int position) {
-        holder.mFileName.setText(mDiffs[position].getFileName());
-        final Resources res = holder.itemView.getResources();
-        holder.mInfo.setText(
-                String.format(
-                        res.getString(R.string.text_diff_changes),
-                        mDiffs[position].getStatus(),
-                        res.getQuantityString(R.plurals.text_commit_additions,
-                                mDiffs[position].getAdditions(), mDiffs[position].getAdditions()
-                        ),
-                        res.getQuantityString(R.plurals.text_commit_deletions,
-                                mDiffs[position].getDeletions(), mDiffs[position].getDeletions()
-                        )
-                )
-        );
-        if(mDiffs[position].getPatch() != null) {
-            holder.mDiff.setVisibility(View.VISIBLE);
-            holder.mDiff.setText(Formatter.buildDiffSpan(mDiffs[position].getPatch()));
-            holder.mDiff.post(() -> {
-                final int maxLines = holder.mDiff.getLineCount();
-                holder.mDiff.setMaxLines(3);
-                holder.itemView.setOnClickListener(v -> {
-                    if(holder.mDiff.getLineCount() < maxLines) {
-                        ObjectAnimator.ofInt(
-                                holder.mDiff,
-                                "maxLines",
-                                3,
-                                maxLines
-                        ).setDuration(res.getInteger(android.R.integer.config_mediumAnimTime))
-                                      .start();
-                    } else {
-                        ObjectAnimator.ofInt(
-                                holder.mDiff,
-                                "maxLines",
-                                maxLines,
-                                3
-                        ).setDuration(res.getInteger(android.R.integer.config_mediumAnimTime))
-                                      .start();
-                    }
-                });
-            });
-
-
-        } else {
-            holder.mDiff.setVisibility(View.GONE);
-        }
-    }
-
-    @Override
-    public int getItemCount() {
-        return mDiffs.length;
-    }
-
-    class DiffHolder extends RecyclerView.ViewHolder {
-
-        @BindView(R.id.diff_filename) TextView mFileName;
-        @BindView(R.id.diff_info) TextView mInfo;
-        @BindView(R.id.diff_diff) TextView mDiff;
-
-        DiffHolder(View itemView) {
-            super(itemView);
-            ButterKnife.bind(this, itemView);
-        }
-    }
-
-}
-
-```
-
-### CommitCommentsFragment
-
-**CommitCommentsFragment.java**
-``` java
-package com.tpb.projects.commits.fragments;
-
-import android.app.Activity;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
-import android.content.Intent;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.PopupMenu;
-import android.widget.Toast;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Editor;
-import com.tpb.github.data.auth.GitHubSession;
-import com.tpb.github.data.models.Comment;
-import com.tpb.github.data.models.Commit;
-import com.tpb.projects.R;
-import com.tpb.projects.commits.CommitCommentsAdapter;
-import com.tpb.projects.common.FixedLinearLayoutManger;
-import com.tpb.projects.common.fab.FloatingActionButton;
-import com.tpb.projects.editors.CommentEditor;
-import com.tpb.projects.util.UI;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.Unbinder;
-
-/**
- * Created by theo on 30/03/17.
- */
-
-public class CommitCommentsFragment extends CommitFragment {
-    private static final String TAG = CommitCommentsFragment.class.getSimpleName();
-
-    private Unbinder unbinder;
-
-    @BindView(R.id.fragment_recycler) RecyclerView mRecycler;
-    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
-    private FloatingActionButton mFab;
-
-    private Editor mEditor;
-
-    private CommitCommentsAdapter mAdapter;
-
-    public static CommitCommentsFragment getInstance() {
-        return new CommitCommentsFragment();
-    }
-
-    @Nullable
-    @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
-        unbinder = ButterKnife.bind(this, view);
-        mEditor = Editor.getEditor(getContext());
-        mAdapter = new CommitCommentsAdapter(this, mRefresher);
-        mRecycler.setLayoutManager(new FixedLinearLayoutManger(getContext()));
-        mRecycler.setAdapter(mAdapter);
-
-        mAreViewsValid = true;
-        if(mFab != null) addListeners();
-        if(mCommit != null) commitLoaded(mCommit);
-        return view;
-    }
-
-    public void setFab(FloatingActionButton fab) {
-        mFab = fab;
-        if(mAreViewsValid) addListeners();
-    }
-
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        if(mFab != null && mAreViewsValid) addListeners();
-    }
-
-    private void addListeners() {
-        final LinearLayoutManager manager = (LinearLayoutManager) mRecycler.getLayoutManager();
-        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                super.onScrolled(recyclerView, dx, dy);
-                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
-                    mAdapter.notifyBottomReached();
-                }
-                if(dy > 10) {
-                    mFab.hide(true);
-                } else if(dy < -10) {
-                    mFab.show(true);
-                }
-            }
-        });
-        mFab.setOnClickListener(v -> {
-            final Intent i = new Intent(getContext(), CommentEditor.class);
-            UI.setViewPositionForIntent(i, mFab);
-            startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
-        });
-    }
-
-    @Override
-    public void commitLoaded(Commit commit) {
-        mCommit = commit;
-        if(!areViewsValid()) return;
-        mAdapter.setCommit(mCommit);
-    }
-
-    private void createComment(Comment comment) {
-        mRefresher.setRefreshing(true);
-        mEditor.createCommitComment(new Editor.CreationListener<Comment>() {
-            @Override
-            public void created(Comment comment) {
-                mRefresher.setRefreshing(false);
-                mAdapter.addComment(comment);
-                mRecycler.post(() -> mRecycler.smoothScrollToPosition(mAdapter.getItemCount()));
-            }
-
-            @Override
-            public void creationError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mCommit.getFullRepoName(), mCommit.getSha(), comment.getBody());
-    }
-
-    private void editComment(Comment comment) {
-        mEditor.updateCommitComment(new Editor.UpdateListener<Comment>() {
-            @Override
-            public void updated(Comment comment) {
-                mRefresher.setRefreshing(false);
-                mAdapter.updateComment(comment);
-            }
-
-            @Override
-            public void updateError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mCommit.getFullRepoName(), comment.getId(), comment.getBody());
-    }
-
-    void removeComment(Comment comment) {
-        mRefresher.setRefreshing(true);
-        mEditor.deleteCommitComment(new Editor.DeletionListener<Integer>() {
-            @Override
-            public void deleted(Integer id) {
-                mRefresher.setRefreshing(false);
-                mAdapter.removeComment(id);
-            }
-
-            @Override
-            public void deletionError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mCommit.getFullRepoName(), comment.getId());
-    }
-
-    public void displayCommentMenu(View view, Comment comment) {
-        final PopupMenu menu = new PopupMenu(getContext(), view);
-        menu.inflate(R.menu.menu_comment);
-        if(comment.getUser().getLogin().equals(
-                GitHubSession.getSession(getContext()).getUserLogin())) {
-            menu.getMenu()
-                .add(0, R.id.menu_edit_comment, Menu.NONE, getString(R.string.menu_edit_comment));
-            menu.getMenu().add(0, R.id.menu_delete_comment, Menu.NONE,
-                    getString(R.string.menu_delete_comment)
-            );
-        }
-        menu.setOnMenuItemClickListener(menuItem -> {
-            switch(menuItem.getItemId()) {
-                case R.id.menu_edit_comment:
-                    final Intent i = new Intent(getContext(), CommentEditor.class);
-                    i.putExtra(getString(R.string.parcel_comment), comment);
-                    UI.setViewPositionForIntent(i, view);
-                    startActivityForResult(i, CommentEditor.REQUEST_CODE_EDIT_COMMENT);
-                    break;
-                case R.id.menu_delete_comment:
-                    removeComment(comment);
-                    break;
-                case R.id.menu_copy_comment_text:
-                    final ClipboardManager cm = (ClipboardManager) getActivity().getSystemService(
-                            Context.CLIPBOARD_SERVICE);
-                    cm.setPrimaryClip(ClipData.newPlainText("Comment", comment.getBody()));
-                    Toast.makeText(getContext(), getString(R.string.text_copied_to_board),
-                            Toast.LENGTH_SHORT
-                    ).show();
-                    break;
-            }
-            return false;
-        });
-        menu.show();
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if(resultCode == AppCompatActivity.RESULT_OK) {
-            final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
-            if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
-                createComment(comment);
-            } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
-                mRefresher.setRefreshing(true);
-                editComment(comment);
-            }
-        }
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        unbinder.unbind();
-    }
-}
-
-```
-
-#### CommitCommentsAdapter
-
-**CommitCommentsAdapter.java**
-``` java
-package com.tpb.projects.commits;
-
-import android.support.v4.util.Pair;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.widget.RecyclerView;
-import android.text.SpannableString;
-import android.text.format.DateUtils;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageButton;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.models.Comment;
-import com.tpb.github.data.models.Commit;
-import com.tpb.mdtext.Markdown;
-import com.tpb.mdtext.imagegetter.HttpImageGetter;
-import com.tpb.mdtext.views.MarkdownTextView;
-import com.tpb.projects.R;
-import com.tpb.projects.commits.fragments.CommitCommentsFragment;
-import com.tpb.projects.common.NetworkImageView;
-import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.markdown.Formatter;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * Created by theo on 01/04/17.
- */
-
-public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
-    private static final String TAG = CommitCommentsAdapter.class.getSimpleName();
-
-    private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
-    private Commit mCommit;
-    private final CommitCommentsFragment mParent;
-
-    private int mPage = 1;
-    private boolean mIsLoading = false;
-    private boolean mMaxPageReached = false;
-
-    private SwipeRefreshLayout mRefresher;
-    private Loader mLoader;
-
-    public CommitCommentsAdapter(CommitCommentsFragment parent, SwipeRefreshLayout refresher) {
-        mParent = parent;
-        mRefresher = refresher;
-        mLoader = Loader.getLoader(mParent.getContext());
-        mRefresher.setOnRefreshListener(() -> {
-            mPage = 1;
-            mMaxPageReached = false;
-            clear();
-            loadComments(true);
-        });
-    }
-
-
-    public void clear() {
-        final int oldSize = mComments.size();
-        mComments.clear();
-        notifyItemRangeRemoved(0, oldSize);
-    }
-
-    public void setCommit(Commit commit) {
-        mCommit = commit;
-        clear();
-        mPage = 1;
-        mLoader.loadCommitComments(this, mCommit.getFullRepoName(), mCommit.getSha(), mPage);
-    }
-
-    @Override
-    public void listLoadComplete(List<Comment> comments) {
-        mRefresher.setRefreshing(false);
-        mIsLoading = false;
-        if(comments.size() > 0) {
-            final int oldLength = mComments.size();
-            for(Comment c : comments) {
-                mComments.add(new Pair<>(c, null));
-            }
-            notifyItemRangeInserted(oldLength, mComments.size());
-        } else {
-            mMaxPageReached = true;
-        }
-    }
-
-    @Override
-    public void listLoadError(APIHandler.APIError error) {
-        mRefresher.setRefreshing(false);
-    }
-
-    public void notifyBottomReached() {
-        if(!mIsLoading && !mMaxPageReached) {
-            mPage++;
-            loadComments(false);
-        }
-    }
-
-    private void loadComments(boolean resetPage) {
-        mIsLoading = true;
-        mRefresher.setRefreshing(true);
-        if(resetPage) {
-            mPage = 1;
-            mMaxPageReached = false;
-        }
-        mLoader.loadCommitComments(this, mCommit.getFullRepoName(), mCommit.getSha(), mPage);
-    }
-
-    public void addComment(Comment comment) {
-        mComments.add(new Pair<>(comment, null));
-        notifyItemInserted(mComments.size());
-    }
-
-    public void removeComment(int commentId) {
-        int index = -1;
-        for(int i = 0; i < mComments.size(); i++) {
-            if(mComments.get(i).first.getId() == commentId) {
-                index = i;
-                break;
-            }
-        }
-        if(index != -1) {
-            mComments.remove(index);
-            notifyItemRemoved(index);
-        }
-    }
-
-    public void updateComment(Comment comment) {
-        int index = -1;
-        for(int i = 0; i < mComments.size(); i++) {
-            if(mComments.get(i).first.getId() == comment.getId()) {
-                index = i;
-                break;
-            }
-        }
-        if(index != -1) {
-            mComments.set(index, new Pair<>(comment, null));
-            notifyItemChanged(index);
-        }
-    }
-
-    @Override
-    public CommentHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        return new CommentHolder(LayoutInflater.from(parent.getContext())
-                                               .inflate(R.layout.viewholder_comment, parent,
-                                                       false
-                                               ));
-
-    }
-
-    @Override
-    public void onBindViewHolder(CommentHolder holder, int position) {
-        bindComment(holder);
-    }
-
-    private void bindComment(CommentHolder commentHolder) {
-        final int pos = commentHolder.getAdapterPosition();
-        final Comment comment = mComments.get(pos).first;
-        if(mComments.get(pos).second == null) {
-            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
-            final StringBuilder builder = new StringBuilder();
-            builder.append(String.format(
-                    commentHolder.itemView.getResources().getString(R.string.text_comment_by),
-                    String.format(
-                            commentHolder.itemView.getResources().getString(R.string.text_href),
-                            comment.getUser().getHtmlUrl(),
-                            comment.getUser().getLogin()
-                    ),
-                    DateUtils.getRelativeTimeSpanString(comment.getCreatedAt())
-            ));
-            if(comment.getUpdatedAt() != comment.getCreatedAt()) {
-                builder.append(" • ");
-                builder.append(commentHolder.itemView.getResources()
-                                                     .getString(R.string.text_comment_edited));
-            }
-            builder.append("<br><br>");
-            builder.append(Markdown.formatMD(comment.getBody(), mCommit.getFullRepoName()));
-            if(comment.getReaction().hasReaction()) {
-                builder.append("\n");
-                builder.append(Formatter.reactions(comment.getReaction()));
-            }
-
-            commentHolder.mText.setMarkdown(
-                    builder.toString(),
-                    new HttpImageGetter(commentHolder.mText),
-                    text -> mComments.set(pos, Pair.create(comment, text))
-            );
-        } else {
-            commentHolder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
-            commentHolder.mText.setText(mComments.get(pos).second);
-        }
-        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mText);
-        IntentHandler.addOnClickHandler(mParent.getActivity(), commentHolder.mAvatar,
-                comment.getUser().getLogin()
-        );
-    }
-
-    @Override
-    public int getItemCount() {
-        return mComments.size();
-    }
-
-    private void displayMenu(View view, int pos) {
-        mParent.displayCommentMenu(view, mComments.get(pos).first);
-    }
-
-    class CommentHolder extends RecyclerView.ViewHolder {
-        @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
-        @BindView(R.id.comment_text) MarkdownTextView mText;
-        @BindView(R.id.comment_menu_button) ImageButton mMenu;
-
-        CommentHolder(View view) {
-            super(view);
-            ButterKnife.bind(this, view);
-            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
-            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
-        }
-
-    }
-}
-
-```
-
-## IssueActivity
-
-**IssueActivity.java**
-``` java
-package com.tpb.projects.issues;
-
-import android.content.Intent;
-import android.net.Uri;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.design.widget.AppBarLayout;
-import android.support.design.widget.TabLayout;
-import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentManager;
-import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.widget.TextView;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.auth.GitHubSession;
-import com.tpb.github.data.models.Issue;
-import com.tpb.github.data.models.Repository;
-import com.tpb.projects.R;
-import com.tpb.projects.common.CircularRevealActivity;
-import com.tpb.projects.common.LockableViewPager;
-import com.tpb.projects.common.ShortcutDialog;
-import com.tpb.projects.common.fab.FloatingActionButton;
-import com.tpb.projects.editors.CommentEditor;
-import com.tpb.projects.issues.fragments.IssueCommentsFragment;
-import com.tpb.projects.issues.fragments.IssueInfoFragment;
-import com.tpb.projects.util.SettingsActivity;
-import com.tpb.projects.util.UI;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * Created by theo on 15/03/17.
- */
-
-public class IssueActivity extends CircularRevealActivity implements Loader.ItemLoader<Issue>{
-    private static final String TAG = IssueActivity.class.getSimpleName();
-    private static final String URL = "https://raw.githubusercontent.com/tpb1908/AndroidProjectsClient/master/app/src/main/java/com/tpb/projects/issues/IssueActivity.java";
-
-
-    @BindView(R.id.issue_appbar) AppBarLayout mAppbar;
-    @BindView(R.id.issue_toolbar) Toolbar mToolbar;
-    @BindView(R.id.issue_content_viewpager) LockableViewPager mPager;
-    @BindView(R.id.issue_fragment_tabs) TabLayout mTabs;
-    @BindView(R.id.issue_number) TextView mNumber;
-    @BindView(R.id.issue_comment_fab) FloatingActionButton mFab;
-
-    private Loader mLoader;
-
-    private IssueFragmentAdapter mAdapter;
-
-    private Issue mIssue;
-    public Repository.AccessLevel mAccessLevel = Repository.AccessLevel.NONE;
-
-    @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        final SettingsActivity.Preferences prefs = SettingsActivity.Preferences
-                .getPreferences(this);
-        setTheme(prefs.isDarkThemeEnabled() ? R.style.AppTheme_Dark : R.style.AppTheme);
-        UI.setStatusBarColor(getWindow(), getResources().getColor(R.color.colorPrimaryDark));
-        setContentView(R.layout.activity_issue);
-        ButterKnife.bind(this);
-        setSupportActionBar(mToolbar);
-        getSupportActionBar().setDisplayShowTitleEnabled(false);
-
-        mLoader = Loader.getLoader(this);
-        mAdapter = new IssueFragmentAdapter(getSupportFragmentManager());
-        final Intent launchIntent = getIntent();
-        if(launchIntent.hasExtra(getString(R.string.transition_card))) {
-            postponeEnterTransition();
-        }
-        if(launchIntent.getExtras() != null && launchIntent.getExtras().containsKey(
-                getString(R.string.parcel_issue))) {
-            mIssue = launchIntent.getExtras().getParcelable(getString(R.string.parcel_issue));
-
-            loadComplete(mIssue);
-        } else {
-            final int issueNumber = launchIntent
-                    .getIntExtra(getString(R.string.intent_issue_number), -1);
-            final String fullRepoName = launchIntent
-                    .getStringExtra(getString(R.string.intent_repo));
-            mLoader.loadIssue(this, fullRepoName, issueNumber, true);
-        }
-
-        mPager.setOffscreenPageLimit(2);
-        mPager.setAdapter(mAdapter);
-        mTabs.setupWithViewPager(mPager);
-        mPager.addOnPageChangeListener(new ViewPager.SimpleOnPageChangeListener() {
-            @Override
-            public void onPageSelected(int position) {
-                super.onPageSelected(position);
-                if(position == 1 && mIssue != null && !mIssue.isLocked()) {
-                    mFab.show(true);
-                } else {
-                    mFab.hide(true);
-                }
-            }
-        });
-    }
-
-    @Override
-    public void loadComplete(Issue issue) {
-        mIssue = issue;
-        mNumber.setText(String.format("#%1$s", issue.getNumber()));
-        final String login = GitHubSession.getSession(IssueActivity.this).getUserLogin();
-        if(mIssue.getOpenedBy().getLogin().equals(login)) {
-            mAccessLevel = Repository.AccessLevel.ADMIN;
-            if(mAdapter.mInfoFragment != null) mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
-        } else {
-            mLoader.checkIfCollaborator(new Loader.ItemLoader<Repository.AccessLevel>() {
-                @Override
-                public void loadComplete(Repository.AccessLevel data) {
-                    mAccessLevel = data;
-                    if(mAdapter.mInfoFragment != null)
-                        mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
-                }
-
-                @Override
-                public void loadError(APIHandler.APIError error) {
-
-                }
-            }, GitHubSession.getSession(this).getUserLogin(), mIssue.getRepoFullName());
-        }
-
-        mAdapter.setIssue();
-    }
-
-    @Override
-    public void loadError(APIHandler.APIError error) {
-
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if(resultCode == AppCompatActivity.RESULT_OK) {
-            if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
-                mAdapter.mCommentsFragment.createCommentForState(
-                        data.getParcelableExtra(
-                                getString(R.string.parcel_comment)
-                        )
-                );
-            }
-        }
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.menu_activity, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch(item.getItemId()) {
-            case R.id.menu_settings:
-                startActivity(new Intent(IssueActivity.this, SettingsActivity.class));
-                break;
-            case R.id.menu_source:
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(URL)));
-                break;
-            case R.id.menu_share:
-                if(mIssue != null) {
-                    final Intent share = new Intent();
-                    share.setAction(Intent.ACTION_SEND);
-                    share.putExtra(Intent.EXTRA_TEXT,
-                            "https://github.com/" + mIssue.getRepoFullName() + "/issues/" + mIssue
-                                    .getNumber()
-                    );
-                    share.setType("text/plain");
-                    startActivity(share);
-                }
-                break;
-            case R.id.menu_save_to_homescreen:
-                final ShortcutDialog dialog = new ShortcutDialog();
-                final Bundle args = new Bundle();
-                args.putInt(getString(R.string.intent_title_res),
-                        R.string.title_save_issue_shortcut
-                );
-                args.putBoolean(getString(R.string.intent_drawable), false);
-                args.putString(getString(R.string.intent_name), "#" + mIssue.getNumber());
-
-                dialog.setArguments(args);
-                dialog.setListener((name, iconFlag) -> {
-                    final Intent i = new Intent(getApplicationContext(), IssueActivity.class);
-                    i.putExtra(getString(R.string.intent_repo), mIssue.getRepoFullName());
-                    i.putExtra(getString(R.string.intent_issue_number), mIssue.getNumber());
-
-                    final Intent add = new Intent();
-                    add.putExtra(Intent.EXTRA_SHORTCUT_INTENT, i);
-                    add.putExtra(Intent.EXTRA_SHORTCUT_NAME, name);
-                    add.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource
-                            .fromContext(getApplicationContext(), R.mipmap.ic_launcher));
-                    add.putExtra("duplicate", false);
-                    add.setAction("com.android.launcher.action.INSTALL_SHORTCUT");
-                    getApplicationContext().sendBroadcast(add);
-                });
-                dialog.show(getSupportFragmentManager(), TAG);
-                break;
-        }
-        return true;
-    }
-
-    @Override
-    public void onBackPressed() {
-        mAdapter.mInfoFragment.checkSharedElementExit();
-        super.onBackPressed();
-    }
-
-
-    private class IssueFragmentAdapter extends FragmentPagerAdapter {
-
-        IssueCommentsFragment mCommentsFragment;
-        IssueInfoFragment mInfoFragment;
-
-        IssueFragmentAdapter(FragmentManager fm) {
-            super(fm);
-        }
-
-        @Override
-        public Fragment getItem(int position) {
-            if(position == 0) {
-                mInfoFragment = IssueInfoFragment.getInstance();
-                if(mIssue != null) mInfoFragment.issueLoaded(mIssue);
-                return mInfoFragment;
-            } else {
-                mCommentsFragment = IssueCommentsFragment.getInstance(mFab);
-                if(mIssue != null) mCommentsFragment.issueLoaded(mIssue);
-                return mCommentsFragment;
-            }
-        }
-
-        void setIssue() {
-            if(mCommentsFragment != null) mCommentsFragment.issueLoaded(mIssue);
-            if(mInfoFragment != null) mInfoFragment.issueLoaded(mIssue);
-        }
-
-        @Override
-        public CharSequence getPageTitle(int position) {
-            if(position == 0) {
-                return getString(R.string.title_issue_info_fragment);
-            } else {
-                return getString(R.string.title_issue_comments_fragment);
-            }
-        }
-
-        @Override
-        public int getCount() {
-            return 2;
-        }
-    }
-}
-
-```
-
-### IssueInfoFragment
-
-**IssueInfoFragment.java**
-``` java
-package com.tpb.projects.issues.fragments;
-
-import android.app.Activity;
-import android.content.Intent;
-import android.graphics.Color;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.app.ActivityOptionsCompat;
-import android.support.v4.util.Pair;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.widget.CardView;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.text.format.DateUtils;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
-import android.widget.ImageButton;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.PopupMenu;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Editor;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.models.Issue;
-import com.tpb.github.data.models.Milestone;
-import com.tpb.github.data.models.Repository;
-import com.tpb.github.data.models.State;
-import com.tpb.github.data.models.User;
-import com.tpb.mdtext.Markdown;
-import com.tpb.mdtext.imagegetter.HttpImageGetter;
-import com.tpb.mdtext.views.MarkdownTextView;
-import com.tpb.projects.R;
-import com.tpb.projects.common.NetworkImageView;
-import com.tpb.projects.editors.CommentEditor;
-import com.tpb.projects.editors.IssueEditor;
-import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.issues.IssueActivity;
-import com.tpb.projects.issues.IssueEventsAdapter;
-import com.tpb.projects.markdown.Formatter;
-import com.tpb.projects.user.UserActivity;
-import com.tpb.projects.util.UI;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-import butterknife.Unbinder;
-
-/**
- * Created by theo on 14/03/17.
- */
-
-public class IssueInfoFragment extends IssueFragment {
-
-    private static final String TAG = IssueInfoFragment.class.getSimpleName();
-
-    private Unbinder unbinder;
-
-    @BindView(R.id.issue_header_card) CardView mHeader;
-    @BindView(R.id.issue_events_recycler) RecyclerView mRecycler;
-    @BindView(R.id.issue_assignees) LinearLayout mAssigneesLayout;
-    @BindView(R.id.text_issue_assignees) View mAssigneesTitle;
-    @BindView(R.id.issue_menu_button) ImageButton mOverflowButton;
-    @BindView(R.id.issue_user_avatar) NetworkImageView mUserAvatar;
-    @BindView(R.id.issue_state) ImageView mImageState;
-    @BindView(R.id.issue_title) MarkdownTextView mTitle;
-    @BindView(R.id.issue_info) MarkdownTextView mInfo;
-    @BindView(R.id.issue_events_refresher) SwipeRefreshLayout mRefresher;
-    @BindView(R.id.viewholder_milestone_card) CardView mMilestoneCard;
-
-    private Issue mIssue;
-
-    private Repository.AccessLevel mAccessLevel = Repository.AccessLevel.NONE;
-    private Editor mEditor;
-
-    private IssueEventsAdapter mAdapter;
-
-    public static IssueInfoFragment getInstance() {
-        return new IssueInfoFragment();
-    }
-
-    @Nullable
-    @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.fragment_issue_info, container, false);
-        unbinder = ButterKnife.bind(this, view);
-        mAccessLevel = ((IssueActivity) getActivity()).mAccessLevel;
-        mEditor = Editor.getEditor(getContext());
-        mAdapter = new IssueEventsAdapter(this, mRefresher);
-        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
-        mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                super.onScrolled(recyclerView, dx, dy);
-                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
-                    mAdapter.notifyBottomReached();
-                }
-            }
-        });
-        mRecycler.setAdapter(mAdapter);
-        mRecycler.setLayoutManager(manager);
-
-
-        mRefresher.setOnRefreshListener(() -> {
-            mAdapter.clear();
-            Loader.getLoader(getContext()).loadIssue(new Loader.ItemLoader<Issue>() {
-                @Override
-                public void loadComplete(Issue issue) {
-                    issueLoaded(issue);
-                }
-
-                @Override
-                public void loadError(APIHandler.APIError error) {
-
-                }
-            }, mIssue.getRepoFullName(), mIssue.getNumber(), true);
-        });
-        checkSharedElementEntry();
-        if(mIssue != null) issueLoaded(mIssue);
-        return view;
-    }
-
-    private void displayIssue(Issue issue) {
-        mTitle.setMarkdown(Formatter.header(issue.getTitle(), 1));
-        mInfo.setMarkdown(
-                Formatter.buildIssueSpan(
-                        getContext(),
-                        issue,
-                        false, //Header title
-                        false, //No numbered link
-                        false, //No assignees
-                        true, //Closed at
-                        false //No comment count
-                ).toString(),
-                new HttpImageGetter(mInfo), null
-        );
-        mUserAvatar.setOnClickListener(v -> IntentHandler
-                .openUser(getActivity(), mUserAvatar, issue.getOpenedBy().getLogin()));
-        mUserAvatar.setImageUrl(issue.getOpenedBy().getAvatarUrl());
-        mImageState.setOnClickListener(v -> toggleIssueState());
-        if(issue.isClosed()) {
-            mImageState.setImageResource(R.drawable.ic_state_closed);
-        } else {
-            mImageState.setImageResource(R.drawable.ic_state_open);
-        }
-    }
-
-    private void displayAssignees(Issue issue) {
-        mAssigneesLayout.removeAllViews();
-        if(issue != null && issue.getAssignees() != null && issue.getAssignees().length > 0) {
-            mAssigneesLayout.setVisibility(View.VISIBLE);
-            mAssigneesTitle.setVisibility(View.VISIBLE);
-            for(User u : issue.getAssignees()) {
-                final LinearLayout user = (LinearLayout) getActivity().getLayoutInflater()
-                                                                      .inflate(R.layout.shard_user,
-                                                                              mAssigneesLayout,
-                                                                              false
-                                                                      );
-                user.setId(View.generateViewId());
-                mAssigneesLayout.addView(user);
-                final NetworkImageView avatar = ButterKnife.findById(user, R.id.user_avatar);
-                avatar.setId(View.generateViewId());
-                avatar.setImageUrl(u.getAvatarUrl());
-                avatar.setScaleType(ImageView.ScaleType.FIT_XY);
-                final TextView login = ButterKnife.findById(user, R.id.user_login);
-                login.setId(View.generateViewId()); //Max 10 assignees
-                login.setText(u.getLogin());
-                user.setOnClickListener((v) -> {
-                    final Intent us = new Intent(getActivity(), UserActivity.class);
-                    us.putExtra(getString(R.string.intent_username), u.getLogin());
-                    UI.setDrawableForIntent(avatar, us);
-                    getActivity().startActivity(us,
-                            ActivityOptionsCompat.makeSceneTransitionAnimation(
-                                    getActivity(),
-                                    new Pair<>(login, getString(R.string.transition_username)),
-                                    new Pair<>(avatar, getString(R.string.transition_user_image))
-                            ).toBundle()
-                    );
-                });
-            }
-        } else {
-            mAssigneesLayout.setVisibility(View.GONE);
-            mAssigneesTitle.setVisibility(View.GONE);
-        }
-    }
-
-    private void displayMilestone() {
-        if(mIssue.getMilestone() != null) {
-            mMilestoneCard.setVisibility(View.VISIBLE);
-            final Milestone milestone = mIssue.getMilestone();
-            final MarkdownTextView tv = ButterKnife
-                    .findById(mMilestoneCard, R.id.milestone_content_markdown);
-            final ImageView status = ButterKnife.findById(mMilestoneCard, R.id.milestone_drawable);
-            final NetworkImageView user = ButterKnife
-                    .findById(mMilestoneCard, R.id.milestone_user_avatar);
-            IntentHandler
-                    .addOnClickHandler(getActivity(), tv, user, milestone.getCreator().getLogin());
-            IntentHandler.addOnClickHandler(getActivity(), user, milestone.getCreator().getLogin());
-            status.setImageResource(milestone
-                    .getState() == State.OPEN ? R.drawable.ic_state_open : R.drawable.ic_state_closed);
-            user.setImageUrl(milestone.getCreator().getAvatarUrl());
-
-            final StringBuilder builder = new StringBuilder();
-
-            builder.append("<b>");
-            builder.append(Markdown.escape(milestone.getTitle()));
-            builder.append("</b>");
-            builder.append("<br>");
-            if(milestone.getOpenIssues() > 0 || milestone.getClosedIssues() > 0) {
-                builder.append("<br>");
-                builder.append(String.format(getString(R.string.text_milestone_completion),
-                        milestone.getOpenIssues(),
-                        milestone.getClosedIssues(),
-                        Math.round(100f * milestone.getClosedIssues() / (milestone
-                                .getOpenIssues() + milestone.getClosedIssues()))
-                        )
-                );
-            }
-            builder.append("<br>");
-            builder.append(
-                    String.format(
-                            getString(R.string.text_milestone_opened_by),
-                            String.format(getString(R.string.text_href),
-                                    "https://github.com/" + mIssue.getMilestone().getCreator()
-                                                                  .getLogin(),
-                                    mIssue.getMilestone().getCreator().getLogin()
-                            ),
-                            DateUtils.getRelativeTimeSpanString(milestone.getCreatedAt())
-                    )
-            );
-            if(milestone.getUpdatedAt() != milestone.getCreatedAt()) {
-                builder.append("<br>");
-                builder.append(
-                        String.format(
-                                getString(R.string.text_last_updated),
-                                DateUtils.getRelativeTimeSpanString(milestone.getUpdatedAt())
-                        )
-                );
-            }
-            if(milestone.getClosedAt() > 0) {
-                builder.append("<br>");
-                builder.append(
-                        String.format(
-                                getString(R.string.text_milestone_closed_at),
-                                DateUtils.getRelativeTimeSpanString(milestone.getClosedAt())
-                        )
-                );
-            }
-            if(milestone.getDueOn() > 0) {
-                builder.append("<br>");
-                if(System.currentTimeMillis() < milestone.getDueOn() ||
-                        (milestone.getClosedAt() != 0 && milestone.getClosedAt() < milestone
-                                .getDueOn())) {
-                    builder.append(
-                            String.format(
-                                    getString(R.string.text_milestone_due_on),
-                                    DateUtils.getRelativeTimeSpanString(milestone.getDueOn())
-                            )
-                    );
-                } else {
-                    builder.append("<font color=\"");
-                    builder.append(String.format("#%06X", (0xFFFFFF & Color.RED)));
-                    builder.append("\">");
-                    builder.append(
-                            String.format(
-                                    getString(R.string.text_milestone_due_on),
-                                    DateUtils.getRelativeTimeSpanString(milestone.getDueOn())
-                            )
-                    );
-                    builder.append("</font>");
-                }
-            }
-            tv.setMarkdown(Markdown.formatMD(builder.toString(), mIssue.getRepoFullName()));
-
-        } else {
-            mMilestoneCard.setVisibility(View.GONE);
-        }
-    }
-
-    public void updateIssue(Issue issue, String[] assignees, String[] labels) {
-        mRefresher.setRefreshing(true);
-        mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
-            int issueCreationAttempts = 0;
-
-            @Override
-            public void updated(Issue issue) {
-                int matchCount = 0;
-                if(mIssue.getAssignees() != null && issue.getAssignees() != null) {
-                    for(User u : mIssue.getAssignees()) {
-                        for(User v : mIssue.getAssignees()) {
-                            if(u.equals(v)) matchCount++;
-                        }
-                    }
-                    if(matchCount != mIssue.getAssignees().length || matchCount != issue
-                            .getAssignees().length) {
-                        displayAssignees(issue);
-                    }
-                }
-                mIssue = issue;
-                displayIssue(mIssue);
-                mRefresher.setRefreshing(false);
-            }
-
-            @Override
-            public void updateError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                } else {
-                    if(issueCreationAttempts < 5) {
-                        issueCreationAttempts++;
-                        mEditor.updateIssue(this, mIssue.getRepoFullName(), issue, assignees,
-                                labels
-                        );
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mRefresher.setRefreshing(false);
-                    }
-                }
-            }
-        }, mIssue.getRepoFullName(), issue, assignees, labels);
-    }
-
-    private void editIssue(View view) {
-        final Intent i = new Intent(getContext(), IssueEditor.class);
-        i.putExtra(getString(R.string.intent_repo), mIssue.getRepoFullName());
-        i.putExtra(getString(R.string.parcel_issue), mIssue);
-        UI.setViewPositionForIntent(i, view);
-        startActivityForResult(i, IssueEditor.REQUEST_CODE_EDIT_ISSUE);
-    }
-
-    private void toggleIssueState() {
-        if(mIssue == null || mAccessLevel != Repository.AccessLevel.ADMIN) return;
-        final Editor.UpdateListener<Issue> listener = new Editor.UpdateListener<Issue>() {
-            @Override
-            public void updated(Issue issue) {
-                mIssue = issue;
-                mImageState.setImageResource(
-                        mIssue.isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open);
-            }
-
-            @Override
-            public void updateError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                }
-            }
-        };
-
-        final AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-        builder.setTitle(R.string.title_state_change_comment);
-        builder.setPositiveButton(R.string.action_ok, (dialog, which) -> {
-            final Intent i = new Intent(getContext(), CommentEditor.class);
-            startActivityForResult(i, CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE);
-            mRefresher.setRefreshing(true);
-            if(mIssue.isClosed()) {
-                mEditor.openIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
-            } else {
-                mEditor.closeIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
-            }
-        });
-        builder.setNeutralButton(R.string.action_no, (dialog, which) -> {
-            mRefresher.setRefreshing(true);
-            if(mIssue.isClosed()) {
-                mEditor.openIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
-            } else {
-                mEditor.closeIssue(listener, mIssue.getRepoFullName(), mIssue.getNumber());
-            }
-        });
-        builder.setNegativeButton(R.string.action_cancel, null);
-        builder.create().show();
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if(resultCode == Activity.RESULT_OK) {
-            if(requestCode == IssueEditor.REQUEST_CODE_EDIT_ISSUE) {
-                final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
-                final String[] assignees;
-                final String[] labels;
-                if(data.hasExtra(getString(R.string.intent_issue_assignees))) {
-                    assignees = data
-                            .getStringArrayExtra(getString(R.string.intent_issue_assignees));
-                } else {
-                    assignees = null;
-                }
-                if(data.hasExtra(getString(R.string.intent_issue_labels))) {
-                    labels = data.getStringArrayExtra(getString(R.string.intent_issue_labels));
-                } else {
-                    labels = null;
-                }
-                updateIssue(issue, assignees, labels);
-            }
-        }
-    }
-
-    @OnClick({R.id.issue_header_card, R.id.issue_info, R.id.issue_title})
-    void onHeaderClick() {
-        if(mIssue != null && mAccessLevel == Repository.AccessLevel.ADMIN) editIssue(mInfo);
-    }
-
-    @OnClick(R.id.issue_menu_button)
-    public void displayIssueMenu(View view) {
-        final PopupMenu menu = new PopupMenu(getContext(), view);
-        menu.inflate(R.menu.menu_issue);
-        if(mAccessLevel == Repository.AccessLevel.ADMIN) {
-            menu.getMenu().add(0, 1, Menu.NONE,
-                    mIssue.isClosed() ? R.string.menu_reopen_issue : R.string.menu_close_issue
-            );
-            menu.getMenu().add(0, 2, Menu.NONE, R.string.menu_edit_issue);
-        }
-        menu.setOnMenuItemClickListener(menuItem -> {
-            switch(menuItem.getItemId()) {
-                case 1:
-                    toggleIssueState();
-                    break;
-                case 2:
-                    editIssue(view);
-                    break;
-                case R.id.menu_fullscreen:
-                    IntentHandler.showFullScreen(getContext(), mIssue.getBody(),
-                            mIssue.getRepoFullName(), getFragmentManager()
-                    );
-                    break;
-            }
-            return false;
-        });
-        menu.show();
-    }
-
-    @Override
-    public void setAccessLevel(Repository.AccessLevel level) {
-        mAccessLevel = level;
-    }
-
-    @Override
-    public void issueLoaded(Issue issue) {
-        mIssue = issue;
-        if(mAdapter != null) {
-            mAdapter.setIssue(issue);
-            displayIssue(mIssue);
-            displayAssignees(mIssue);
-            displayMilestone();
-        }
-    }
-
-    private void checkSharedElementEntry() {
-        final Intent i = getActivity().getIntent();
-        if(i.hasExtra(getString(R.string.transition_card))) {
-            mHeader.getViewTreeObserver()
-                   .addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-                       @Override
-                       public boolean onPreDraw() {
-                           mHeader.getViewTreeObserver().removeOnPreDrawListener(this);
-                           if(i.hasExtra(getString(R.string.intent_drawable))) {
-                               mUserAvatar.setImageBitmap(
-                                       i.getParcelableExtra(getString(R.string.intent_drawable)));
-                           }
-                           getActivity().startPostponedEnterTransition();
-                           return true;
-                       }
-                   });
-        }
-    }
-
-    public void checkSharedElementExit() {
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        unbinder.unbind();
-    }
-}
-
-```
-
-#### IssueEventsAdapter
-
-**IssueEventsAdapter.java**
-``` java
-package com.tpb.projects.issues;
-
-import android.content.res.Resources;
-import android.support.v4.util.Pair;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.widget.RecyclerView;
-import android.text.SpannableString;
-import android.text.format.DateUtils;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.Util;
-import com.tpb.github.data.models.DataModel;
-import com.tpb.github.data.models.Issue;
-import com.tpb.github.data.models.IssueEvent;
-import com.tpb.github.data.models.MergedModel;
-import com.tpb.mdtext.imagegetter.HttpImageGetter;
-import com.tpb.mdtext.views.MarkdownTextView;
-import com.tpb.projects.BuildConfig;
-import com.tpb.projects.R;
-import com.tpb.projects.common.NetworkImageView;
-import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.issues.fragments.IssueInfoFragment;
-import com.tpb.projects.markdown.Formatter;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * Created by theo on 15/03/17.
- */
-
-public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.EventHolder> implements Loader.ListLoader<IssueEvent> {
-    private static final String TAG = IssueEventsAdapter.class.getSimpleName();
-
-    private final ArrayList<Pair<DataModel, SpannableString>> mEvents = new ArrayList<>();
-    private Issue mIssue;
-    private final IssueInfoFragment mParent;
-
-    private int mPage = 1;
-    private boolean mIsLoading = false;
-    private boolean mMaxPageReached = false;
-
-    private SwipeRefreshLayout mRefresher;
-    private Loader mLoader;
-
-    public IssueEventsAdapter(IssueInfoFragment parent, SwipeRefreshLayout refresher) {
-        mParent = parent;
-        mLoader = Loader.getLoader(parent.getContext());
-        mRefresher = refresher;
-        mRefresher.setRefreshing(true);
-        mRefresher.setOnRefreshListener(() -> {
-            mPage = 1;
-            mMaxPageReached = false;
-            notifyDataSetChanged();
-            loadEvents(true);
-        });
-    }
-
-    public void clear() {
-        mEvents.clear();
-        notifyDataSetChanged();
-    }
-
-    public void setIssue(Issue issue) {
-        mIssue = issue;
-        mEvents.clear();
-        mPage = 1;
-        mLoader.loadEvents(this, issue.getRepoFullName(), issue.getNumber(), mPage);
-    }
-
-    @Override
-    public void listLoadComplete(List<IssueEvent> events) {
-        mRefresher.setRefreshing(false);
-        mIsLoading = false;
-        if(events.size() > 0) {
-            int oldLength = mEvents.size();
-            if(mPage == 1) mEvents.clear();
-            for(DataModel dm : Util.mergeModels(events, comparator)) {
-                mEvents.add(new Pair<>(dm, null));
-            }
-            notifyItemRangeInserted(oldLength, mEvents.size());
-        } else {
-            mMaxPageReached = true;
-        }
-    }
-
-    private static Comparator<DataModel> comparator = (o1, o2) ->
-            o1 instanceof IssueEvent &&
-                    o2 instanceof IssueEvent &&
-                    o1.getCreatedAt() == o2.getCreatedAt() &&
-                    ((IssueEvent) o1).getEvent() == ((IssueEvent) o2).getEvent()
-                    ? 0 : -1;
-
-
-    private ArrayList<DataModel> mergeEvents(List<IssueEvent> events) {
-        final ArrayList<DataModel> merged = new ArrayList<>();
-        ArrayList<IssueEvent> toMerge = new ArrayList<>();
-        IssueEvent last = new IssueEvent();
-        for(int i = 0; i < events.size(); i++) {
-            //If we have two of the same event, happening at the same time
-            if(events.get(i).getCreatedAt() == last.getCreatedAt() && events.get(i)
-                                                                            .getEvent() == last
-                    .getEvent()) {
-                /*If multiple events (labels or assignees) were added as the first event,
-                * then we need to stop the first item being duplicated
-                 */
-                if(merged.size() == 1 && merged.get(0).equals(events.get(i - 1))) merged.remove(0);
-                toMerge.add(events.get(i - 1)); //Add the previous event
-                int j = i;
-                //Loop until we find an event which shouldn't be merged
-                while(j < events.size() && events.get(j).getCreatedAt() == last
-                        .getCreatedAt() && events.get(j).getEvent() == last.getEvent()) {
-                    toMerge.add(events.get(j++));
-                }
-                i = j - 1; //Jump to the end of the merged positions
-                merged.add(new MergedModel<IssueEvent>(toMerge));
-                toMerge = new ArrayList<>(); //Reset the list of merged events
-            } else {
-                merged.add(events.get(i));
-            }
-            last = events.get(i); //Set the last event
-        }
-        return merged;
-
-    }
-
-
-    @Override
-    public void listLoadError(APIHandler.APIError error) {
-
-    }
-
-    public void notifyBottomReached() {
-        if(!mIsLoading && !mMaxPageReached) {
-            mPage++;
-            loadEvents(false);
-        }
-    }
-
-    private void loadEvents(boolean resetPage) {
-        mIsLoading = true;
-        mRefresher.setRefreshing(true);
-        if(resetPage) {
-            mPage = 1;
-            mMaxPageReached = false;
-        }
-        mLoader.loadEvents(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
-    }
-
-    void addEvent(IssueEvent event) {
-        mEvents.add(new Pair<>(event, null));
-        notifyItemInserted(mEvents.size());
-    }
-
-    @Override
-    public EventHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        return new EventHolder(LayoutInflater.from(parent.getContext())
-                                             .inflate(R.layout.viewholder_event, parent, false));
-    }
-
-    @Override
-    public void onBindViewHolder(EventHolder holder, int position) {
-        if(mEvents.get(position).first instanceof IssueEvent) {
-            bindEvent(holder, (IssueEvent) mEvents.get(position).first);
-        } else if(mEvents.get(position).first instanceof MergedModel) {
-            bindMergedEvent(holder, (MergedModel<IssueEvent>) mEvents.get(position).first);
-        }
-    }
-
-    private void bindMergedEvent(EventHolder eventHolder, MergedModel<IssueEvent> me) {
-        String text;
-        final Resources res = eventHolder.itemView.getResources();
-        switch(me.getData().get(0).getEvent()) {
-            case ASSIGNED:
-                final StringBuilder assignees = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    assignees.append(String.format(res.getString(R.string.text_href),
-                            e.getActor().getHtmlUrl(),
-                            e.getActor().getLogin()
-                    ));
-                    assignees.append(", ");
-                }
-                assignees.setLength(assignees.length() - 2); //Remove final comma
-                text = String.format(res.getString(R.string.text_event_assigned_multiple),
-                        assignees.toString()
-                );
-                break;
-            case UNASSIGNED:
-                final StringBuilder unassignees = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    unassignees.append(String.format(res.getString(R.string.text_href),
-                            e.getActor().getHtmlUrl(),
-                            e.getActor().getLogin()
-                    ));
-                    unassignees.append(", ");
-                }
-                unassignees.setLength(unassignees.length() - 2); //Remove final comma
-                text = String.format(res.getString(R.string.text_event_unassigned_multiple),
-                        unassignees.toString()
-                );
-                break;
-            case REVIEW_REQUESTED:
-                final StringBuilder requested = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    requested.append(String.format(res.getString(R.string.text_href),
-                            e.getRequestedReviewer().getHtmlUrl(),
-                            e.getRequestedReviewer().getLogin()
-                    ));
-                    requested.append(", ");
-                }
-                requested.setLength(requested.length() - 2); //Remove final comma
-                text = String.format(res.getString(R.string.text_event_review_requested_multiple),
-                        String.format(res.getString(R.string.text_href),
-                                me.getData().get(0).getReviewRequester().getHtmlUrl(),
-                                me.getData().get(0).getReviewRequester().getLogin()
-                        ),
-                        requested.toString()
-                );
-                break;
-            case REVIEW_REQUEST_REMOVED:
-                final StringBuilder derequested = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    derequested.append(String.format(res.getString(R.string.text_href),
-                            e.getReviewRequester().getHtmlUrl(),
-                            e.getReviewRequester().getLogin()
-                    ));
-                    derequested.append(", ");
-                }
-                derequested.setLength(derequested.length() - 2); //Remove final comma
-                text = String
-                        .format(res.getString(R.string.text_event_review_request_removed_multiple),
-                                String.format(res.getString(R.string.text_href),
-                                        me.getData().get(0).getActor().getHtmlUrl(),
-                                        me.getData().get(0).getActor().getLogin()
-                                ),
-                                derequested.toString()
-                        );
-                break;
-            case LABELED:
-                final StringBuilder labels = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    labels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
-                    labels.append("&nbsp;");
-                }
-                labels.setLength(labels.length() - "&nbsp;".length());
-                text = String.format(
-                        res.getString(R.string.text_event_labels_added),
-                        String.format(res.getString(R.string.text_href),
-                                me.getData().get(0).getActor().getHtmlUrl(),
-                                me.getData().get(0).getActor().getLogin()
-                        ),
-                        labels.toString()
-                );
-                break;
-            case UNLABELED:
-                final StringBuilder unlabels = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    unlabels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
-                    unlabels.append("&nbsp;");
-                }
-                unlabels.setLength(unlabels.length() - 2);
-                text = String.format(res.getString(R.string.text_event_labels_removed),
-                        String.format(res.getString(R.string.text_href),
-                                me.getData().get(0).getActor().getHtmlUrl(),
-                                me.getData().get(0).getActor().getLogin()
-                        ),
-                        unlabels.toString()
-                );
-                break;
-            case CLOSED:
-                //Duplicate close events seem to happen
-                bindEvent(eventHolder, me.getData().get(0));
-                return;
-            case REFERENCED:
-                final StringBuilder commits = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    commits.append("<br>");
-                    commits.append(String.format(res.getString(R.string.text_href),
-                            "https://github.com/" + mIssue.getRepoFullName() + "/commit/" + e
-                                    .getCommitId(),
-                            String.format(res.getString(R.string.text_commit), e.getShortCommitId())
-                    ));
-                }
-                commits.append("<br>");
-                text = String.format(res.getString(R.string.text_event_referenced_multiple),
-                        commits.toString()
-                );
-                break;
-            case MENTIONED:
-                final StringBuilder mentioned = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    mentioned.append("<br>");
-                    mentioned.append(String.format(res.getString(R.string.text_href),
-                            e.getActor().getHtmlUrl(),
-                            e.getActor().getLogin()
-                    ));
-                }
-                text = String.format(res.getString(R.string.text_event_mentioned_multiple),
-                        mentioned.toString()
-                );
-                break;
-            case RENAMED:
-                final StringBuilder named = new StringBuilder();
-                for(IssueEvent e : me.getData()) {
-                    named.append("<br>");
-                    named.append(
-                            String.format(
-                                    res.getString(R.string.text_event_rename_multiple),
-                                    e.getRenameFrom(),
-                                    e.getRenameTo()
-                            )
-                    );
-                }
-                text = String.format(res.getString(R.string.text_event_renamed_multiple),
-                        named.toString()
-                );
-                break;
-            case MOVED_COLUMNS_IN_PROJECT:
-                text = res.getString(R.string.text_event_moved_columns_in_project_multiple);
-                break;
-            default:
-                bindEvent(eventHolder, me.getData().get(0));
-                return;
-        }
-        text += " • " + DateUtils.getRelativeTimeSpanString(me.getCreatedAt());
-        eventHolder.mText.setMarkdown(
-                text,
-                new HttpImageGetter(eventHolder.mText),
-                null
-        );
-        if(me.getData().get(0).getActor() != null) {
-            eventHolder.mAvatar.setVisibility(View.VISIBLE);
-            eventHolder.mAvatar.setImageUrl(me.getData().get(0).getActor().getAvatarUrl());
-            IntentHandler.addOnClickHandler(
-                    mParent.getActivity(),
-                    eventHolder.mAvatar, me.getData().get(0).getActor().getLogin()
-            );
-            IntentHandler.addOnClickHandler(mParent.getActivity(),
-                    eventHolder.mText,
-                    eventHolder.mAvatar,
-                    me.getData().get(0).getActor().getLogin()
-            );
-        } else {
-            eventHolder.mAvatar.setVisibility(View.GONE);
-        }
-    }
-
-    private void bindEvent(EventHolder eventHolder, IssueEvent event) {
-        String text;
-        final Resources res = eventHolder.itemView.getResources();
-        switch(event.getEvent()) {
-            case CLOSED:
-                if(event.getShortCommitId() != null) {
-                    text = String.format(res.getString(R.string.text_event_closed_in),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            ),
-                            String.format(res.getString(R.string.text_href),
-                                    "https://github.com/" + mIssue
-                                            .getRepoFullName() + "/commit/" + event.getCommitId(),
-                                    String.format(res.getString(R.string.text_commit),
-                                            event.getShortCommitId()
-                                    )
-                            )
-                    );
-                } else {
-                    text = String.format(res.getString(R.string.text_event_closed),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            )
-                    );
-                }
-                break;
-            case REOPENED:
-                text = String.format(res.getString(R.string.text_event_reopened),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case SUBSCRIBED:
-                text = String.format(res.getString(R.string.text_event_subscribed),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case MERGED:
-                text = String.format(res.getString(R.string.text_event_merged),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        ),
-                        String.format(res.getString(R.string.text_href),
-                                "https://github.com/" + mIssue
-                                        .getRepoFullName() + "/commit/" + event.getCommitId(),
-                                String.format(res.getString(R.string.text_commit),
-                                        event.getShortCommitId()
-                                )
-                        )
-                );
-                break;
-            case REFERENCED:
-                text = String.format(res.getString(R.string.text_event_referenced),
-                        String.format(res.getString(R.string.text_href),
-                                "https://github.com/" + mIssue
-                                        .getRepoFullName() + "/commit/" + event.getCommitId(),
-                                String.format(res.getString(R.string.text_commit),
-                                        event.getShortCommitId()
-                                )
-                        )
-                );
-                break;
-            case MENTIONED:
-                text = String.format(res.getString(R.string.text_event_mentioned),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case ASSIGNED:
-                if(event.getAssignee() != null && event.getActor().equals(event.getAssignee())) {
-                    text = String.format(res.getString(R.string.text_event_assigned_themselves),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            )
-                    );
-                } else {
-                    text = String.format(res.getString(R.string.text_event_assigned),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            )
-                    );
-                }
-                break;
-            case UNASSIGNED:
-                if(event.getAssignee() != null && event.getActor().equals(event.getAssignee())) {
-                    text = String.format(res.getString(R.string.text_event_unassigned_themselves),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            )
-                    );
-                } else {
-                    text = String.format(res.getString(R.string.text_event_unassigned),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            )
-                    );
-                }
-                break;
-            case LABELED:
-                text = String.format(res.getString(R.string.text_event_labeled),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        ),
-                        Formatter.getLabelString(event.getLabelName(), event.getLabelColor())
-                );
-                break;
-            case UNLABELED:
-                text = String.format(res.getString(R.string.text_event_unlabeled),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        ),
-                        Formatter.getLabelString(event.getLabelName(), event.getLabelColor())
-                );
-                break;
-            case MILESTONED:
-                text = "Milestoned"; //TODO
-                break;
-            case DEMILESTONED:
-                text = "De-milestoned"; //TODO
-                break;
-            case RENAMED:
-                text = String.format(res.getString(R.string.text_event_renamed),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        ),
-                        event.getRenameFrom(),
-                        event.getRenameTo()
-                );
-                break;
-            case LOCKED:
-                text = String.format(res.getString(R.string.text_event_locked),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case UNLOCKED:
-                text = String.format(res.getString(R.string.text_event_unlocked),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case HEAD_REF_DELETED:
-                text = res.getString(R.string.text_event_head_ref_deleted);
-                break;
-            case HEAD_REF_RESTORED:
-                text = res.getString(R.string.text_event_head_ref_restored);
-                break;
-            case REVIEW_DISMISSED:
-                text = String.format(res.getString(R.string.text_event_review_dismissed),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case REVIEW_REQUESTED:
-                if(event.getReviewRequester().getId() == event.getRequestedReviewer().getId()) {
-                    text = String.format(res.getString(R.string.text_event_own_review_request),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getReviewRequester().getHtmlUrl(),
-                                    event.getReviewRequester().getLogin()
-                            )
-                    );
-                } else {
-                    text = String.format(res.getString(R.string.text_event_review_requested),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getReviewRequester().getHtmlUrl(),
-                                    event.getReviewRequester().getLogin()
-                            ),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getRequestedReviewer().getHtmlUrl(),
-                                    event.getRequestedReviewer().getLogin()
-                            )
-                    );
-                }
-                break;
-            case REVIEW_REQUEST_REMOVED:
-                if(event.getReviewRequester().getId() == event.getRequestedReviewer().getId()) {
-                    text = String
-                            .format(res.getString(R.string.text_event_removed_own_review_request),
-                                    String.format(res.getString(R.string.text_href),
-                                            event.getReviewRequester().getHtmlUrl(),
-                                            event.getReviewRequester().getLogin()
-                                    )
-                            );
-                } else {
-                    text = String.format(res.getString(R.string.text_event_review_request_removed),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getActor().getHtmlUrl(),
-                                    event.getActor().getLogin()
-                            ),
-                            String.format(res.getString(R.string.text_href),
-                                    event.getRequestedReviewer().getHtmlUrl(),
-                                    event.getRequestedReviewer().getLogin()
-                            )
-                    );
-                }
-                break;
-            case REMOVED_FROM_PROJECT:
-                text = String.format(res.getString(R.string.text_event_removed_from_project),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case ADDED_TO_PROJECT:
-                text = String.format(res.getString(R.string.text_event_added_to_project),
-                        String.format(res.getString(R.string.text_href),
-                                event.getActor().getHtmlUrl(),
-                                event.getActor().getLogin()
-                        )
-                );
-                break;
-            case MOVED_COLUMNS_IN_PROJECT:
-                text = res.getString(R.string.text_event_moved_columns_in_project);
-                break;
-            default:
-                text = "An event type hasn't been implemented " + event.getEvent();
-                text += "\nTell me here " + BuildConfig.BUG_EMAIL;
-        }
-        text += " • " + DateUtils.getRelativeTimeSpanString(event.getCreatedAt());
-        eventHolder.mText.setMarkdown(
-                text,
-                new HttpImageGetter(eventHolder.mText),
-                null
-        );
-        if(event.getActor() != null) {
-            eventHolder.mAvatar.setVisibility(View.VISIBLE);
-            eventHolder.mAvatar.setImageUrl(event.getActor().getAvatarUrl());
-            IntentHandler.addOnClickHandler(mParent.getActivity(), eventHolder.mAvatar,
-                    event.getActor().getLogin()
-            );
-            IntentHandler.addOnClickHandler(mParent.getActivity(), eventHolder.mText,
-                    eventHolder.mAvatar, event.getActor().getLogin()
-            );
-        } else {
-            eventHolder.mAvatar.setVisibility(View.GONE);
-        }
-    }
-
-    @Override
-    public int getItemCount() {
-        return mEvents.size();
-    }
-
-
-    class EventHolder extends RecyclerView.ViewHolder {
-        @BindView(R.id.event_text) MarkdownTextView mText;
-        @BindView(R.id.event_user_avatar) NetworkImageView mAvatar;
-
-        EventHolder(View view) {
-            super(view);
-            ButterKnife.bind(this, view);
-        }
-
-    }
-
-
-}
-
-```
-
-### IssueCommentsFragment
-
-**IssueCommentsFragment.java**
-``` java
-package com.tpb.projects.issues.fragments;
-
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
-import android.content.Intent;
-import android.os.Bundle;
-import android.support.annotation.Nullable;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.PopupMenu;
-import android.widget.Toast;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Editor;
-import com.tpb.github.data.auth.GitHubSession;
-import com.tpb.github.data.models.Comment;
-import com.tpb.github.data.models.Issue;
-import com.tpb.github.data.models.Repository;
-import com.tpb.projects.R;
-import com.tpb.projects.common.fab.FloatingActionButton;
-import com.tpb.projects.editors.CommentEditor;
-import com.tpb.projects.issues.IssueCommentsAdapter;
-import com.tpb.projects.util.UI;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.Unbinder;
-
-/**
- * Created by theo on 14/03/17.
- */
-
-public class IssueCommentsFragment extends IssueFragment {
-
-    private Unbinder unbinder;
-
-    @BindView(R.id.fragment_recycler) RecyclerView mRecycler;
-    @BindView(R.id.fragment_refresher) SwipeRefreshLayout mRefresher;
-    private FloatingActionButton mFab;
-
-    private IssueCommentsAdapter mAdapter;
-
-    private Editor mEditor;
-
-    private Repository.AccessLevel mAccessLevel;
-    private Issue mIssue;
-
-    public static IssueCommentsFragment getInstance(FloatingActionButton fab) {
-        final IssueCommentsFragment frag = new IssueCommentsFragment();
-        frag.mFab = fab;
-        return frag;
-    }
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mEditor = Editor.getEditor(getContext());
-    }
-
-    @Nullable
-    @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.fragment_recycler, container, false);
-        unbinder = ButterKnife.bind(this, view);
-        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
-        mRecycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                super.onScrolled(recyclerView, dx, dy);
-                if(manager.findFirstVisibleItemPosition() + 20 > manager.getItemCount()) {
-                    mAdapter.notifyBottomReached();
-                }
-                if(dy > 10) {
-                    mFab.hide(true);
-                } else if(dy < -10 && mIssue != null && !mIssue.isLocked()) {
-                    mFab.show(true);
-                }
-            }
-        });
-        mFab.setOnClickListener(v -> {
-            final Intent i = new Intent(getContext(), CommentEditor.class);
-            UI.setViewPositionForIntent(i, mFab);
-            startActivityForResult(i, CommentEditor.REQUEST_CODE_NEW_COMMENT);
-        });
-        mAdapter = new IssueCommentsAdapter(this, mRefresher);
-        if(mIssue != null) mAdapter.setIssue(mIssue);
-        if(mAccessLevel != null && mAccessLevel == Repository.AccessLevel.ADMIN) {
-            mFab.setVisibility(View.VISIBLE);
-        }
-        mRecycler.setAdapter(mAdapter);
-        mRecycler.setLayoutManager(manager);
-        mRefresher.setOnRefreshListener(() -> {
-            mAdapter.clear();
-            mAdapter.setIssue(mIssue);
-        });
-
-        return view;
-    }
-
-    @Override
-    public void issueLoaded(Issue issue) {
-        mIssue = issue;
-        if(mAdapter != null) mAdapter.setIssue(issue);
-    }
-
-    @Override
-    public void setAccessLevel(Repository.AccessLevel level) {
-        mAccessLevel = level;
-        if(mAccessLevel == Repository.AccessLevel.ADMIN && mIssue != null && !mIssue.isLocked()) {
-            mFab.setVisibility(View.VISIBLE);
-            mFab.show(true);
-        }
-    }
-
-    private void createComment(Comment comment) {
-        mRefresher.setRefreshing(true);
-        mEditor.createIssueComment(new Editor.CreationListener<Comment>() {
-            @Override
-            public void created(Comment comment) {
-                mRefresher.setRefreshing(false);
-                mAdapter.addComment(comment);
-                mRecycler.post(() -> mRecycler.smoothScrollToPosition(mAdapter.getItemCount()));
-            }
-
-            @Override
-            public void creationError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mIssue.getRepoFullName(), mIssue.getNumber(), comment.getBody());
-    }
-
-    public void createCommentForState(Comment comment) {
-        createComment(comment);
-    }
-
-    private void editComment(Comment comment) {
-        mEditor.updateIssueComment(new Editor.UpdateListener<Comment>() {
-            @Override
-            public void updated(Comment comment) {
-                mRefresher.setRefreshing(false);
-                mAdapter.updateComment(comment);
-            }
-
-            @Override
-            public void updateError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mIssue.getRepoFullName(), comment.getId(), comment.getBody());
-    }
-
-    void removeComment(Comment comment) {
-        mRefresher.setRefreshing(true);
-        mEditor.deleteIssueComment(new Editor.DeletionListener<Integer>() {
-            @Override
-            public void deleted(Integer id) {
-                mRefresher.setRefreshing(false);
-                mAdapter.removeComment(id);
-            }
-
-            @Override
-            public void deletionError(APIHandler.APIError error) {
-                mRefresher.setRefreshing(false);
-            }
-        }, mIssue.getRepoFullName(), comment.getId());
-    }
-
-    public void displayCommentMenu(View view, Comment comment) {
-        final PopupMenu menu = new PopupMenu(getContext(), view);
-        menu.inflate(R.menu.menu_comment);
-        if(comment.getUser().getLogin().equals(
-                GitHubSession.getSession(getContext()).getUserLogin()) && !mIssue.isLocked()) {
-            menu.getMenu()
-                .add(0, R.id.menu_edit_comment, Menu.NONE, getString(R.string.menu_edit_comment));
-            menu.getMenu().add(0, R.id.menu_delete_comment, Menu.NONE,
-                    getString(R.string.menu_delete_comment)
-            );
-        }
-        menu.setOnMenuItemClickListener(menuItem -> {
-            switch(menuItem.getItemId()) {
-                case R.id.menu_edit_comment:
-                    final Intent i = new Intent(getContext(), CommentEditor.class);
-                    i.putExtra(getString(R.string.parcel_comment), comment);
-                    UI.setViewPositionForIntent(i, view);
-                    startActivityForResult(i, CommentEditor.REQUEST_CODE_EDIT_COMMENT);
-                    break;
-                case R.id.menu_delete_comment:
-                    removeComment(comment);
-                    break;
-                case R.id.menu_copy_comment_text:
-                    final ClipboardManager cm = (ClipboardManager) getActivity()
-                            .getSystemService(Context.CLIPBOARD_SERVICE);
-                    cm.setPrimaryClip(ClipData.newPlainText("Comment", comment.getBody()));
-                    Toast.makeText(getContext(), getString(R.string.text_copied_to_board),
-                            Toast.LENGTH_SHORT
-                    ).show();
-                    break;
-            }
-            return false;
-        });
-        menu.show();
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if(resultCode == AppCompatActivity.RESULT_OK) {
-            final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
-            if(requestCode == CommentEditor.REQUEST_CODE_NEW_COMMENT) {
-                createComment(comment);
-            } else if(requestCode == CommentEditor.REQUEST_CODE_EDIT_COMMENT) {
-                mRefresher.setRefreshing(true);
-                editComment(comment);
-            } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
-                createCommentForState(comment);
-            }
-        }
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        unbinder.unbind();
-    }
-}
-
-```
-
-#### IssueCommentsAdapter
-
-**IssueCommentsAdapter.java**
-``` java
-package com.tpb.projects.issues;
-
-import android.support.v4.util.Pair;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.support.v7.widget.RecyclerView;
-import android.text.SpannableString;
-import android.text.format.DateUtils;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageButton;
-
-import com.tpb.github.data.APIHandler;
-import com.tpb.github.data.Loader;
-import com.tpb.github.data.models.Comment;
-import com.tpb.github.data.models.Issue;
-import com.tpb.mdtext.Markdown;
-import com.tpb.mdtext.imagegetter.HttpImageGetter;
-import com.tpb.mdtext.views.MarkdownTextView;
-import com.tpb.projects.R;
-import com.tpb.projects.common.NetworkImageView;
-import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.issues.fragments.IssueCommentsFragment;
-import com.tpb.projects.markdown.Formatter;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * Created by theo on 14/03/17.
- */
-
-public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdapter.CommentHolder> implements Loader.ListLoader<Comment> {
-
-    private final ArrayList<Pair<Comment, SpannableString>> mComments = new ArrayList<>();
-    private Issue mIssue;
-    private final IssueCommentsFragment mParent;
-
-    private int mPage = 1;
-    private boolean mIsLoading = false;
-    private boolean mMaxPageReached = false;
-
-    private SwipeRefreshLayout mRefresher;
-    private Loader mLoader;
-
-    public IssueCommentsAdapter(IssueCommentsFragment parent, SwipeRefreshLayout refresher) {
-        mParent = parent;
-        mLoader = Loader.getLoader(parent.getContext());
-        mRefresher = refresher;
-        mRefresher.setRefreshing(true);
-        mRefresher.setOnRefreshListener(() -> {
-            mPage = 1;
-            mMaxPageReached = false;
-            clear();
-            loadComments(true);
-        });
-    }
-
-    public void clear() {
-        final int oldSize = mComments.size();
-        mComments.clear();
-        notifyItemRangeRemoved(0, oldSize);
-    }
-
-    public void setIssue(Issue issue) {
-        mIssue = issue;
-        clear();
-        mPage = 1;
-        mLoader.loadIssueComments(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
-    }
-
-    @Override
-    public void listLoadComplete(List<Comment> data) {
-        mRefresher.setRefreshing(false);
-        mIsLoading = false;
-        if(data.size() > 0) {
-            int oldLength = mComments.size();
-            for(Comment c : data) {
-                mComments.add(new Pair<>(c, null));
-            }
-            notifyItemRangeInserted(oldLength, mComments.size());
-        } else {
-            mMaxPageReached = true;
-        }
-    }
-
-    @Override
-    public void listLoadError(APIHandler.APIError error) {
-
-    }
-
-    public void notifyBottomReached() {
-        if(!mIsLoading && !mMaxPageReached) {
-            mPage++;
-            loadComments(false);
-        }
-    }
-
-    private void loadComments(boolean resetPage) {
-        mIsLoading = true;
-        mRefresher.setRefreshing(true);
-        if(resetPage) {
-            mPage = 1;
-            mMaxPageReached = false;
-        }
-        mLoader.loadIssueComments(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
-    }
-
-    public void addComment(Comment comment) {
-        mComments.add(new Pair<>(comment, null));
-        notifyItemInserted(mComments.size());
-    }
-
-    public void removeComment(int commentId) {
-        int index = -1;
-        for(int i = 0; i < mComments.size(); i++) {
-            if(mComments.get(i).first.getId() == commentId) {
-                index = i;
-                break;
-            }
-        }
-        if(index != -1) {
-            mComments.remove(index);
-            notifyItemRemoved(index);
-        }
-    }
-
-    public void updateComment(Comment comment) {
-        int index = -1;
-        for(int i = 0; i < mComments.size(); i++) {
-            if(mComments.get(i).first.getId() == comment.getId()) {
-                index = i;
-                break;
-            }
-        }
-        if(index != -1) {
-            mComments.set(index, new Pair<>(comment, null));
-            notifyItemChanged(index);
-        }
-    }
-
-    @Override
-    public CommentHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        return new CommentHolder(LayoutInflater.from(parent.getContext())
-                                               .inflate(R.layout.viewholder_comment, parent,
-                                                       false
-                                               ));
-
-    }
-
-    @Override
-    public void onBindViewHolder(CommentHolder holder, int position) {
-        final int pos = holder.getAdapterPosition();
-        final Comment comment = mComments.get(pos).first;
-        if(mComments.get(pos).second == null) {
-            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
-            final StringBuilder builder = new StringBuilder();
-            builder.append(String.format(
-                    holder.itemView.getResources().getString(R.string.text_comment_by),
-                    String.format(
-                            holder.itemView.getResources().getString(R.string.text_href),
-                            comment.getUser().getHtmlUrl(),
-                            comment.getUser().getLogin()
-                    ),
-                    DateUtils.getRelativeTimeSpanString(comment.getCreatedAt())
-            ));
-            if(comment.getUpdatedAt() != comment.getCreatedAt()) {
-                builder.append(" • ");
-                builder.append(holder.itemView.getResources()
-                                                     .getString(R.string.text_comment_edited));
-            }
-            builder.append("<br><br>");
-            builder.append(Markdown.formatMD(comment.getBody(), mIssue.getRepoFullName()));
-            if(comment.hasReaction()) {
-                builder.append("\n");
-                builder.append(Formatter.reactions(comment.getReaction()));
-            }
-
-            holder.mText.setMarkdown(
-                    builder.toString(),
-                    new HttpImageGetter(holder.mText),
-                    text -> mComments.set(pos, Pair.create(comment, text))
-            );
-        } else {
-            holder.mAvatar.setImageUrl(comment.getUser().getAvatarUrl());
-            holder.mText.setText(mComments.get(pos).second);
-        }
-        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mText);
-        IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mAvatar,
-                comment.getUser().getLogin()
-        );
-    }
-
-    @Override
-    public int getItemCount() {
-        return mComments.size();
-    }
-
-    private void displayMenu(View view, int pos) {
-        mParent.displayCommentMenu(view, mComments.get(pos).first);
-    }
-
-    class CommentHolder extends RecyclerView.ViewHolder {
-        @BindView(R.id.event_comment_avatar) NetworkImageView mAvatar;
-        @BindView(R.id.comment_text) MarkdownTextView mText;
-        @BindView(R.id.comment_menu_button) ImageButton mMenu;
-
-        CommentHolder(View view) {
-            super(view);
-            ButterKnife.bind(this, view);
-            mMenu.setOnClickListener((v) -> displayMenu(v, getAdapterPosition()));
-            // view.setOnClickListener((v) -> displayInFullScreen(getAdapterPosition()));
-        }
-
-    }
-}
-
-```
 
 ## Notifications
 
