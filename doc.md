@@ -5049,9 +5049,25 @@ If the user selects the negative button, the issue state is toggled without show
 If the user selects the third, neutral, option, the dialog is cancelled.
 
 
+#### Adapter
+
+The ```RepoIssuesAdapter``` manages loading and displaying ```Issues```, managing updates to ```Issues```, and applying a search to the dataset.
+
+Binding works in the standard manner, with each ```Issue``` stored in a ```Pair``` alongisde its cached ```SpannableString```.
+
+The filters described above are set in ```applyFilter``` and passed to the ```Loader``` in ```loadIssues```.
+
+Search filters are applied using the ```FuzzyStringSearcher```.
+When ```search``` is called a list of the information about each ```Issue``` is created and passed with the query to the ```FuzzyStringSearcher```.
+The positions returned are set in mSearchFilter, and ```notifyDataSetChanged``` is called.
+
+In ```onBindViewHolder```, if mIsSearching is true, the actual position of the data is found from the value in mSearchFilter at the position being bound.
+
 #import "app/src/main/java/com/tpb/projects/repo/RepoIssuesAdapter.java"
 
 ### RepoProjectsFragment
+
+The final ```RepoFragment``` displayed in ```RepoActivity``` is the ```RepoProjectsFragment``` which displays the projects associated with a repository, as well as managing their state, editing and deleting them.
 
 #import "app/src/main/java/com/tpb/projects/repo/fragments/RepoProjectsFragment.java"
 

@@ -16171,12 +16171,24 @@ If the user selects the negative button, the issue state is toggled without show
 If the user selects the third, neutral, option, the dialog is cancelled.
 
 
+#### Adapter
+
+The ```RepoIssuesAdapter``` manages loading and displaying ```Issues```, managing updates to ```Issues```, and applying a search to the dataset.
+
+Binding works in the standard manner, with each ```Issue``` stored in a ```Pair``` alongisde its cached ```SpannableString```.
+
+The filters described above are set in ```applyFilter``` and passed to the ```Loader``` in ```loadIssues```.
+
+Search filters are applied using the ```FuzzyStringSearcher```.
+When ```search``` is called a list of the information about each ```Issue``` is created and passed with the query to the ```FuzzyStringSearcher```.
+The positions returned are set in mSearchFilter, and ```notifyDataSetChanged``` is called.
+
+In ```onBindViewHolder```, if mIsSearching is true, the actual position of the data is found from the value in mSearchFilter at the position being bound.
+
 **RepoIssuesAdapter.java**
 ``` java
 package com.tpb.projects.repo;
 
-import android.content.Intent;
-import android.support.v4.app.ActivityOptionsCompat;
 import android.support.v4.util.Pair;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.widget.RecyclerView;
@@ -16198,10 +16210,8 @@ import com.tpb.mdtext.views.MarkdownTextView;
 import com.tpb.projects.R;
 import com.tpb.projects.common.NetworkImageView;
 import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.issues.IssueActivity;
 import com.tpb.projects.markdown.Formatter;
 import com.tpb.projects.repo.fragments.RepoIssuesFragment;
-import com.tpb.projects.util.UI;
 import com.tpb.projects.util.Util;
 import com.tpb.projects.util.search.FuzzyStringSearcher;
 
@@ -16256,15 +16266,20 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
     public void search(String query) {
         if(mIsLoading) return;
         mIsSearching = true;
-        final ArrayList<String> issues = new ArrayList<>();
-        String s;
+        final List<String> issues = new ArrayList<>();
+        final StringBuilder builder = new StringBuilder();
         for(Pair<Issue, SpannableString> p : mIssues) {
-            s = "#" + p.first.getNumber();
+            builder.append(p.first.getNumber());
+            builder.append(" ");
+            builder.append(p.first.getTitle());
+            if(p.first.getOpenedBy() != null) builder.append(p.first.getOpenedBy().getLogin());
             if(p.first.getLabels() != null) {
-                for(Label l : p.first.getLabels()) s += "\n" + l.getName();
+                for(Label l : p.first.getLabels()) builder.append(l.getName());
             }
-            s += p.first.getTitle() + "\n" + p.first.getBody();
-            issues.add(s);
+            builder.append(" ");
+            builder.append(p.first.getBody());
+            issues.add(builder.toString());
+            builder.setLength(0);
         }
         mSearcher.setItems(issues);
         mSearchFilter = mSearcher.search(query);
@@ -16306,7 +16321,8 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
 
     @Override
     public void listLoadError(APIHandler.APIError error) {
-
+        mRefresher.setRefreshing(false);
+        loadIssues(false);
     }
 
     public void notifyBottomReached() {
@@ -16349,12 +16365,7 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
 
     @Override
     public void onBindViewHolder(IssueHolder holder, int position) {
-        final int pos;
-        if(mIsSearching) {
-            pos = mSearchFilter.get(position);
-        } else {
-            pos = holder.getAdapterPosition();
-        }
+        final int pos = mIsSearching ? mSearchFilter.get(position) : holder.getAdapterPosition();
         final Issue issue = mIssues.get(pos).first;
         holder.mTitle.setMarkdown(Formatter.bold(issue.getTitle()));
         holder.mIssueIcon.setImageResource(
@@ -16382,6 +16393,7 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
         IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mContent, issue);
         IntentHandler.addOnClickHandler(mParent.getActivity(), holder.mTitle, issue);
         IntentHandler.addOnClickHandler(mParent.getActivity(), holder.itemView, issue);
+        holder.mMenuButton.setOnClickListener((v) -> mParent.openMenu(v, issue));
     }
 
     @Override
@@ -16389,21 +16401,7 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
         return mIsSearching ? mSearchFilter.size() : mIssues.size();
     }
 
-    private void openIssue(IssueHolder holder, int pos) {
-        final Intent i = new Intent(mParent.getContext(), IssueActivity.class);
-        i.putExtra(mParent.getString(R.string.transition_card), "");
-        i.putExtra(mParent.getString(R.string.parcel_issue), mIssues.get(pos).first);
-        UI.setDrawableForIntent(holder.mUserAvatar, i);
-        //We have to add the nav bar as ViewOverlay is above it
-        mParent.startActivity(i, ActivityOptionsCompat.makeSceneTransitionAnimation(
-                mParent.getActivity(),
-                Pair.create(holder.itemView, mParent.getString(R.string.transition_card)),
-                UI.getSafeNavigationBarTransitionPair(mParent.getActivity())
-                ).toBundle()
-        );
-    }
-
-    class IssueHolder extends RecyclerView.ViewHolder {
+    static class IssueHolder extends RecyclerView.ViewHolder {
 
         @BindView(R.id.issue_title) MarkdownTextView mTitle;
         @BindView(R.id.issue_content_markdown) MarkdownTextView mContent;
@@ -16414,8 +16412,6 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
         IssueHolder(View view) {
             super(view);
             ButterKnife.bind(this, view);
-            mMenuButton.setOnClickListener(
-                    (v) -> mParent.openMenu(v, mIssues.get(getAdapterPosition()).first));
         }
     }
 }
@@ -16423,6 +16419,8 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
 ```
 
 ### RepoProjectsFragment
+
+The final ```RepoFragment``` displayed in ```RepoActivity``` is the ```RepoProjectsFragment``` which displays the projects associated with a repository, as well as managing their state, editing and deleting them.
 
 **RepoProjectsFragment.java**
 ``` java
@@ -16492,7 +16490,7 @@ public class RepoProjectsFragment extends RepoFragment {
     @Override
     public void repoLoaded(Repository repo) {
         mRepo = repo;
-        if(!areViewsValid()) return;
+        if(!mAreViewsValid) return;
         mAdapter.setRepository(repo);
 
     }
@@ -16541,9 +16539,9 @@ public class RepoProjectsFragment extends RepoFragment {
                     Editor.getEditor(getContext()).deleteProject(
                             new Editor.DeletionListener<Project>() {
                                 @Override
-                                public void deleted(Project project1) {
+                                public void deleted(Project deleted) {
                                     mRefresher.setRefreshing(false);
-                                    mAdapter.removeProject(project1);
+                                    mAdapter.removeProject(deleted);
                                 }
 
                                 @Override
