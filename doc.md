@@ -4747,9 +4747,114 @@ If mIsShowingFollowers is true, the ```loadFollowersCall``` is made, otherwise t
 
 ## Search
 
+I implemented two different fuzzy string matching algorithms while implementing search features in different parts of the app.
+
+The first algorithm uses the Levenshtein distance between two strings to score each string, allowing them to be sorted.
+
+``` java
+package com.tpb.projects.util.search;
+
+import android.support.annotation.NonNull;
+import android.support.v4.util.Pair;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Created by theo on 30/04/17.
+ */
+
+public class StringSearcher {
+    private List<String> mItems = new ArrayList<>();
+
+    public void setItems(List<String> items) {
+        mItems = items;
+    }
+
+    public List<Integer> matches(@NonNull String query, int maxResults) {
+        if(query.isEmpty()) return Collections.emptyList();
+        final List<Pair<Integer, Integer>> matches = new ArrayList<>();
+        for(int i = 0; i < mItems.size(); i++) {
+            matches.add(Pair.create(distance(query, mItems.get(i)), i));
+        }
+        Collections.sort(matches, (p1, p2) -> p1.first > p2.first ? 1 : p1.first.equals(p2.first) ? 0 : -1);
+        
+        final List<Integer> results = new ArrayList<>();
+        for(int i = 0; i < matches.size() && i < maxResults; i++) {
+            results.add(matches.get(i).second);
+        }
+        return results;
+    }
+
+    private static int distance(final String s1, final String s2) {
+        final int len0 = s1.length() + 1;
+        final int len1 = s2.length() + 1;
+
+        // the array of distances
+        int[] cost = new int[len0];
+        int[] newcost = new int[len0];
+
+        // initial cost of skipping prefix in String s0
+        for(int i = 0; i < len0; i++) cost[i] = i;
+
+        // dynamically computing the array of distances
+
+        // transformation cost for each letter in s1
+        for (int j = 1; j < len1; j++) {
+            // initial cost of skipping prefix in String s1
+            newcost[0] = j;
+
+            // transformation cost for each letter in s0
+            for(int i = 1; i < len0; i++) {
+                // matching current letters in both strings
+                int match = (s1.charAt(i - 1) == s2.charAt(j - 1)) ? 0 : 1;
+
+                // computing cost for each transformation
+                final int replaceCost = cost[i - 1] + match;
+                final int insertCost  = cost[i] + 1;
+                final int deleteCost  = newcost[i - 1] + 1;
+
+                // keep minimum cost
+                newcost[i] = Math.min(Math.min(insertCost, deleteCost), replaceCost);
+            }
+
+            // swap cost/newcost arrays
+            int[] swap = cost; cost = newcost; newcost = swap;
+        }
+
+        // the distance is the cost for transforming all letters in both strings
+        return cost[len0 - 1] / Math.max(s1.length(), s2.length());
+    }
+
+}
+```
+
+The Levenshtein distance between two strings is found by creating a matrix of the distances between each character in each string, and finding the shortest path through it.
+
+![Levenshtein](http://www.levenshtein.net/images/levenshtein_meilenstein_matrix.gif)
+
+The problem with this is that it returns short distances for short strings, even if they do not contain a subsequence remotely resembling the query.
+Performance was improved slightly by dividing the distance by the length of the larger of the two strings, but small strings were still matched above larger ones which contained the entire substring.
+
+The second algorithm I implemented is the Bitap algorithm.
+
+The algorithm computes a set of bitmasks containing one bit for each element in the pattern.
+The bitmask must be able to mask all characters which might occur, and as such it is 2<sup>16</sup> in length.
+Rather than allocating this array on each search, which would be needlessly wasteful, ```FuzzyStringSearcher``` is a singleton which can be re-used. This will never be a problem as the user cannot be searching int two places at once.
+Each item in the mask is an integer, which gives a limit of 31 characters for the query, as each character requires 1 bit.
+
+
 #import "app/src/main/java/com/tpb/projects/util/search/FuzzyStringSearcher.java"
 
+```search``` iterates through the items given and finds the index of the query in them.
+If the index is valid (The query was matched), the current ranks are checked and the the rank is added to the first position which it is greater than. The index of the item is then added to the positions list which is returned once the searching is complete.
+
+The ```ArrayFilter``` is a generic class used to filter a list for an ```ArrayAdapter``` which is the adapter type for dropdown search results.
+
 #import "app/src/main/java/com/tpb/projects/util/search/ArrayFilter.java"
+
+It uses the ```FuzzyStringSearcher``` to match a set of positions, and then creates the ```FilterResults``` object with the filtered items and their size.
 
 ## RepoActivity
 

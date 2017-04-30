@@ -14159,30 +14159,114 @@ If mIsShowingFollowers is true, the ```loadFollowersCall``` is made, otherwise t
 
 ## Search
 
+I implemented two different fuzzy string matching algorithms while implementing search features in different parts of the app.
+
+The first algorithm uses the Levenshtein distance between two strings to score each string, allowing them to be sorted.
+
+``` java
+package com.tpb.projects.util.search;
+
+import android.support.annotation.NonNull;
+import android.support.v4.util.Pair;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Created by theo on 30/04/17.
+ */
+
+public class StringSearcher {
+    private List<String> mItems = new ArrayList<>();
+
+    public void setItems(List<String> items) {
+        mItems = items;
+    }
+
+    public List<Integer> matches(@NonNull String query, int maxResults) {
+        if(query.isEmpty()) return Collections.emptyList();
+        final List<Pair<Integer, Integer>> matches = new ArrayList<>();
+        for(int i = 0; i < mItems.size(); i++) {
+            matches.add(Pair.create(distance(query, mItems.get(i)), i));
+        }
+        Collections.sort(matches, (p1, p2) -> p1.first > p2.first ? 1 : p1.first.equals(p2.first) ? 0 : -1);
+        
+        final List<Integer> results = new ArrayList<>();
+        for(int i = 0; i < matches.size() && i < maxResults; i++) {
+            results.add(matches.get(i).second);
+        }
+        return results;
+    }
+
+    private static int distance(final String s1, final String s2) {
+        final int len0 = s1.length() + 1;
+        final int len1 = s2.length() + 1;
+
+        // the array of distances
+        int[] cost = new int[len0];
+        int[] newcost = new int[len0];
+
+        // initial cost of skipping prefix in String s0
+        for(int i = 0; i < len0; i++) cost[i] = i;
+
+        // dynamically computing the array of distances
+
+        // transformation cost for each letter in s1
+        for (int j = 1; j < len1; j++) {
+            // initial cost of skipping prefix in String s1
+            newcost[0] = j;
+
+            // transformation cost for each letter in s0
+            for(int i = 1; i < len0; i++) {
+                // matching current letters in both strings
+                int match = (s1.charAt(i - 1) == s2.charAt(j - 1)) ? 0 : 1;
+
+                // computing cost for each transformation
+                final int replaceCost = cost[i - 1] + match;
+                final int insertCost  = cost[i] + 1;
+                final int deleteCost  = newcost[i - 1] + 1;
+
+                // keep minimum cost
+                newcost[i] = Math.min(Math.min(insertCost, deleteCost), replaceCost);
+            }
+
+            // swap cost/newcost arrays
+            int[] swap = cost; cost = newcost; newcost = swap;
+        }
+
+        // the distance is the cost for transforming all letters in both strings
+        return cost[len0 - 1] / Math.max(s1.length(), s2.length());
+    }
+
+}
+```
+
+The Levenshtein distance between two strings is found by creating a matrix of the distances between each character in each string, and finding the shortest path through it.
+
+![Levenshtein](http://www.levenshtein.net/images/levenshtein_meilenstein_matrix.gif)
+
+The problem with this is that it returns short distances for short strings, even if they do not contain a subsequence remotely resembling the query.
+Performance was improved slightly by dividing the distance by the length of the larger of the two strings, but small strings were still matched above larger ones which contained the entire substring.
+
+The second algorithm I implemented is the Bitap algorithm.
+
+The algorithm computes a set of bitmasks containing one bit for each element in the pattern.
+The bitmask must be able to mask all characters which might occur, and as such it is 2<sup>16</sup> in length.
+Rather than allocating this array on each search, which would be needlessly wasteful, ```FuzzyStringSearcher``` is a singleton which can be re-used. This will never be a problem as the user cannot be searching int two places at once.
+Each item in the mask is an integer, which gives a limit of 31 characters for the query, as each character requires 1 bit.
+
+
 **FuzzyStringSearcher.java**
 ``` java
 package com.tpb.projects.util.search;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Created by theo on 03/02/17.
- * <p>
- * Possible algorithms
- * https://en.wikipedia.org/wiki/Bitap_algorithm
- * Uses Levenshtein distance on substrings
- * First computes a set of bitmasks containing one bit for each element of the pattern
- * <p>
- * Rabin-Karp algorithm
- * https://en.wikipedia.org/wiki/Rabin%E2%80%93Karp_algorithm
- * Uses hashing to find any one of a set of pattern strings in a atext
- * <p>
- * Knuth-Morris-Pratt algorithm
- * https://en.wikipedia.org/wiki/Knuth%E2%80%93Morris%E2%80%93Pratt_algorithm
- * <p>
- * Boyer-Moore string search
- * https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string_search_algorithm
  */
 
 /*
@@ -14194,9 +14278,7 @@ An error may be insertion, deletion, or substitution
  */
 
 public class FuzzyStringSearcher {
-    private static final String TAG = FuzzyStringSearcher.class.getSimpleName();
-
-    private ArrayList<String> items = new ArrayList<>();
+    private List<String> mItems = new ArrayList<>();
     private final int[] queryMask = new int[65536];
 
     private static FuzzyStringSearcher instance;
@@ -14205,11 +14287,11 @@ public class FuzzyStringSearcher {
 
     }
 
-    private FuzzyStringSearcher(ArrayList<String> items) {
-        this.items = items;
+    private FuzzyStringSearcher(List<String> items) {
+        mItems = items;
     }
 
-    public static FuzzyStringSearcher getInstance(ArrayList<String> items) {
+    public static FuzzyStringSearcher getInstance(List<String> items) {
         if(instance == null) {
             instance = new FuzzyStringSearcher(items);
         } else {
@@ -14218,18 +14300,18 @@ public class FuzzyStringSearcher {
         return instance;
     }
 
-    public void setItems(ArrayList<String> items) {
-        this.items = items;
+    public void setItems(List<String> items) {
+        mItems = items;
     }
 
-    public ArrayList<Integer> search(String query) {
-        final ArrayList<Integer> positions = new ArrayList<>();
-        final ArrayList<Integer> ranks = new ArrayList<>();
+    public List<Integer> search(String query) {
+        final List<Integer> positions = new ArrayList<>();
+        final List<Integer> ranks = new ArrayList<>();
         int index, rank;
-        for(int i = 0; i < items.size(); i++) {
-            index = findIndex(items.get(i), query, 1);
+        for(int i = 0; i < mItems.size(); i++) {
+            index = findIndex(mItems.get(i), query, 1);
             if(index >= 0) {
-                rank = index; //TODO Other indexing
+                rank = index;
                 boolean added = false;
                 for(int j = 0; j < ranks.size(); j++) {
                     if(rank > ranks.get(j)) {
@@ -14254,14 +14336,14 @@ public class FuzzyStringSearcher {
         int[] R;
         int i, d;
 
-        if(query.isEmpty()) return 0;
+        if(query.isEmpty()) return -1;
         if(m > 31) return -1;
 
         R = new int[k + 1];
         for(i = 0; i <= k; ++i) {
             R[i] = ~1; //Bitwise complement of 1
         }
-        Arrays.fill(queryMask, ~0);
+        Arrays.fill(queryMask, ~0); //Fill the mask
 
         for(i = 0; i < m; ++i) {
             queryMask[query.charAt(i)] &= ~(1 << i);
@@ -14291,6 +14373,11 @@ public class FuzzyStringSearcher {
 
 ```
 
+```search``` iterates through the items given and finds the index of the query in them.
+If the index is valid (The query was matched), the current ranks are checked and the the rank is added to the first position which it is greater than. The index of the item is then added to the positions list which is returned once the searching is complete.
+
+The ```ArrayFilter``` is a generic class used to filter a list for an ```ArrayAdapter``` which is the adapter type for dropdown search results.
+
 **ArrayFilter.java**
 ``` java
 package com.tpb.projects.util.search;
@@ -14299,6 +14386,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Filter;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by theo on 05/02/17.
@@ -14306,20 +14394,20 @@ import java.util.ArrayList;
 
 public class ArrayFilter<T> extends Filter {
 
-    private final ArrayAdapter<T> parent;
-    private final FuzzyStringSearcher searcher;
-    private final ArrayList<T> data;
-    private ArrayList<T> filtered;
+    private final ArrayAdapter<T> mParent;
+    private final FuzzyStringSearcher mSearcher;
+    private final List<T> mData;
+    private List<T> mFiltered;
 
-    public ArrayFilter(ArrayAdapter<T> parent, FuzzyStringSearcher searcher, ArrayList<T> data) {
-        this.parent = parent;
-        this.searcher = searcher;
-        this.data = data;
-        this.filtered = new ArrayList<>();
+    public ArrayFilter(ArrayAdapter<T> parent, FuzzyStringSearcher searcher, List<T> data) {
+        mParent = parent;
+        mSearcher = searcher;
+        mData = data;
+        mFiltered = new ArrayList<>();
     }
 
-    public ArrayList<T> getFiltered() {
-        return filtered;
+    public List<T> getFiltered() {
+        return mFiltered;
     }
 
     @Override
@@ -14329,11 +14417,11 @@ public class ArrayFilter<T> extends Filter {
             results.values = new ArrayList<T>();
             results.count = 0;
         } else {
-            final ArrayList<Integer> positions = searcher.search(charSequence.toString());
+            final List<Integer> positions = mSearcher.search(charSequence.toString());
             final ArrayList<T> items = new ArrayList<>(positions.size());
 
             for(int i : positions) {
-                items.add(data.get(i));
+                items.add(mData.get(i));
             }
             results.values = items;
             results.count = items.size();
@@ -14343,16 +14431,19 @@ public class ArrayFilter<T> extends Filter {
 
     @Override
     protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
-        filtered = (ArrayList<T>) filterResults.values;
+        mFiltered = (List<T>) filterResults.values;
         if(filterResults.count > 0) {
-            parent.notifyDataSetChanged();
+            mParent.notifyDataSetChanged();
         } else {
-            parent.notifyDataSetInvalidated();
+            mParent.notifyDataSetInvalidated();
         }
     }
+
 }
 
 ```
+
+It uses the ```FuzzyStringSearcher``` to match a set of positions, and then creates the ```FilterResults``` object with the filtered items and their size.
 
 ## RepoActivity
 
@@ -15900,7 +15991,7 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
     private final ArrayList<Pair<Issue, SpannableString>> mIssues = new ArrayList<>();
     private FuzzyStringSearcher mSearcher = new FuzzyStringSearcher();
     private boolean mIsSearching = false;
-    private ArrayList<Integer> mSearchFilter = new ArrayList<>();
+    private List<Integer> mSearchFilter = new ArrayList<>();
 
     private Loader mLoader;
     private Repository mRepo;
@@ -19334,6 +19425,8 @@ import com.tpb.projects.util.search.FuzzyStringSearcher;
 
 import java.util.ArrayList;
 
+import butterknife.ButterKnife;
+
 /**
  * Created by theo on 02/02/17.
  */
@@ -19399,25 +19492,23 @@ class ProjectSearchAdapter extends ArrayAdapter<Card> {
     private void bindView(int pos, View view) {
         final int dp = data.indexOf(mFilter.getFiltered().get(pos));
         final String text;
-        if(data.get(dp).hasIssue()) {
-            text = " #" + data.get(dp).getIssue().getNumber() + " " + data.get(dp).getIssue()
+        final Card c = data.get(dp);
+        if(c.hasIssue()) {
+            text = " #" + c.getIssue().getNumber() + " " + c.getIssue()
                                                                           .getTitle();
         } else {
-            text = data.get(dp).getNote();
+            text = c.getNote();
         }
-
-        if(data.get(dp).hasIssue()) {
-            ((TextView) view.findViewById(R.id.suggestion_text))
-                    .setCompoundDrawablesRelativeWithIntrinsicBounds(data.get(dp).getIssue()
-                                                                         .isClosed() ? R.drawable.ic_state_closed : R.drawable.ic_state_open,
+        final TextView tv = ButterKnife.findById(view, R.id.suggestion_text);
+        tv.setText(text);
+        if(c.hasIssue()) {
+            tv.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                            c.getIssue().isClosed() ?
+                                    R.drawable.ic_state_closed : R.drawable.ic_state_open,
                             0, 0, 0
                     );
-            ((TextView) view.findViewById(R.id.suggestion_text)).setText(text);
         } else {
-            ((TextView) view.findViewById(R.id.suggestion_text))
-                    .setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
-            //Log.i(TAG, "bindView: Setting text " + parseCache[dataPos]);
-            ((TextView) view.findViewById(R.id.suggestion_text)).setText(text);
+            tv.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
         }
     }
 
