@@ -19904,6 +19904,9 @@ If these conditions pass, an ```AlertDialog``` is created to allow the user to c
 
 #### IssueEventsAdapter
 
+The ```IssueEventsAdapter``` has to handle 24 different events, as listed in objective 4.a.xi.
+It also has to manage these events when they occur at the same time, as a singular event.
+
 **IssueEventsAdapter.java**
 ``` java
 package com.tpb.projects.issues;
@@ -19946,7 +19949,6 @@ import butterknife.ButterKnife;
  */
 
 public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.EventHolder> implements Loader.ListLoader<IssueEvent> {
-    private static final String TAG = IssueEventsAdapter.class.getSimpleName();
 
     private final ArrayList<Pair<DataModel, SpannableString>> mEvents = new ArrayList<>();
     private Issue mIssue;
@@ -20037,6 +20039,7 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
                                              .inflate(R.layout.viewholder_event, parent, false));
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void onBindViewHolder(EventHolder holder, int position) {
         if(mEvents.get(position).first instanceof IssueEvent) {
@@ -20049,140 +20052,128 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
     private void bindMergedEvent(EventHolder eventHolder, MergedModel<IssueEvent> me) {
         String text;
         final Resources res = eventHolder.itemView.getResources();
+        final StringBuilder builder = new StringBuilder();
         switch(me.getData().get(0).getEvent()) {
             case ASSIGNED:
-                final StringBuilder assignees = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    assignees.append(String.format(res.getString(R.string.text_href),
+                    builder.append(String.format(res.getString(R.string.text_href),
                             e.getActor().getHtmlUrl(),
                             e.getActor().getLogin()
                     ));
-                    assignees.append(", ");
+                    builder.append(", ");
                 }
-                assignees.setLength(assignees.length() - 2); //Remove final comma
+                builder.setLength(builder.length() - 2); //Remove final comma
                 text = String.format(res.getString(R.string.text_event_assigned_multiple),
-                        assignees.toString()
+                        builder.toString()
                 );
                 break;
             case UNASSIGNED:
-                final StringBuilder unassignees = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    unassignees.append(String.format(res.getString(R.string.text_href),
+                    builder.append(String.format(res.getString(R.string.text_href),
                             e.getActor().getHtmlUrl(),
                             e.getActor().getLogin()
                     ));
-                    unassignees.append(", ");
+                    builder.append(", ");
                 }
-                unassignees.setLength(unassignees.length() - 2); //Remove final comma
+                builder.setLength(builder.length() - 2); //Remove final comma
                 text = String.format(res.getString(R.string.text_event_unassigned_multiple),
-                        unassignees.toString()
+                        builder.toString()
                 );
                 break;
             case REVIEW_REQUESTED:
-                final StringBuilder requested = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    requested.append(String.format(res.getString(R.string.text_href),
+                    builder.append(String.format(res.getString(R.string.text_href),
                             e.getRequestedReviewer().getHtmlUrl(),
                             e.getRequestedReviewer().getLogin()
                     ));
-                    requested.append(", ");
+                    builder.append(", ");
                 }
-                requested.setLength(requested.length() - 2); //Remove final comma
+                builder.setLength(builder.length() - 2);
                 text = String.format(res.getString(R.string.text_event_review_requested_multiple),
                         String.format(res.getString(R.string.text_href),
                                 me.getData().get(0).getReviewRequester().getHtmlUrl(),
                                 me.getData().get(0).getReviewRequester().getLogin()
                         ),
-                        requested.toString()
+                        builder.toString()
                 );
                 break;
             case REVIEW_REQUEST_REMOVED:
-                final StringBuilder derequested = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    derequested.append(String.format(res.getString(R.string.text_href),
+                    builder.append(String.format(res.getString(R.string.text_href),
                             e.getReviewRequester().getHtmlUrl(),
                             e.getReviewRequester().getLogin()
                     ));
-                    derequested.append(", ");
+                    builder.append(", ");
                 }
-                derequested.setLength(derequested.length() - 2); //Remove final comma
+                builder.setLength(builder.length() - 2);
                 text = String
                         .format(res.getString(R.string.text_event_review_request_removed_multiple),
                                 String.format(res.getString(R.string.text_href),
                                         me.getData().get(0).getActor().getHtmlUrl(),
                                         me.getData().get(0).getActor().getLogin()
                                 ),
-                                derequested.toString()
+                                builder.toString()
                         );
                 break;
             case LABELED:
-                final StringBuilder labels = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    labels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
-                    labels.append("&nbsp;");
+                    builder.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
+                    builder.append("&nbsp;");
                 }
-                labels.setLength(labels.length() - "&nbsp;".length());
+                builder.setLength(builder.length() - "&nbsp;".length());
                 text = String.format(
                         res.getString(R.string.text_event_labels_added),
                         String.format(res.getString(R.string.text_href),
                                 me.getData().get(0).getActor().getHtmlUrl(),
                                 me.getData().get(0).getActor().getLogin()
                         ),
-                        labels.toString()
+                        builder.toString()
                 );
                 break;
             case UNLABELED:
-                final StringBuilder unlabels = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    unlabels.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
-                    unlabels.append("&nbsp;");
+                    builder.append(Formatter.getLabelString(e.getLabelName(), e.getLabelColor()));
+                    builder.append("&nbsp;");
                 }
-                unlabels.setLength(unlabels.length() - 2);
+                builder.setLength(builder.length() - 2);
                 text = String.format(res.getString(R.string.text_event_labels_removed),
                         String.format(res.getString(R.string.text_href),
                                 me.getData().get(0).getActor().getHtmlUrl(),
                                 me.getData().get(0).getActor().getLogin()
                         ),
-                        unlabels.toString()
+                        builder.toString()
                 );
                 break;
-            case CLOSED:
-                //Duplicate close events seem to happen
-                bindEvent(eventHolder, me.getData().get(0));
-                return;
             case REFERENCED:
-                final StringBuilder commits = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    commits.append("<br>");
-                    commits.append(String.format(res.getString(R.string.text_href),
+                    builder.append("<br>");
+                    builder.append(String.format(res.getString(R.string.text_href),
                             "https://github.com/" + mIssue.getRepoFullName() + "/commit/" + e
                                     .getCommitId(),
                             String.format(res.getString(R.string.text_commit), e.getShortCommitId())
                     ));
                 }
-                commits.append("<br>");
+                builder.append("<br>");
                 text = String.format(res.getString(R.string.text_event_referenced_multiple),
-                        commits.toString()
+                        builder.toString()
                 );
                 break;
             case MENTIONED:
-                final StringBuilder mentioned = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    mentioned.append("<br>");
-                    mentioned.append(String.format(res.getString(R.string.text_href),
+                    builder.append("<br>");
+                    builder.append(String.format(res.getString(R.string.text_href),
                             e.getActor().getHtmlUrl(),
                             e.getActor().getLogin()
                     ));
                 }
                 text = String.format(res.getString(R.string.text_event_mentioned_multiple),
-                        mentioned.toString()
+                        builder.toString()
                 );
                 break;
             case RENAMED:
-                final StringBuilder named = new StringBuilder();
                 for(IssueEvent e : me.getData()) {
-                    named.append("<br>");
-                    named.append(
+                    builder.append("<br>");
+                    builder.append(
                             String.format(
                                     res.getString(R.string.text_event_rename_multiple),
                                     e.getRenameFrom(),
@@ -20191,7 +20182,7 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
                     );
                 }
                 text = String.format(res.getString(R.string.text_event_renamed_multiple),
-                        named.toString()
+                        builder.toString()
                 );
                 break;
             case MOVED_COLUMNS_IN_PROJECT:
@@ -20355,10 +20346,28 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
                 );
                 break;
             case MILESTONED:
-                text = "Milestoned"; //TODO
+                text = String.format(res.getString(R.string.text_event_milestoned),
+                        String.format(res.getString(R.string.text_href),
+                                event.getMilestone().getHtmlUrl(),
+                                event.getMilestone().getTitle()
+                        ),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
                 break;
             case DEMILESTONED:
-                text = "De-milestoned"; //TODO
+                text = String.format(res.getString(R.string.text_event_demilestoned),
+                        String.format(res.getString(R.string.text_href),
+                                event.getMilestone().getHtmlUrl(),
+                                event.getMilestone().getTitle()
+                        ),
+                        String.format(res.getString(R.string.text_href),
+                                event.getActor().getHtmlUrl(),
+                                event.getActor().getLogin()
+                        )
+                );
                 break;
             case RENAMED:
                 text = String.format(res.getString(R.string.text_event_renamed),
@@ -20463,8 +20472,8 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
                 text = res.getString(R.string.text_event_moved_columns_in_project);
                 break;
             default:
-                text = "An event type hasn't been implemented " + event.getEvent();
-                text += "\nTell me here " + BuildConfig.BUG_EMAIL;
+                text = "An event type hasn't been implemented " + event.getEvent()
+                        + "\nTell me here " + BuildConfig.BUG_EMAIL;
         }
         text += " • " + DateUtils.getRelativeTimeSpanString(event.getCreatedAt());
         eventHolder.mText.setMarkdown(
@@ -20492,7 +20501,7 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
     }
 
 
-    class EventHolder extends RecyclerView.ViewHolder {
+    static class EventHolder extends RecyclerView.ViewHolder {
         @BindView(R.id.event_text) MarkdownTextView mText;
         @BindView(R.id.event_user_avatar) NetworkImageView mAvatar;
 
@@ -20507,6 +20516,184 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
 }
 
 ```
+
+Ignoring the ```ViewHolder``` bindings for now, I will first explain the loading and merging of events.
+
+The ```IssueEvent``` models are loaded from the API through ```ListLoader<IssueEvent>``` and passed to ```listLoadComplete``` in the adapter.
+
+An example of a singular ```IssueEvent``` type is CLOSED.
+An issue can clearly only be closed once consecutively as in order to be closed again it must first be re-opened.
+
+This event should be displayed in its own ```ViewHolder``` telling the user something along the lines of, "The issue was renamed from title0 to title1".
+
+An example of a merged event type is LABELED.
+This event occurs when a label is applied to the issue.
+
+The API returns individual events for each label that is added to the issue, each with the same timestamp.
+The website however, displays these events as a single merged event:
+
+![Merged LABELED event](http://imgur.com/pxdK0gH.png)
+
+In order to implement the merging of events I added the ```MergedModel``` class.
+
+**MergedModel.java**
+``` java
+package com.tpb.github.data.models;
+
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.util.Log;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Created by theo on 08/01/17.
+ */
+
+public class MergedModel<T extends DataModel> extends DataModel implements Parcelable {
+
+    private List<T> data = new ArrayList<>();
+
+    public MergedModel(ArrayList<T> data) {
+        this.data.addAll(data);
+    }
+
+    public MergedModel(List<T> data) {
+        this.data.addAll(data);
+    }
+
+    public List<T> getData() {
+        return data;
+    }
+
+    @Override
+    public long getCreatedAt() {
+        return data.size() > 0 ? data.get(0).createdAt : 0;
+    }
+
+    @Override
+    public String toString() {
+        return "MergedModel{" +
+                "data=" + data +
+                '}';
+    }
+
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeString(data.getClass().getName());
+        dest.writeList(this.data);
+    }
+
+    protected MergedModel(Parcel in) {
+        final String c = in.readString();
+        this.data = new ArrayList<>();
+        try {
+            in.readList(this.data, Class.forName(c).getClassLoader());
+        } catch(ClassNotFoundException cnfe) {
+            Log.e(MergedModel.class.getSimpleName(), "Error finding class", cnfe);
+        }
+    }
+
+    public static final Creator<MergedModel> CREATOR = new Creator<MergedModel>() {
+        @Override
+        public MergedModel createFromParcel(Parcel source) {
+            return new MergedModel(source);
+        }
+
+        @Override
+        public MergedModel[] newArray(int size) {
+            return new MergedModel[size];
+        }
+    };
+}
+
+```
+
+This generic class stores a list of a generic type extending ```DataModel```.
+
+The merging of ```DataModels```is done in the utility method ```Util.mergeModels```.
+
+**Util.java**
+``` java
+public static List<DataModel> mergeModels(List<? extends DataModel> models, Comparator<DataModel> comparator) {
+        final List<DataModel> merged = new ArrayList<>();
+        List<DataModel> toMerge = new ArrayList<>();
+        DataModel last = null;
+        for(int i = 0; i < models.size(); i++) {
+            //If we have two of the same event, happening at the same time
+            if(comparator.compare(models.get(i), last) == 0) {
+                if(merged.size() > 1) merged.remove(merged.size() - 1);
+                /* If multiple events (labels or assignees) were added as the first event,
+                * then we need to stop the first item being duplicated
+                 */
+                if(merged.size() == 1 && merged.get(0).equals(last)) merged.remove(0);
+                toMerge.add(models.get(i - 1)); //Add the previous event
+                int j = i;
+                //Loop until we find an event which shouldn't be merged
+                while(j < models.size() && comparator.compare(models.get(j), last) == 0) {
+                    toMerge.add(models.get(j++));
+                }
+                i = j - 1; //Jump to the end of the merged positions
+                merged.add(new MergedModel<>(toMerge));
+                toMerge = new ArrayList<>(); //Reset the list of merged events
+            } else {
+                merged.add(models.get(i));
+            }
+            last = models.get(i); //Set the last event
+        }
+        return merged;
+
+    }
+```
+
+This method takes a list of any type of ```DataModel```, and a comparator for the models.
+It merges the ```DataModels``` into a mixed list of the models and ```MergedModels```, maintaining their original order.
+
+The merged list is the output list to be returned.
+The toMerge list is the working list which builds up a list of ```DataModels``` to be added to each ```MergedModel```.
+
+The models list is iterated through, and each model is compared to the last.
+If the models are not equal, the current model is added to merged.
+However, if the ```Comparator``` indicates that the models are equal, a ```MergedModel``` is built.
+
+In the case that there is more than one ```DataModel``` currently in the merged list, the last item is removed because it needs to be added to the ```MergedModel```.
+If there is exactly one item in merged, a specific case where the models begin with a merged set of events must be dealt with. 
+
+The previous item in models is added, and we begin adding the ```DataModels``` from models to toMerge.
+The while loop runs while we are within the size of models, and the current model is still equal to the model that began the ```MergedModel```.
+Once the loop completes, the outer counter is jumped to the end of the merged positions, a ```MergedModel``` containing the items from toMerge is created, and toMerge is reset.
+
+Returning to ```IssueEventsAdapter``` the comparator used checks that both models are instances of ```IssueEvent```, that they were created at the same time, and that their event type is the same.
+
+```onBindViewHolder``` calls either ```bindEvent``` or ```bindMergedEvent``` depending on the type of the ```DataModel``` at the position being bound.
+
+```bindEvent``` declares a string for the item text and then switches over the event type.
+
+Each event type has a corresponding format string which is populated with the event information.
+
+If a new event type is added and it has not been implemented, the ```GitIssueEvent``` enum will default to UNKNOWN and the event string will be added to the ```EventHolder```.
+
+Finally, if the event has an actor, their login and avatar are displayed.
+
+```bindMergedEvent``` deals with the following event types:
+- ASSIGNED- Multiple users were assigned to the issue
+- UNASSIGNED - Multiple users were unassigned from the issue
+- REVIEW_REQUESTED- Multiple users were requested to review the issue
+- REVIEW_REQUEST_REMOVED- Multiple review requests were removed
+- LABELED- Multiple labels were added
+- UNLABELED- Multiple labels were removed
+- REFERENCED- The issue was reference in multiple commits
+- MENTIONED- Multiple users were mentioned
+- RENAMED- The issue was rename multiple times
+- MOVED_COLUMNS_IN_PROJECT- The issue was moved around in a project multiple times
+
 
 ### IssueCommentsFragment
 

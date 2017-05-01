@@ -5617,7 +5617,79 @@ If these conditions pass, an ```AlertDialog``` is created to allow the user to c
 
 #### IssueEventsAdapter
 
+The ```IssueEventsAdapter``` has to handle 24 different events, as listed in objective 4.a.xi.
+It also has to manage these events when they occur at the same time, as a singular event.
+
 #import "app/src/main/java/com/tpb/projects/issues/IssueEventsAdapter.java"
+
+Ignoring the ```ViewHolder``` bindings for now, I will first explain the loading and merging of events.
+
+The ```IssueEvent``` models are loaded from the API through ```ListLoader<IssueEvent>``` and passed to ```listLoadComplete``` in the adapter.
+
+An example of a singular ```IssueEvent``` type is CLOSED.
+An issue can clearly only be closed once consecutively as in order to be closed again it must first be re-opened.
+
+This event should be displayed in its own ```ViewHolder``` telling the user something along the lines of, "The issue was renamed from title0 to title1".
+
+An example of a merged event type is LABELED.
+This event occurs when a label is applied to the issue.
+
+The API returns individual events for each label that is added to the issue, each with the same timestamp.
+The website however, displays these events as a single merged event:
+
+![Merged LABELED event](http://imgur.com/pxdK0gH.png)
+
+In order to implement the merging of events I added the ```MergedModel``` class.
+
+#import "gitapi/src/main/java/com/tpb/github/data/models/MergedModel.java"
+
+This generic class stores a list of a generic type extending ```DataModel```.
+
+The merging of ```DataModels```is done in the utility method ```Util.mergeModels```.
+
+#import "gitapi/src/main/java/com/tpb/github/data/Util.java $public static List<DataModel> mergeModels$"
+
+This method takes a list of any type of ```DataModel```, and a comparator for the models.
+It merges the ```DataModels``` into a mixed list of the models and ```MergedModels```, maintaining their original order.
+
+The merged list is the output list to be returned.
+The toMerge list is the working list which builds up a list of ```DataModels``` to be added to each ```MergedModel```.
+
+The models list is iterated through, and each model is compared to the last.
+If the models are not equal, the current model is added to merged.
+However, if the ```Comparator``` indicates that the models are equal, a ```MergedModel``` is built.
+
+In the case that there is more than one ```DataModel``` currently in the merged list, the last item is removed because it needs to be added to the ```MergedModel```.
+If there is exactly one item in merged, a specific case where the models begin with a merged set of events must be dealt with. 
+
+The previous item in models is added, and we begin adding the ```DataModels``` from models to toMerge.
+The while loop runs while we are within the size of models, and the current model is still equal to the model that began the ```MergedModel```.
+Once the loop completes, the outer counter is jumped to the end of the merged positions, a ```MergedModel``` containing the items from toMerge is created, and toMerge is reset.
+
+Returning to ```IssueEventsAdapter``` the comparator used checks that both models are instances of ```IssueEvent```, that they were created at the same time, and that their event type is the same.
+
+```onBindViewHolder``` calls either ```bindEvent``` or ```bindMergedEvent``` depending on the type of the ```DataModel``` at the position being bound.
+
+```bindEvent``` declares a string for the item text and then switches over the event type.
+
+Each event type has a corresponding format string which is populated with the event information.
+
+If a new event type is added and it has not been implemented, the ```GitIssueEvent``` enum will default to UNKNOWN and the event string will be added to the ```EventHolder```.
+
+Finally, if the event has an actor, their login and avatar are displayed.
+
+```bindMergedEvent``` deals with the following event types:
+- ASSIGNED- Multiple users were assigned to the issue
+- UNASSIGNED - Multiple users were unassigned from the issue
+- REVIEW_REQUESTED- Multiple users were requested to review the issue
+- REVIEW_REQUEST_REMOVED- Multiple review requests were removed
+- LABELED- Multiple labels were added
+- UNLABELED- Multiple labels were removed
+- REFERENCED- The issue was reference in multiple commits
+- MENTIONED- Multiple users were mentioned
+- RENAMED- The issue was rename multiple times
+- MOVED_COLUMNS_IN_PROJECT- The issue was moved around in a project multiple times
+
 
 ### IssueCommentsFragment
 
