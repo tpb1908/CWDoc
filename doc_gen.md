@@ -13560,7 +13560,7 @@ When ```unpin``` is called, the repository is removed from the pins list, and th
 
 The ```RepoHolder``` sets ```OnClickListeners``` on its elements, and if the mIsShowingStars flag is false, it sets an ```OnClickListener``` on the ```NetworkImageView``` which would otherwise be used for displaying the user avatar. This listener calls ```togglePIn```, flips the isPinned flag and switches the image resource from the pinned to not pinned drawable.
 
-### UserStarsFragment
+### Objective 2.c: UserStarsFragment
 
 The ```UserStarsFragment``` is very simple as all of the view logic is handled in the ```RepositoriesAdapter```.
 The ```Fragment``` is only responsible for creating the layout, handling its own lifecycle, and notifying the adapter of scroll changes in the ```RecyclerView```.
@@ -13643,7 +13643,7 @@ public class UserStarsFragment extends UserFragment {
 
 ```
 
-### UserGistsFragment
+### Objective 2.d: UserGistsFragment
 
 The ```UserGistsFragment``` is also very simple as it only deals with notifying the ```GistAdapter``` of scroll changes, and opening the ```FileActivity``` when a gist is clicked.
 
@@ -13918,7 +13918,7 @@ It then binds the ```Gist``` owners avatar to the ```NetworkImageView```, the ``
 
 When a gist list item is clicked, the ```FileActivity``` is launched to display the gist file.
 
-### UserFollowingFragment and UserFollowersFragment
+### Objectives 2.e and 2.f: UserFollowingFragment and UserFollowersFragment
 
 The two fragments display a list of users that the authenticated user is following or that are following the authenticated user respectively.
 Each list item consists of the user's login and their avatar, as other information is not guaranteed to exist and is superflous.
@@ -14514,7 +14514,7 @@ It uses the ```FuzzyStringSearcher``` to match a set of positions, and then crea
 
 <div style="page-break-after: always;"></div>
 
-## RepoActivity
+## Objective 3: RepoActivity
 
 The ```RepoActivity``` displays the ```Fragments``` showing information about a repository.
 It manages loading the ```Repository``` and attaching and re-attaching the ```Fragments``` on state changes such as rotation, as well as navigating to a particular ```Fragment``` if a page is included in the launch ```Intent```.
@@ -14803,7 +14803,7 @@ public abstract class RepoFragment extends ViewSafeFragment {
 
 ```
 
-### RepoInfoFragment
+### Objective 3.a: RepoInfoFragment
 
 The ```RepoInfoFragment``` binds a set of information about the ```Repository```:
 - Owner username
@@ -15127,7 +15127,7 @@ public class RepoInfoFragment extends RepoFragment {
 
 ```
 
-### RepoReadmeFragment
+### Objective 3.c: RepoReadmeFragment
 
 The ```RepoReadmeFragment``` uses a ```MarkdownWebView``` to display the repsoitory README.
 It first loads the README, and then uses the GitHub markdown API to render the markdown as it would be displayed on GitHub.
@@ -15265,7 +15265,7 @@ public class RepoReadmeFragment extends RepoFragment {
 
 ```
 
-### RepoCommitsFragment
+### Objective 3.d: RepoCommitsFragment
 
 The ```RepoCommitsFragment``` primarily deals with the ```RepoCommitsAdapter```, but it also manages the ```Spinner``` which is used to choose the branch to display commits for.
 
@@ -15682,7 +15682,7 @@ The screenshot below shows commits made from my account and the web-flow:
 
 
 
-### RepoIssuesFragment
+### Objective 3.e: RepoIssuesFragment
 
 The ```RepoIssuesFragment``` is the first ```RepoFragment``` which actually uses the ```FloatingActionButton```.
 It also manages filtering and searching the ```Issues```.
@@ -16484,7 +16484,7 @@ public class RepoIssuesAdapter extends RecyclerView.Adapter<RepoIssuesAdapter.Is
 
 ```
 
-### RepoProjectsFragment
+### Objective 3.f: RepoProjectsFragment
 
 The final ```RepoFragment``` displayed in ```RepoActivity``` is the ```RepoProjectsFragment``` which displays the projects associated with a repository, as well as managing their state, editing and deleting them.
 
@@ -16902,7 +16902,7 @@ The menu button ```OnClickListener``` is set to call ```showMenu``` on the ```Re
 
 <div style="page-break-after: always;"></div>
 
-## ContentActivity
+## Objective 3.b: ContentActivity
 
 The ```ContentActivity``` is used for displaying the content of a repository (whoever would have guessed?).
 
@@ -17931,7 +17931,7 @@ public class FileActivity extends AppCompatActivity {
 
 <div style="page-break-after: always;"></div>
 
-## CommitActivity
+## Objective 5: CommitActivity
 
 The ```CommitActivity``` is used to show detailed information about a commit, as well as handling displaying and commenting upon the commit.
 
@@ -18092,12 +18092,12 @@ public class CommitActivity extends CircularRevealActivity implements Loader.Ite
 
 ```
 
-### CommitInfoFragment
+### Objective 5.a, 5.b, and 5.d: CommitInfoFragment
 
 When a ```Commit``` is loaded, the ```CommitInfoFragment``` displays the ```Commit``` title, and commiter information.
 If the ```Commit``` contains a list of files, the number of additions and deletions are also displayed, and the files are passed to the ```CommitDiffAdapter```.
 
-#### Statuses
+#### Objective 5.d: Statuses
 
 If an integration is present for a repository, the status of a commit can be loaded and displayed.
 
@@ -18307,7 +18307,7 @@ The primary body of information about a commit may appear as shown below:
 
 ![Commit info](http://imgur.com/JhXZJHr.png)
 
-#### CommitDiffAdapter
+#### Objective 5.b: CommitDiffAdapter
 
 The ```CommitDiffAdapter``` is used to display the actual changes made by a ```Commit```.
 
@@ -18504,7 +18504,7 @@ public class CommitDiffAdapter extends RecyclerView.Adapter<CommitDiffAdapter.Di
 | --- | --- | 
 | ![Short span](http://imgur.com/RDCgsT6.png) | ![Large span](http://imgur.com/UsJ5x80.png) |
 
-### CommitCommentsFragment
+### Objective 5.c: CommitCommentsFragment
 
 The ```CommitCommentsFragment``` inflates the fragment_recycler layout to display a ```RecyclerView``` showing any comments on the commit.
 It also manages launching the ```CommentEditor``` to allow the user to create or edit comments, and then to perform the relevant requests.
