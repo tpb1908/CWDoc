@@ -5461,40 +5461,8 @@ Instead, only the first 3 lines are shown by default and the rest of the patch s
 
 The span is built in the ```Formatter``` class in ```buildDiffSpan```.
 
-``` java
-public static SpannableStringBuilder buildDiffSpan(@NonNull String diff) {
-    final SpannableStringBuilder builder = new SpannableStringBuilder();
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $public static SpannableStringBuilder buildDiffSpan$"
 
-    int oldLength = 0;
-    for(String line : diff.split("\n")) {
-        oldLength = builder.length();
-        if(line.startsWith("+")) {
-            builder.append(line);
-            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#8BC34A")),
-                    oldLength, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        } else if(line.startsWith("-")) {
-            builder.append(line);
-            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#F44336")),
-                    oldLength, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        } else {
-            builder.append(line);
-            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#9E9E9E")),
-                    oldLength, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        }
-        builder.append("\n");
-    }
-    builder.setSpan(new TypefaceSpan("monospace"), 0, builder.length(),
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-    );
-    return builder;
-}
-```
 This splits the string into individual lines and colours each line depending on whether it begins with a "+" or a "-".
 
 The ```FullWidthBackgroundColorSpan``` used is not part of the the markdown package as it is only used here.
@@ -5562,13 +5530,90 @@ Comments in the ```CommitCommentAdapter``` are formatted in the same way as any 
 
 #page
 
-## IssueActivity
+## Objective 4: IssueActivity
+
+The ```IssueActivity``` and its ```Fragments``` are structured in a similar manner to the ```CommitActivity```, except that the adapter for ```Events``` is more complicated than the adapter for ```DiffFiles```.
 
 #import "app/src/main/java/com/tpb/projects/issues/IssueActivity.java"
 
-### IssueInfoFragment
+The ```IssueActivity``` is launched with either a parcelled ```Issue```, or an issue number and a repository name.
+
+Once an ```Issue``` has been loaded, a request is made to check the level of access that a user has to a particular issue.
+If it is in their repository, they are able to edit other user's comments.
+
+The ```IssueActivity``` also manages its overflow menu, with the ability to save a shortcut to a particular issue to the homescreen.
+
+### Objective 4.a: IssueInfoFragment
+
+The ```IssueInfoFragment``` is responsible for displaying the following information:
+- The issue title (4.a.i)
+- The issue state (4.a.iii)
+- The issue body (4.a.iv)
+- The user that created the issue (4.a.v)
+- The date that the issue was opened (4.a.vi)
+- The user(s) assigned to the issue, if they exist (4.a.vii)
+- The labels added to the issue (4.a.viii)
+- The milestone that the issue is attached to, if applicable
+
+It should also display the events which have occured on the issue, via the ```IssueEventsAdapter```.
+
+The ```IssueInfoFragment``` also implements objective 4.c, editing the issue.
 
 #import "app/src/main/java/com/tpb/projects/issues/fragments/IssueInfoFragment.java"
+
+When ```issueLoaded``` is called, the ```Issue``` is passed to the adapter, before ```displayIssue```, ```displayAssignees```, and ```displayMilestone``` are called.
+
+#### displayIssue
+
+```displayIssue``` first sets the the title text, using ```Formatter``` to wrap the title in a level 1 header element.
+
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $public static String header$"
+
+It then uses ```Formatter``` again to build the span:
+
+#import "app/src/main/java/com/tpb/projects/markdown/Formatter.java $public static StringBuilder buildIssueSpan$"
+
+This method is used to format an ```Issue``` model for displaying.
+It first adds the title, if the showTitle flag is true.
+Next it adds the body if it is non-empty, removing any leading whitespace.
+If showNumberedLink is true, it adds a line containing the issue number, creator, and the time that it was created. Otherwise the issue number is ommitted.
+Next, the labels are added.
+If showAssignees is true, and the ```Issue``` has assignees, a link is added to each assignee.
+If showCommentCount is true,  a line is added showing the number of comments.
+Finally, if showClosedAt is true, and the issue is closed, a line is added with a link to the user that closed the issue, and when they closed it.
+
+Returning to ```displayIssue```, the user avatar is set and an ```OnClickListener``` is added to open the user.
+An ```OnClickListener``` is then added to the state ```ImageView``` and its resource is set.
+
+#### displayAssignees
+
+```displayAssignees``` clears the ```Views``` from the mAssigneesLayout ```LinearLayout```.
+It then checks if there are assignees to add, hiding the ```LinearLayout``` and its header ```TextView``` otherwise.
+
+If there are assigneed, the shard_user layout is inflated for each of them, the ```Views``` are bound with the user login and avatar, and the ```OnClickListener``` is set to open the ```UserActivity``` with a shared element transition.
+
+#### displayMilestone
+
+```displayMilestone``` populates a ```MarkdownTextView``` with information about a ```Milestone``` to which the ```Issue``` is attached (If it is attached to one).
+The information lines are as follows:
+- Milestone title
+- Number of open and closed issues attached to milestone, and percentage complete
+- The date that the milestone was created at, and the user that created the milestone
+- The last time that the milestone was updated, if it has been updated
+- The date that the milestone was closed, if it has been closed
+- The date that the milestone is due, if it is due at a specific time. This is displayed in red if the deadline has been reached
+
+#### updateIssue
+
+```updateIssue``` is called ```onActivityResult``` from the ```IssueEditor```.
+It first checks whether any of the assignees have changed, calling ```displayAssignees``` if they have.
+Next ```displayIssue``` and ```displayMilestone``` are called to update the issue information.
+
+#### toggleIssueState
+
+```toggleIssueState``` checks that the ```Issue``` exists, and that the user has access to modify its state.
+If these conditions pass, an ```AlertDialog``` is created to allow the user to choose whether they wish to add a comment when changing the state.
+
 
 #### IssueEventsAdapter
 

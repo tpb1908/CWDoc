@@ -18325,40 +18325,42 @@ Instead, only the first 3 lines are shown by default and the rest of the patch s
 
 The span is built in the ```Formatter``` class in ```buildDiffSpan```.
 
+**Formatter.java**
 ``` java
 public static SpannableStringBuilder buildDiffSpan(@NonNull String diff) {
-    final SpannableStringBuilder builder = new SpannableStringBuilder();
+        final SpannableStringBuilder builder = new SpannableStringBuilder();
 
-    int oldLength = 0;
-    for(String line : diff.split("\n")) {
-        oldLength = builder.length();
-        if(line.startsWith("+")) {
-            builder.append(line);
-            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#8BC34A")),
-                    oldLength, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        } else if(line.startsWith("-")) {
-            builder.append(line);
-            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#F44336")),
-                    oldLength, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
-        } else {
-            builder.append(line);
-            builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#9E9E9E")),
-                    oldLength, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
+        int oldLength = 0;
+        for(String line : diff.split("\n")) {
+            oldLength = builder.length();
+            if(line.startsWith("+")) {
+                builder.append(line);
+                builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#8BC34A")),
+                        oldLength, builder.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else if(line.startsWith("-")) {
+                builder.append(line);
+                builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#F44336")),
+                        oldLength, builder.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            } else {
+                builder.append(line);
+                builder.setSpan(new FullWidthBackgroundColorSpan(Color.parseColor("#9E9E9E")),
+                        oldLength, builder.length(),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                );
+            }
+            builder.append("\n");
         }
-        builder.append("\n");
+        builder.setSpan(new TypefaceSpan("monospace"), 0, builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        );
+        return builder;
     }
-    builder.setSpan(new TypefaceSpan("monospace"), 0, builder.length(),
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-    );
-    return builder;
-}
 ```
+
 This splits the string into individual lines and colours each line depending on whether it begins with a "+" or a "-".
 
 The ```FullWidthBackgroundColorSpan``` used is not part of the the markdown package as it is only used here.
@@ -18989,7 +18991,9 @@ public class CommitCommentsAdapter extends RecyclerView.Adapter<CommitCommentsAd
 
 <div style="page-break-after: always;"></div>
 
-## IssueActivity
+## Objective 4: IssueActivity
+
+The ```IssueActivity``` and its ```Fragments``` are structured in a similar manner to the ```CommitActivity```, except that the adapter for ```Events``` is more complicated than the adapter for ```DiffFiles```.
 
 **IssueActivity.java**
 ``` java
@@ -19079,9 +19083,9 @@ public class IssueActivity extends CircularRevealActivity implements Loader.Item
         } else {
             final int issueNumber = launchIntent
                     .getIntExtra(getString(R.string.intent_issue_number), -1);
-            final String fullRepoName = launchIntent
+            final String repoFullName = launchIntent
                     .getStringExtra(getString(R.string.intent_repo));
-            mLoader.loadIssue(this, fullRepoName, issueNumber, true);
+            mLoader.loadIssue(this, repoFullName, issueNumber, true);
         }
 
         mPager.setOffscreenPageLimit(2);
@@ -19113,8 +19117,9 @@ public class IssueActivity extends CircularRevealActivity implements Loader.Item
                 @Override
                 public void loadComplete(Repository.AccessLevel data) {
                     mAccessLevel = data;
-                    if(mAdapter.mInfoFragment != null)
+                    if(mAdapter.mInfoFragment != null) {
                         mAdapter.mInfoFragment.setAccessLevel(mAccessLevel);
+                    }
                 }
 
                 @Override
@@ -19123,7 +19128,6 @@ public class IssueActivity extends CircularRevealActivity implements Loader.Item
                 }
             }, GitHubSession.getSession(this).getUserLogin(), mIssue.getRepoFullName());
         }
-
         mAdapter.setIssue();
     }
 
@@ -19203,13 +19207,6 @@ public class IssueActivity extends CircularRevealActivity implements Loader.Item
         return true;
     }
 
-    @Override
-    public void onBackPressed() {
-        mAdapter.mInfoFragment.checkSharedElementExit();
-        super.onBackPressed();
-    }
-
-
     private class IssueFragmentAdapter extends FragmentPagerAdapter {
 
         IssueCommentsFragment mCommentsFragment;
@@ -19255,7 +19252,28 @@ public class IssueActivity extends CircularRevealActivity implements Loader.Item
 
 ```
 
-### IssueInfoFragment
+The ```IssueActivity``` is launched with either a parcelled ```Issue```, or an issue number and a repository name.
+
+Once an ```Issue``` has been loaded, a request is made to check the level of access that a user has to a particular issue.
+If it is in their repository, they are able to edit other user's comments.
+
+The ```IssueActivity``` also manages its overflow menu, with the ability to save a shortcut to a particular issue to the homescreen.
+
+### Objective 4.a: IssueInfoFragment
+
+The ```IssueInfoFragment``` is responsible for displaying the following information:
+- The issue title (4.a.i)
+- The issue state (4.a.iii)
+- The issue body (4.a.iv)
+- The user that created the issue (4.a.v)
+- The date that the issue was opened (4.a.vi)
+- The user(s) assigned to the issue, if they exist (4.a.vii)
+- The labels added to the issue (4.a.viii)
+- The milestone that the issue is attached to, if applicable
+
+It should also display the events which have occured on the issue, via the ```IssueEventsAdapter```.
+
+The ```IssueInfoFragment``` also implements objective 4.c, editing the issue.
 
 **IssueInfoFragment.java**
 ``` java
@@ -19298,6 +19316,7 @@ import com.tpb.mdtext.Markdown;
 import com.tpb.mdtext.imagegetter.HttpImageGetter;
 import com.tpb.mdtext.views.MarkdownTextView;
 import com.tpb.projects.R;
+import com.tpb.projects.common.FixedLinearLayoutManger;
 import com.tpb.projects.common.NetworkImageView;
 import com.tpb.projects.editors.CommentEditor;
 import com.tpb.projects.editors.IssueEditor;
@@ -19318,8 +19337,6 @@ import butterknife.Unbinder;
  */
 
 public class IssueInfoFragment extends IssueFragment {
-
-    private static final String TAG = IssueInfoFragment.class.getSimpleName();
 
     private Unbinder unbinder;
 
@@ -19354,7 +19371,7 @@ public class IssueInfoFragment extends IssueFragment {
         mAccessLevel = ((IssueActivity) getActivity()).mAccessLevel;
         mEditor = Editor.getEditor(getContext());
         mAdapter = new IssueEventsAdapter(this, mRefresher);
-        final LinearLayoutManager manager = new LinearLayoutManager(getContext());
+        final LinearLayoutManager manager = new FixedLinearLayoutManger(getContext());
         mRecycler.setOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
@@ -19378,7 +19395,7 @@ public class IssueInfoFragment extends IssueFragment {
 
                 @Override
                 public void loadError(APIHandler.APIError error) {
-
+                    mRefresher.setRefreshing(false);
                 }
             }, mIssue.getRepoFullName(), mIssue.getNumber(), true);
         });
@@ -19387,13 +19404,25 @@ public class IssueInfoFragment extends IssueFragment {
         return view;
     }
 
-    private void displayIssue(Issue issue) {
-        mTitle.setMarkdown(Formatter.header(issue.getTitle(), 1));
+
+    @Override
+    public void issueLoaded(Issue issue) {
+        mIssue = issue;
+        if(mAdapter != null) {
+            mAdapter.setIssue(issue);
+            displayIssue();
+            displayAssignees();
+            displayMilestone();
+        }
+    }
+
+    private void displayIssue() {
+        mTitle.setMarkdown(Formatter.header(mIssue.getTitle(), 1));
         mInfo.setMarkdown(
                 Formatter.buildIssueSpan(
                         getContext(),
-                        issue,
-                        false, //Header title
+                        mIssue,
+                        false, //Show title
                         false, //No numbered link
                         false, //No assignees
                         true, //Closed at
@@ -19401,23 +19430,22 @@ public class IssueInfoFragment extends IssueFragment {
                 ).toString(),
                 new HttpImageGetter(mInfo), null
         );
-        mUserAvatar.setOnClickListener(v -> IntentHandler
-                .openUser(getActivity(), mUserAvatar, issue.getOpenedBy().getLogin()));
-        mUserAvatar.setImageUrl(issue.getOpenedBy().getAvatarUrl());
+        mUserAvatar.setImageUrl(mIssue.getOpenedBy().getAvatarUrl());
+        IntentHandler.addOnClickHandler(getActivity(), mUserAvatar, mIssue.getOpenedBy().getLogin());
         mImageState.setOnClickListener(v -> toggleIssueState());
-        if(issue.isClosed()) {
+        if(mIssue.isClosed()) {
             mImageState.setImageResource(R.drawable.ic_state_closed);
         } else {
             mImageState.setImageResource(R.drawable.ic_state_open);
         }
     }
 
-    private void displayAssignees(Issue issue) {
+    private void displayAssignees() {
         mAssigneesLayout.removeAllViews();
-        if(issue != null && issue.getAssignees() != null && issue.getAssignees().length > 0) {
+        if(mIssue != null && mIssue.getAssignees() != null && mIssue.getAssignees().length > 0) {
             mAssigneesLayout.setVisibility(View.VISIBLE);
             mAssigneesTitle.setVisibility(View.VISIBLE);
-            for(User u : issue.getAssignees()) {
+            for(User u : mIssue.getAssignees()) {
                 final LinearLayout user = (LinearLayout) getActivity().getLayoutInflater()
                                                                       .inflate(R.layout.shard_user,
                                                                               mAssigneesLayout,
@@ -19430,7 +19458,7 @@ public class IssueInfoFragment extends IssueFragment {
                 avatar.setImageUrl(u.getAvatarUrl());
                 avatar.setScaleType(ImageView.ScaleType.FIT_XY);
                 final TextView login = ButterKnife.findById(user, R.id.user_login);
-                login.setId(View.generateViewId()); //Max 10 assignees
+                login.setId(View.generateViewId());
                 login.setText(u.getLogin());
                 user.setOnClickListener((v) -> {
                     final Intent us = new Intent(getActivity(), UserActivity.class);
@@ -19452,9 +19480,9 @@ public class IssueInfoFragment extends IssueFragment {
     }
 
     private void displayMilestone() {
-        if(mIssue.getMilestone() != null) {
+        final Milestone milestone = mIssue.getMilestone();
+        if(milestone != null) {
             mMilestoneCard.setVisibility(View.VISIBLE);
-            final Milestone milestone = mIssue.getMilestone();
             final MarkdownTextView tv = ButterKnife
                     .findById(mMilestoneCard, R.id.milestone_content_markdown);
             final ImageView status = ButterKnife.findById(mMilestoneCard, R.id.milestone_drawable);
@@ -19469,9 +19497,7 @@ public class IssueInfoFragment extends IssueFragment {
 
             final StringBuilder builder = new StringBuilder();
 
-            builder.append("<b>");
-            builder.append(Markdown.escape(milestone.getTitle()));
-            builder.append("</b>");
+            Formatter.bold(Markdown.escape(milestone.getTitle()));
             builder.append("<br>");
             if(milestone.getOpenIssues() > 0 || milestone.getClosedIssues() > 0) {
                 builder.append("<br>");
@@ -19488,9 +19514,9 @@ public class IssueInfoFragment extends IssueFragment {
                     String.format(
                             getString(R.string.text_milestone_opened_by),
                             String.format(getString(R.string.text_href),
-                                    "https://github.com/" + mIssue.getMilestone().getCreator()
+                                    "https://github.com/" + milestone.getCreator()
                                                                   .getLogin(),
-                                    mIssue.getMilestone().getCreator().getLogin()
+                                    milestone.getCreator().getLogin()
                             ),
                             DateUtils.getRelativeTimeSpanString(milestone.getCreatedAt())
                     )
@@ -19552,19 +19578,22 @@ public class IssueInfoFragment extends IssueFragment {
             @Override
             public void updated(Issue issue) {
                 int matchCount = 0;
-                if(mIssue.getAssignees() != null && issue.getAssignees() != null) {
-                    for(User u : mIssue.getAssignees()) {
-                        for(User v : mIssue.getAssignees()) {
+                final Issue old = mIssue;
+                mIssue = issue;
+                if(old.getAssignees() != null && mIssue.getAssignees() != null) {
+                    for(User u : old.getAssignees()) {
+                        for(User v : old.getAssignees()) {
                             if(u.equals(v)) matchCount++;
                         }
                     }
-                    if(matchCount != mIssue.getAssignees().length || matchCount != issue
-                            .getAssignees().length) {
-                        displayAssignees(issue);
+                    if(matchCount != old.getAssignees().length || 
+                            matchCount != mIssue.getAssignees().length) {
+                        displayAssignees();
                     }
                 }
-                mIssue = issue;
-                displayIssue(mIssue);
+
+                displayIssue();
+                displayMilestone();
                 mRefresher.setRefreshing(false);
             }
 
@@ -19703,17 +19732,6 @@ public class IssueInfoFragment extends IssueFragment {
         mAccessLevel = level;
     }
 
-    @Override
-    public void issueLoaded(Issue issue) {
-        mIssue = issue;
-        if(mAdapter != null) {
-            mAdapter.setIssue(issue);
-            displayIssue(mIssue);
-            displayAssignees(mIssue);
-            displayMilestone();
-        }
-    }
-
     private void checkSharedElementEntry() {
         final Intent i = getActivity().getIntent();
         if(i.hasExtra(getString(R.string.transition_card))) {
@@ -19733,9 +19751,6 @@ public class IssueInfoFragment extends IssueFragment {
         }
     }
 
-    public void checkSharedElementExit() {
-    }
-
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -19744,6 +19759,148 @@ public class IssueInfoFragment extends IssueFragment {
 }
 
 ```
+
+When ```issueLoaded``` is called, the ```Issue``` is passed to the adapter, before ```displayIssue```, ```displayAssignees```, and ```displayMilestone``` are called.
+
+#### displayIssue
+
+```displayIssue``` first sets the the title text, using ```Formatter``` to wrap the title in a level 1 header element.
+
+**Formatter.java**
+``` java
+public static String header(String s, @IntRange(from = 0, to = 6) int depth) {
+        String header = "<h" + depth + ">";
+        header += Markdown.escape(s).replace("\n", "</h" + depth + "><h" + depth + ">");
+        return header + "</h" + depth + ">";
+    }
+```
+
+It then uses ```Formatter``` again to build the span:
+
+**Formatter.java**
+``` java
+public static StringBuilder buildIssueSpan(Context context, Issue issue,
+                                               boolean showTitle,
+                                               boolean showNumberedLink,
+                                               boolean showAssignees,
+                                               boolean showClosedAt,
+                                               boolean showCommentCount) {
+        final StringBuilder builder = new StringBuilder();
+        if(showTitle) {
+            builder.append(header(Markdown.escape(issue.getTitle()), 1));
+        }
+
+        if(issue.getBody() != null && !issue.getBody().isEmpty()) {
+            builder.append(Markdown.formatMD(issue.getBody().replaceFirst("\\s++$", ""),
+                    issue.getRepoFullName()
+            ));
+        }
+        builder.append("\n\n");
+        if(showNumberedLink) {
+            builder.append(String.format(context.getString(R.string.text_issue_opened_by),
+                    String.format(context.getString(R.string.text_md_link),
+                            "#" + Integer.toString(issue.getNumber()),
+                            "https://github.com/" + issue.getRepoFullName() + "/issues/" + Integer
+                                    .toString(issue.getNumber())
+                    ),
+                    String.format(context.getString(R.string.text_md_link),
+                            issue.getOpenedBy().getLogin(),
+                            issue.getOpenedBy().getHtmlUrl()
+                    ),
+                    DateUtils.getRelativeTimeSpanString(issue.getCreatedAt())
+                    )
+            );
+            builder.append("<br>");
+        } else {
+            builder.append(
+                    String.format(
+                            context.getString(R.string.text_opened_this_issue),
+                            String.format(context.getString(R.string.text_href),
+                                    "https://github.com/" + issue.getOpenedBy().getLogin(),
+                                    issue.getOpenedBy().getLogin()
+                            ),
+                            DateUtils.getRelativeTimeSpanString(issue.getCreatedAt())
+                    )
+            );
+            builder.append("<br>");
+        }
+
+        if(issue.getLabels() != null && issue.getLabels().length > 0) {
+            appendLabels(builder, issue.getLabels(), "&nbsp;");
+            builder.append("<br>");
+        }
+        if(showAssignees && issue.getAssignees() != null) {
+            builder.append(context.getString(R.string.text_assigned_to));
+            builder.append(' ');
+            for(User u : issue.getAssignees()) {
+                builder.append(String.format(context.getString(R.string.text_md_link),
+                        u.getLogin(),
+                        u.getHtmlUrl()
+                ));
+                builder.append(' ');
+            }
+            builder.append("<br>");
+        }
+        if(showCommentCount && issue.getComments() > 0) {
+            builder.append(context.getResources()
+                                  .getQuantityString(R.plurals.text_issue_comment_count,
+                                          issue.getComments(), issue.getComments()
+                                  ));
+            builder.append("<br>");
+        }
+        if(showClosedAt && issue.getClosedAt() != 0 && issue.getClosedBy() != null) {
+            builder.append(String.format(context.getString(R.string.text_closed_by_link),
+                    issue.getClosedBy().getLogin(),
+                    issue.getClosedBy().getHtmlUrl(),
+                    DateUtils.getRelativeTimeSpanString(issue.getClosedAt())
+            ));
+            builder.append("<br>");
+        }
+        return builder;
+    }
+```
+
+This method is used to format an ```Issue``` model for displaying.
+It first adds the title, if the showTitle flag is true.
+Next it adds the body if it is non-empty, removing any leading whitespace.
+If showNumberedLink is true, it adds a line containing the issue number, creator, and the time that it was created. Otherwise the issue number is ommitted.
+Next, the labels are added.
+If showAssignees is true, and the ```Issue``` has assignees, a link is added to each assignee.
+If showCommentCount is true,  a line is added showing the number of comments.
+Finally, if showClosedAt is true, and the issue is closed, a line is added with a link to the user that closed the issue, and when they closed it.
+
+Returning to ```displayIssue```, the user avatar is set and an ```OnClickListener``` is added to open the user.
+An ```OnClickListener``` is then added to the state ```ImageView``` and its resource is set.
+
+#### displayAssignees
+
+```displayAssignees``` clears the ```Views``` from the mAssigneesLayout ```LinearLayout```.
+It then checks if there are assignees to add, hiding the ```LinearLayout``` and its header ```TextView``` otherwise.
+
+If there are assigneed, the shard_user layout is inflated for each of them, the ```Views``` are bound with the user login and avatar, and the ```OnClickListener``` is set to open the ```UserActivity``` with a shared element transition.
+
+#### displayMilestone
+
+```displayMilestone``` populates a ```MarkdownTextView``` with information about a ```Milestone``` to which the ```Issue``` is attached (If it is attached to one).
+The information lines are as follows:
+- Milestone title
+- Number of open and closed issues attached to milestone, and percentage complete
+- The date that the milestone was created at, and the user that created the milestone
+- The last time that the milestone was updated, if it has been updated
+- The date that the milestone was closed, if it has been closed
+- The date that the milestone is due, if it is due at a specific time. This is displayed in red if the deadline has been reached
+
+#### updateIssue
+
+```updateIssue``` is called ```onActivityResult``` from the ```IssueEditor```.
+It first checks whether any of the assignees have changed, calling ```displayAssignees``` if they have.
+Next ```displayIssue``` and ```displayMilestone``` are called to update the issue information.
+
+#### toggleIssueState
+
+```toggleIssueState``` checks that the ```Issue``` exists, and that the user has access to modify its state.
+If these conditions pass, an ```AlertDialog``` is created to allow the user to choose whether they wish to add a comment when changing the state.
+
 
 #### IssueEventsAdapter
 
@@ -19851,39 +20008,6 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
                     ? 0 : -1;
 
 
-    private ArrayList<DataModel> mergeEvents(List<IssueEvent> events) {
-        final ArrayList<DataModel> merged = new ArrayList<>();
-        ArrayList<IssueEvent> toMerge = new ArrayList<>();
-        IssueEvent last = new IssueEvent();
-        for(int i = 0; i < events.size(); i++) {
-            //If we have two of the same event, happening at the same time
-            if(events.get(i).getCreatedAt() == last.getCreatedAt() && events.get(i)
-                                                                            .getEvent() == last
-                    .getEvent()) {
-                /*If multiple events (labels or assignees) were added as the first event,
-                * then we need to stop the first item being duplicated
-                 */
-                if(merged.size() == 1 && merged.get(0).equals(events.get(i - 1))) merged.remove(0);
-                toMerge.add(events.get(i - 1)); //Add the previous event
-                int j = i;
-                //Loop until we find an event which shouldn't be merged
-                while(j < events.size() && events.get(j).getCreatedAt() == last
-                        .getCreatedAt() && events.get(j).getEvent() == last.getEvent()) {
-                    toMerge.add(events.get(j++));
-                }
-                i = j - 1; //Jump to the end of the merged positions
-                merged.add(new MergedModel<IssueEvent>(toMerge));
-                toMerge = new ArrayList<>(); //Reset the list of merged events
-            } else {
-                merged.add(events.get(i));
-            }
-            last = events.get(i); //Set the last event
-        }
-        return merged;
-
-    }
-
-
     @Override
     public void listLoadError(APIHandler.APIError error) {
 
@@ -19906,10 +20030,6 @@ public class IssueEventsAdapter extends RecyclerView.Adapter<IssueEventsAdapter.
         mLoader.loadEvents(this, mIssue.getRepoFullName(), mIssue.getNumber(), mPage);
     }
 
-    void addEvent(IssueEvent event) {
-        mEvents.add(Pair.create(event, null));
-        notifyItemInserted(mEvents.size());
-    }
 
     @Override
     public EventHolder onCreateViewHolder(ViewGroup parent, int viewType) {
