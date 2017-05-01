@@ -5703,7 +5703,108 @@ Finally, if the event has an actor, their login and avatar are displayed.
 
 ## ProjectActivity
 
+The ```ProjectActivity``` and ```ColumnFragment``` are the most complicated of the app as they have to deal with the most possible states, and a limited API.
+
+The ```ProjectActivity``` deals with:
+- Managing the the loading of the ```Project```
+- Managing the loading of each ```Column```
+- Managing the priority of loading ```Issues```
+- Managing the refreshing of content
+- Managing the creation of:
+    - New columns
+    - New cards
+    - New issue and the cards created from them
+- Deletion of cards
+- Searching of loaded content
+- Checking access to the repository
+- Dragging and dropping of cards between columns
+- Dragging and dropping of columns
+
 #import "app/src/main/java/com/tpb/projects/project/ProjectActivity.java"
+
+#### Loading the Project
+
+The ```Project``` model can be passes as a parcel, or passed as the project number when launched from the ```Interceptor```.
+The first case is trivial, however the second is a problem because although the URL for a project only gives the project number, there is no API endpoint to load the project from its number and repository.
+
+Instead, ```loadFromId``` is called.
+This method loads all of the ```Project``` models for a repository, and checks their numbers against the number passed from the ```Interceptor```.
+
+When ```LoadComplete``` is called, the title and its state drawable are set, and the next stage of loading can begin.
+
+#### Loading the columns
+
+The ```Column``` models are loaded with a call to ```Loader.loadColumns```.
+If there are columns to be shown the ```FloatingActionButtons``` for adding cards and issues are set to the invisible state, and may be made visible if the authenticated user has access to edit the project.
+
+If the ```Columns``` have already been loaded and displayed, the id of the currently visible column is saved before the ```ColumnFragments``` are removed.
+Each of the new ```Columns``` are then added, and if the same ```Column``` id is found again, mCurrentPosition is saved.
+Once the ```Fragments``` have been created, the position is checked to ensure that the column still exists, and the adapter is moved to this column.
+
+#### Adding a new column
+
+```addColumn``` is the onClick method for one of the ```FloatinActionButtons```.
+It shows a dialog to input the name of a new column.
+A listener is then added to the dialog to capture the input if the positive button is pressed, and create the new column before adding it to the adapter and moving to the new position.
+
+#### Deleting columns
+
+When a user attempts to delted a column, an ```AlertDialog``` is shown asking them to confirm that they wish to delete the column.
+If the user confirms their action, the request is made to delete the column and the ```ColumnFragment``` is removed from the adapter.
+
+#### Dragging and dropping Fragments in a ViewPager
+
+In order to have the same functionality as the desktop website, users should be able to re-order the columns in a project.
+
+This is done by allowing the ```Fragments``` to be dragged and dropped when their header is long pressed.
+
+While the ```Fragment``` layouts themselves are far too complex to move around the screen, the header card containing the column title can be easily moved.
+
+The ```moveColumn``` method is called from the ```ColumnFragment``` in an ```OnDragListener``` set on the header card. This will be explained in further detail later.
+
+The tag parameter is the tag set on the ```ColumnFragment``` to be moved, and the ```dropTag``` is the tag set on the ```View``` which the detached header card is being held over.
+
+The new position is calculated from the position of the dragging ```Fragment``` in the adapter, and the ```Fragment``` is moved from one position to the other.
+The ```ViewPager``` is then set to the new position, and the API call is made to perform the movement.
+
+Of course, prior to the ```Fragment``` being moved, the user must already have performed the dragging action.
+In the ```ColumnFragment``` an instance of ```ColumnDragListener``` is attached to the header card containing information about the column.
+The ```OnLongClickListener``` is then set on the card to created a ```DrawShadowBuilder``` and start a drag and drop action with the shadowed version of the ```View```.
+
+The ```OnDragListener``` is called when the shadow is placed over another ```View```.
+In the event of the shadow being released, the object returned from ```DragEvent.getLocalState``` is the ```View``` which the shadow is being held over.
+If the tag of this ```View``` is not equal to the tag of the ```View``` being dragged, and the ```View``` hsa the column_card id, the ```moveColumn``` method is called.
+
+This still does not explain how the user drags their shadowed ```View``` onto another ```Fragment```, they are currently only able to drag the ```View``` around the ```Fragment``` which it belongs to, not triggering any action.
+
+The action of dragging the shadowed ```View``` to the edge of the screen and performing a scroll is handled by the ```NavigationDragListener```, another implementation of ```OnDragListener```.
+
+There is only one instance of ```NavigationDragListener``` and it is passed to each ```ColumnFragment``` which is created.
+This listener is then attached to the ```RecyclerView``` in each ```ColumnFragment``` via a ```CardDragListener```.
+
+The ```CardDragListener``` is the third and final implementation of ```OnDragListener``` and will be explained later in the context of dragging and dropping cards.
+For now, it is only necessary to know that the ```CardDragListener``` may have a reference to a parent ```OnDragListener``` and it passes ```onDrag``` events to this parent without having to set one huge ```OnDragListener``` on every ```View```.
+
+To recap:
+- The ```ColumnDragListener``` tells the ```ProjectActivity``` when to move a ```ColumnFragment``` from one position to another. It does this when the ```View``` being dragged is released by the user over another header card ```View```.
+- The ```NavigationDragListener``` manages the ```onDrag``` events when the shadowed ```View``` is dragged over the ```Views``` contained within the ```RecyclerView``` in each ```ColumnFragment``` and the ```RecyclerView``` itself. It determines whether the the user is trying to drag the shadowed ```View``` to the next ```ColumnFragment``` or up or down the ```RecyclerView```.
+
+##### NavigationDragListener
+
+In the ```onDrag``` method of ```NavigationDragListener``` an instance of ```DisplayMetrics``` is collected.
+
+The event action is then checked.
+The two actions that we are concerned with are ACTION_DRAG_ENTERED, which occurs when the shadowed ```View``` enters the bounds of a new ```View``` with an ```OnDragListener```, and ACTION_DRAG_LOCATION which is fired while the shadow ```View``` is *inside* the bounds of a ```View``` with an ```OnDragListener```.
+
+I will not yet explain the process behind ACTION_DRAG_ENTERED as it is only used when dragging cards around, not column headers.
+
+ACTION_DRAG_LOCATION on the other hand is used in both cases in exactly the same way.
+We know that the ```ColumnFragment``` fills the entire width of the screen, so ```DisplayMetrics.widthPixels``` is the same value without requiring a reference to a ```Fragment``` layout.
+
+The x value of the ```DragEvent``` is compared to the screen width and if it is in the outer 15% of either side of the screen, either ```dragLeft``` or ```dragRight``` are called.
+Of course, this would result in near instantaneous scrolling to the final ```ColumnFragment```, so the page change time is stored and used in the comparisons to only allow a page drag every 500ms.
+
+```dragLeft``` and ```dragRight``` simply check that the movement is possible, and set the ```ViewPager``` position.
 
 ### ColumnFragment
 

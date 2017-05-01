@@ -21174,6 +21174,23 @@ public class IssueCommentsAdapter extends RecyclerView.Adapter<IssueCommentsAdap
 
 ## ProjectActivity
 
+The ```ProjectActivity``` and ```ColumnFragment``` are the most complicated of the app as they have to deal with the most possible states, and a limited API.
+
+The ```ProjectActivity``` deals with:
+- Managing the the loading of the ```Project```
+- Managing the loading of each ```Column```
+- Managing the priority of loading ```Issues```
+- Managing the refreshing of content
+- Managing the creation of:
+    - New columns
+    - New cards
+    - New issue and the cards created from them
+- Deletion of cards
+- Searching of loaded content
+- Checking access to the repository
+- Dragging and dropping of cards between columns
+- Dragging and dropping of columns
+
 **ProjectActivity.java**
 ``` java
 package com.tpb.projects.project;
@@ -21230,7 +21247,6 @@ import com.tpb.projects.editors.CardEditor;
 import com.tpb.projects.editors.CommentEditor;
 import com.tpb.projects.editors.IssueEditor;
 import com.tpb.projects.util.Analytics;
-import com.tpb.projects.util.Logger;
 import com.tpb.projects.util.SettingsActivity;
 import com.tpb.projects.util.UI;
 
@@ -21310,7 +21326,13 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
             }
             loadFromId(repo, number);
         }
+        //Ensure that the keyboard does not show
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
+
+        initialiseListeners();
+    }
+
+    private void initialiseListeners() {
         mAdapter = new ColumnPagerAdapter(getSupportFragmentManager(), new ArrayList<>());
         mColumnPager.setAdapter(mAdapter);
         mColumnPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
@@ -21336,18 +21358,13 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                 }
             }
         });
+
+
         mRefresher.setRefreshing(true);
         mMenu.hideMenuButton(false); //Hide the button so that we can show it later
         mMenu.setClosedOnTouchOutside(true);
         mRefresher.setOnRefreshListener(() -> {
-            if(mProject != null) {
-                mLoader.loadProject(ProjectActivity.this, mProject.getId());
-            } else {
-                final String repo = launchIntent.getStringExtra(getString(R.string.intent_repo));
-                final int number = launchIntent
-                        .getIntExtra(getString(R.string.intent_project_number), 1);
-                loadFromId(repo, number);
-            }
+            mLoader.loadProject(ProjectActivity.this, mProject.getId());
         });
         mRefresher.setOnChildScrollUpCallback((parent, child) -> {
             mAdapter.getCurrentFragment().notifyScroll();
@@ -21359,8 +21376,8 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
 
     private void loadFromId(String repo, int number) {
         //We have to load all of the projects to get the id that we want
+        //This is because we have the number and need the id
         mLoader.loadProjects(new Loader.ListLoader<Project>() {
-            int projectLoadAttempts = 0;
 
             @Override
             public void listLoadComplete(List<Project> projects) {
@@ -21379,27 +21396,14 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
 
             @Override
             public void listLoadError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mRefresher.setRefreshing(false);
-                    Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT).show();
-
-                } else {
-                    if(projectLoadAttempts < 5) {
-                        projectLoadAttempts++;
-                        mLoader.loadProjects(this, repo);
-                    } else {
-                        Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
-                             .show();
-                        mRefresher.setRefreshing(false);
-                    }
-                }
+                mRefresher.setRefreshing(false);
+                Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT).show();
             }
         }, repo);
     }
 
     private void checkAccess(Project project) {
         mLoader.checkAccessToRepository(new Loader.ItemLoader<Repository.AccessLevel>() {
-            int accessCheckAttempts = 0;
 
             @Override
             public void loadComplete(Repository.AccessLevel data) {
@@ -21418,23 +21422,8 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
 
             @Override
             public void loadError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mRefresher.setRefreshing(false);
-                    Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT).show();
-
-                } else {
-                    if(accessCheckAttempts < 5) {
-                        accessCheckAttempts++;
-                        mLoader.checkAccessToRepository(this,
-                                GitHubSession.getSession(ProjectActivity.this).getUserLogin(),
-                                project.getRepoPath()
-                        );
-                    } else {
-                        Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
-                             .show();
-                        mRefresher.setRefreshing(false);
-                    }
-                }
+                mRefresher.setRefreshing(false);
+                Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT).show();
             }
         }, GitHubSession.getSession(this).getUserLogin(), project.getRepoPath());
     }
@@ -21450,16 +21439,12 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
     @Override
     public void loadComplete(Project project) {
         mProject = project;
-        mLoader.loadLabels(null, mProject.getRepoPath());
         mName.setText(mProject.getName());
         mName.setCompoundDrawablesRelativeWithIntrinsicBounds(
                 project.getState() == State.OPEN ? R.drawable.ic_state_open : R.drawable.ic_state_closed,
                 0, 0, 0
         );
 
-        final Bundle bundle = new Bundle();
-        bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_SUCCESS);
-        mAnalytics.logEvent(Analytics.TAG_PROJECT_LOADED, bundle);
         mLoadCount = 0;
         mLoader.loadColumns(new Loader.ListLoader<Column>() {
             @Override
@@ -21495,18 +21480,13 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                     mAddCard.setVisibility(View.GONE);
                     mAddIssue.setVisibility(View.GONE);
                 }
-
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_SUCCESS);
-                bundle.putInt(Analytics.KEY_COLUMN_COUNT, columns.size() + 1);
-                mAnalytics.logEvent(Analytics.TAG_COLUMNS_LOADED, bundle);
             }
 
             @Override
             public void listLoadError(APIHandler.APIError error) {
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_LOAD_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_COLUMNS_LOADED, bundle);
+                mRefresher.setRefreshing(false);
+                Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
+                     .show();
             }
         }, mProject.getId());
 
@@ -21548,7 +21528,6 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
             if(!text.isEmpty()) {
                 mRefresher.setRefreshing(true);
                 mEditor.addColumn(new Editor.CreationListener<Column>() {
-                    int addColumnAttempts = 0;
 
                     @Override
                     public void created(Column column) {
@@ -21562,32 +21541,13 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                             mColumnPager.setCurrentItem(mAdapter.getCount(), true);
                         }
                         mRefresher.setRefreshing(false);
-                        final Bundle bundle = new Bundle();
-                        bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                        mAnalytics.logEvent(Analytics.TAG_COLUMN_ADD, bundle);
                     }
 
                     @Override
                     public void creationError(APIHandler.APIError error) {
-                        if(error == APIHandler.APIError.NO_CONNECTION) {
-                            mRefresher.setRefreshing(false);
-                            Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
-                                 .show();
-
-                        } else {
-                            if(addColumnAttempts < 5) {
-                                addColumnAttempts++;
-                                mEditor.addColumn(this, mProject.getId(), text);
-                            } else {
-                                Toast.makeText(ProjectActivity.this, error.resId,
-                                        Toast.LENGTH_SHORT
-                                ).show();
-                                mRefresher.setRefreshing(false);
-                            }
-                        }
-                        final Bundle bundle = new Bundle();
-                        bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                        mAnalytics.logEvent(Analytics.TAG_COLUMN_ADD, bundle);
+                        mRefresher.setRefreshing(false);
+                        Toast.makeText(ProjectActivity.this, error.resId, Toast.LENGTH_SHORT)
+                             .show();
                     }
                 }, mProject.getId(), text);
                 dialog.dismiss();
@@ -21640,7 +21600,6 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                 .setPositiveButton(R.string.action_ok, (dialogInterface, i) -> {
                     mRefresher.setRefreshing(true);
                     mEditor.deleteColumn(new Editor.DeletionListener<Integer>() {
-                        int deleteColumnAttempts = 0;
 
                         @Override
                         public void deleted(Integer integer) {
@@ -21651,67 +21610,18 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                                 mAddCard.setVisibility(View.GONE);
                                 mAddIssue.setVisibility(View.GONE);
                             }
-                            final Bundle bundle = new Bundle();
-                            bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                            mAnalytics.logEvent(Analytics.TAG_COLUMN_DELETE, bundle);
                         }
 
                         @Override
                         public void deletionError(APIHandler.APIError error) {
-                            if(error == APIHandler.APIError.NO_CONNECTION) {
-                                mRefresher.setRefreshing(false);
-                                Toast.makeText(ProjectActivity.this, error.resId,
-                                        Toast.LENGTH_SHORT
-                                ).show();
-
-                            } else {
-                                if(deleteColumnAttempts < 5) {
-                                    deleteColumnAttempts++;
-                                    mEditor.deleteColumn(this, column.getId());
-                                } else {
-                                    Toast.makeText(ProjectActivity.this, error.resId,
-                                            Toast.LENGTH_SHORT
-                                    ).show();
-                                    mRefresher.setRefreshing(false);
-                                }
-                            }
-                            final Bundle bundle = new Bundle();
-                            bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                            mAnalytics.logEvent(Analytics.TAG_COLUMN_DELETE, bundle);
+                            mRefresher.setRefreshing(false);
+                            Toast.makeText(ProjectActivity.this, error.resId,
+                                    Toast.LENGTH_SHORT
+                            ).show();
                         }
                     }, column.getId());
                 }).show();
 
-    }
-
-    /**
-     * @param tag       id of the column being moved
-     * @param dropTag   id of the column being dropped onto
-     * @param direction side of the drop column to drop to true=left false=right
-     */
-    void moveColumn(int tag, int dropTag, boolean direction) {
-        final int from = mAdapter.indexOf(tag);
-        final int to;
-        if(direction) {
-            to = Math.max(0, mAdapter.indexOf(dropTag) - 1);
-        } else {
-            to = Math.min(mAdapter.getCount() - 1, mAdapter.indexOf(dropTag) + 1);
-        }
-        Logger.i(TAG, "moveColumn: From " + from + ", to " + to);
-        mAdapter.move(from, to);
-        mAdapter.columns.add(to, mAdapter.columns.remove(from));
-        mColumnPager.setCurrentItem(to, true);
-        mEditor.moveColumn(new Editor.UpdateListener<Integer>() {
-            @Override
-            public void updated(Integer integer) {
-
-            }
-
-            @Override
-            public void updateError(APIHandler.APIError error) {
-
-            }
-        }, tag, dropTag, to);
     }
 
     void deleteCard(Card card, boolean showWarning) {
@@ -21751,26 +21661,6 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
         }
     }
 
-    private void dragLeft() {
-        if(mCurrentPosition > 0) {
-            mColumnPager.setCurrentItem(mCurrentPosition - 1, true);
-        }
-    }
-
-    private void dragRight() {
-        if(mCurrentPosition < mAdapter.getCount()) {
-            mColumnPager.setCurrentItem(mCurrentPosition + 1, true);
-        }
-    }
-
-    private void dragUp() {
-        mAdapter.getCurrentFragment().scrollUp();
-    }
-
-    private void dragDown() {
-        mAdapter.getCurrentFragment().scrollDown();
-    }
-
     void notifyFragmentLoaded() {
         mLoadCount++;
         if(mLoadCount == mAdapter.getCount()) {
@@ -21786,10 +21676,6 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
         if(mMenu.isOpened()) {
             mMenu.close(true);
         } else {
-            /*
-            This seems to fix the problem with RecyclerView view detaching
-            Quick and dirty way of removing the com.tpb.mdtext.views
-             */
             mColumnPager.setAdapter(null);
             mMenu.hideMenuButton(true);
             super.onBackPressed();
@@ -21875,8 +21761,8 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        mMenu.close(true);
         if(resultCode == AppCompatActivity.RESULT_OK) {
+            mMenu.close(true);
             mRefresher.setRefreshing(true);
             if(requestCode == IssueEditor.REQUEST_CODE_NEW_ISSUE) {
                 String[] assignees = null;
@@ -21916,8 +21802,7 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                     mAdapter.getCurrentFragment().newCard(card);
                 }
             } else if(requestCode == CardEditor.REQUEST_CODE_EDIT_CARD) {
-                mAdapter.getCurrentFragment()
-                        .editCard(data.getParcelableExtra(getString(R.string.parcel_card)));
+                mAdapter.getCurrentFragment().editCard(data.getParcelableExtra(getString(R.string.parcel_card)));
             } else if(requestCode == CommentEditor.REQUEST_CODE_COMMENT_FOR_STATE) {
                 final Comment comment = data.getParcelableExtra(getString(R.string.parcel_comment));
                 final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
@@ -21941,11 +21826,53 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mAnalytics.setAnalyticsCollectionEnabled(
-                SettingsActivity.Preferences.getPreferences(this).areAnalyticsEnabled());
+    /**
+     * @param tag       id of the column being moved
+     * @param dropTag   id of the column being dropped onto
+     * @param direction side of the drop column to drop to true=left false=right
+     */
+    void moveColumn(int tag, int dropTag, boolean direction) {
+        final int from = mAdapter.indexOf(tag);
+        final int to;
+        if(direction) {
+            to = Math.max(0, mAdapter.indexOf(dropTag) - 1);
+        } else {
+            to = Math.min(mAdapter.getCount() - 1, mAdapter.indexOf(dropTag) + 1);
+        }
+        mAdapter.move(from, to);
+        mAdapter.columns.add(to, mAdapter.columns.remove(from));
+        mColumnPager.setCurrentItem(to, true);
+        mEditor.moveColumn(new Editor.UpdateListener<Integer>() {
+            @Override
+            public void updated(Integer integer) {
+
+            }
+
+            @Override
+            public void updateError(APIHandler.APIError error) {
+
+            }
+        }, tag, dropTag, to);
+    }
+
+    private void dragLeft() {
+        if(mCurrentPosition > 0) {
+            mColumnPager.setCurrentItem(mCurrentPosition - 1, true);
+        }
+    }
+
+    private void dragRight() {
+        if(mCurrentPosition < mAdapter.getCount()) {
+            mColumnPager.setCurrentItem(mCurrentPosition + 1, true);
+        }
+    }
+
+    private void dragUp() {
+        mAdapter.getCurrentFragment().scrollUp();
+    }
+
+    private void dragDown() {
+        mAdapter.getCurrentFragment().scrollDown();
     }
 
     class NavigationDragListener implements View.OnDragListener {
@@ -21983,10 +21910,8 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
                     if(pos[1] + relativePos < 0.1 * metrics.heightPixels) {
                         dragUp();
                     }
-                    Logger.i(TAG, "onDrag: At the first position- We should scroll up");
 
                 } else if(tp == last) {
-                    Logger.i(TAG, "onDrag: At the last position- We should scroll down");
                     rv.getChildAt(last).getLocationOnScreen(pos);
                     if(pos[1] + relativePos > 0.9 * metrics.heightPixels) {
                         dragDown();
@@ -22011,7 +21936,7 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
     }
 
     private class ColumnPagerAdapter extends ArrayPagerAdapter<ColumnFragment> {
-        private ArrayList<Column> columns = new ArrayList<>();
+        private List<Column> columns = new ArrayList<>();
 
         ColumnPagerAdapter(FragmentManager manager, List<PageDescriptor> descriptors) {
             super(manager, descriptors);
@@ -22024,8 +21949,8 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
             return -1;
         }
 
-        ArrayList<Card> getAllCards() {
-            final ArrayList<Card> cards = new ArrayList<>();
+        List<Card> getAllCards() {
+            final List<Card> cards = new ArrayList<>();
             for(int i = 0; i < getCount(); i++) {
                 cards.addAll(getExistingFragment(i).getCards());
             }
@@ -22099,6 +22024,90 @@ public class ProjectActivity extends BaseActivity implements Loader.ItemLoader<P
 
 ```
 
+#### Loading the Project
+
+The ```Project``` model can be passes as a parcel, or passed as the project number when launched from the ```Interceptor```.
+The first case is trivial, however the second is a problem because although the URL for a project only gives the project number, there is no API endpoint to load the project from its number and repository.
+
+Instead, ```loadFromId``` is called.
+This method loads all of the ```Project``` models for a repository, and checks their numbers against the number passed from the ```Interceptor```.
+
+When ```LoadComplete``` is called, the title and its state drawable are set, and the next stage of loading can begin.
+
+#### Loading the columns
+
+The ```Column``` models are loaded with a call to ```Loader.loadColumns```.
+If there are columns to be shown the ```FloatingActionButtons``` for adding cards and issues are set to the invisible state, and may be made visible if the authenticated user has access to edit the project.
+
+If the ```Columns``` have already been loaded and displayed, the id of the currently visible column is saved before the ```ColumnFragments``` are removed.
+Each of the new ```Columns``` are then added, and if the same ```Column``` id is found again, mCurrentPosition is saved.
+Once the ```Fragments``` have been created, the position is checked to ensure that the column still exists, and the adapter is moved to this column.
+
+#### Adding a new column
+
+```addColumn``` is the onClick method for one of the ```FloatinActionButtons```.
+It shows a dialog to input the name of a new column.
+A listener is then added to the dialog to capture the input if the positive button is pressed, and create the new column before adding it to the adapter and moving to the new position.
+
+#### Deleting columns
+
+When a user attempts to delted a column, an ```AlertDialog``` is shown asking them to confirm that they wish to delete the column.
+If the user confirms their action, the request is made to delete the column and the ```ColumnFragment``` is removed from the adapter.
+
+#### Dragging and dropping Fragments in a ViewPager
+
+In order to have the same functionality as the desktop website, users should be able to re-order the columns in a project.
+
+This is done by allowing the ```Fragments``` to be dragged and dropped when their header is long pressed.
+
+While the ```Fragment``` layouts themselves are far too complex to move around the screen, the header card containing the column title can be easily moved.
+
+The ```moveColumn``` method is called from the ```ColumnFragment``` in an ```OnDragListener``` set on the header card. This will be explained in further detail later.
+
+The tag parameter is the tag set on the ```ColumnFragment``` to be moved, and the ```dropTag``` is the tag set on the ```View``` which the detached header card is being held over.
+
+The new position is calculated from the position of the dragging ```Fragment``` in the adapter, and the ```Fragment``` is moved from one position to the other.
+The ```ViewPager``` is then set to the new position, and the API call is made to perform the movement.
+
+Of course, prior to the ```Fragment``` being moved, the user must already have performed the dragging action.
+In the ```ColumnFragment``` an instance of ```ColumnDragListener``` is attached to the header card containing information about the column.
+The ```OnLongClickListener``` is then set on the card to created a ```DrawShadowBuilder``` and start a drag and drop action with the shadowed version of the ```View```.
+
+The ```OnDragListener``` is called when the shadow is placed over another ```View```.
+In the event of the shadow being released, the object returned from ```DragEvent.getLocalState``` is the ```View``` which the shadow is being held over.
+If the tag of this ```View``` is not equal to the tag of the ```View``` being dragged, and the ```View``` hsa the column_card id, the ```moveColumn``` method is called.
+
+This still does not explain how the user drags their shadowed ```View``` onto another ```Fragment```, they are currently only able to drag the ```View``` around the ```Fragment``` which it belongs to, not triggering any action.
+
+The action of dragging the shadowed ```View``` to the edge of the screen and performing a scroll is handled by the ```NavigationDragListener```, another implementation of ```OnDragListener```.
+
+There is only one instance of ```NavigationDragListener``` and it is passed to each ```ColumnFragment``` which is created.
+This listener is then attached to the ```RecyclerView``` in each ```ColumnFragment``` via a ```CardDragListener```.
+
+The ```CardDragListener``` is the third and final implementation of ```OnDragListener``` and will be explained later in the context of dragging and dropping cards.
+For now, it is only necessary to know that the ```CardDragListener``` may have a reference to a parent ```OnDragListener``` and it passes ```onDrag``` events to this parent without having to set one huge ```OnDragListener``` on every ```View```.
+
+To recap:
+- The ```ColumnDragListener``` tells the ```ProjectActivity``` when to move a ```ColumnFragment``` from one position to another. It does this when the ```View``` being dragged is released by the user over another header card ```View```.
+- The ```NavigationDragListener``` manages the ```onDrag``` events when the shadowed ```View``` is dragged over the ```Views``` contained within the ```RecyclerView``` in each ```ColumnFragment``` and the ```RecyclerView``` itself. It determines whether the the user is trying to drag the shadowed ```View``` to the next ```ColumnFragment``` or up or down the ```RecyclerView```.
+
+##### NavigationDragListener
+
+In the ```onDrag``` method of ```NavigationDragListener``` an instance of ```DisplayMetrics``` is collected.
+
+The event action is then checked.
+The two actions that we are concerned with are ACTION_DRAG_ENTERED, which occurs when the shadowed ```View``` enters the bounds of a new ```View``` with an ```OnDragListener```, and ACTION_DRAG_LOCATION which is fired while the shadow ```View``` is *inside* the bounds of a ```View``` with an ```OnDragListener```.
+
+I will not yet explain the process behind ACTION_DRAG_ENTERED as it is only used when dragging cards around, not column headers.
+
+ACTION_DRAG_LOCATION on the other hand is used in both cases in exactly the same way.
+We know that the ```ColumnFragment``` fills the entire width of the screen, so ```DisplayMetrics.widthPixels``` is the same value without requiring a reference to a ```Fragment``` layout.
+
+The x value of the ```DragEvent``` is compared to the screen width and if it is in the outer 15% of either side of the screen, either ```dragLeft``` or ```dragRight``` are called.
+Of course, this would result in near instantaneous scrolling to the final ```ColumnFragment```, so the page change time is stored and used in the comparisons to only allow a page drag every 500ms.
+
+```dragLeft``` and ```dragRight``` simply check that the movement is possible, and set the ```ViewPager``` position.
+
 ### ColumnFragment
 
 **ColumnFragment.java**
@@ -22144,19 +22153,16 @@ import com.tpb.projects.editors.CardEditor;
 import com.tpb.projects.editors.CommentEditor;
 import com.tpb.projects.editors.IssueEditor;
 import com.tpb.projects.flow.IntentHandler;
-import com.tpb.projects.util.Analytics;
-import com.tpb.projects.util.Logger;
 import com.tpb.projects.util.SettingsActivity;
 import com.tpb.projects.util.UI;
 
-import java.util.ArrayList;
+import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.Unbinder;
 
-import static com.tpb.projects.flow.ProjectsApplication.mAnalytics;
 import static com.tpb.projects.util.SettingsActivity.Preferences.CardAction.COPY;
 
 /**
@@ -22164,7 +22170,6 @@ import static com.tpb.projects.util.SettingsActivity.Preferences.CardAction.COPY
  */
 
 public class ColumnFragment extends ViewSafeFragment {
-    private static final String TAG = ColumnFragment.class.getSimpleName();
 
     private Unbinder unbinder;
 
@@ -22232,7 +22237,6 @@ public class ColumnFragment extends ViewSafeFragment {
                     mName.setText(mColumn.getName());
                 } else {
                     mEditor.updateColumnName(new Editor.UpdateListener<Column>() {
-                        int loadCount = 0;
 
                         @Override
                         public void updated(Column column) {
@@ -22240,31 +22244,14 @@ public class ColumnFragment extends ViewSafeFragment {
                                 mColumn.setName(mName.getText().toString());
                                 resetLastUpdate();
                             }
-                            final Bundle bundle = new Bundle();
-                            bundle.putString(Analytics.TAG_PROJECT_EDIT, Analytics.VALUE_SUCCESS);
-                            mAnalytics.logEvent(Analytics.TAG_COLUMN_NAME_CHANGE, bundle);
                         }
 
                         @Override
                         public void updateError(APIHandler.APIError error) {
-                            if(error != APIHandler.APIError.NO_CONNECTION) {
-                                if(loadCount < 5) {
-                                    loadCount++;
-                                    mEditor.updateColumnName(this, mColumn.getId(),
-                                            mName.getText().toString()
-                                    );
-                                } else {
-                                    Toast.makeText(getContext(), R.string.error_title_change_failed,
-                                            Toast.LENGTH_SHORT
-                                    ).show();
-                                    mName.setText(mColumn.getName());
-                                    final Bundle bundle = new Bundle();
-                                    bundle.putString(Analytics.TAG_PROJECT_EDIT,
-                                            Analytics.VALUE_FAILURE
-                                    );
-                                    mAnalytics.logEvent(Analytics.TAG_COLUMN_NAME_CHANGE, bundle);
-                                }
-                            }
+                            Toast.makeText(getContext(), R.string.error_title_change_failed,
+                                    Toast.LENGTH_SHORT
+                            ).show();
+                            mName.setText(mColumn.getName());
                         }
                     }, mColumn.getId(), mName.getText().toString());
                 }
@@ -22338,7 +22325,6 @@ public class ColumnFragment extends ViewSafeFragment {
 
     @OnClick(R.id.column_delete)
     void deleteColumn() {
-        //TODO Move this to an options menu for the column
         mParent.deleteColumn(mColumn);
     }
 
@@ -22359,7 +22345,6 @@ public class ColumnFragment extends ViewSafeFragment {
     void recreateCard(Card card) {
         mParent.mRefresher.setRefreshing(true);
         mEditor.createCard(new Editor.CreationListener<Pair<Integer, Card>>() {
-            int createAttempts = 0;
 
             @Override
             public void created(Pair<Integer, Card> integerCardPair) {
@@ -22369,22 +22354,8 @@ public class ColumnFragment extends ViewSafeFragment {
 
             @Override
             public void creationError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-
-                } else {
-                    if(createAttempts < 5) {
-                        createAttempts++;
-                        mEditor.createCard(this, mColumn.getId(), card.getNote());
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_CARD_CREATION, bundle);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                mParent.mRefresher.setRefreshing(false);
             }
         }, mColumn.getId(), card.getNote());
     }
@@ -22404,13 +22375,11 @@ public class ColumnFragment extends ViewSafeFragment {
         for(int i = 0; i < mRecycler.getChildCount() && i < index; i++) {
             height += mRecycler.getChildAt(i).getHeight();
         }
-        Logger.i(TAG, "attemptMoveTo: Height of " + height);
         mNestedScroller.scrollTo(0, height);
-
         return true;
     }
 
-    ArrayList<Card> getCards() {
+    List<Card> getCards() {
         return mAdapter.getCards();
     }
 
@@ -22435,18 +22404,19 @@ public class ColumnFragment extends ViewSafeFragment {
             case IssueEditor.REQUEST_CODE_ISSUE_FROM_CARD:
                 final Card oldCard = data.getParcelableExtra(getString(R.string.parcel_card));
                 final Issue issue = data.getParcelableExtra(getString(R.string.parcel_issue));
-                mEditor.createIssue(new Editor.CreationListener<Issue>() {
-                                        @Override
-                                        public void created(Issue issue) {
-                                            convertCardToIssue(oldCard, issue);
-                                        }
+                mEditor.createIssue(
+                        new Editor.CreationListener<Issue>() {
+                                @Override
+                                public void created(Issue issue) {
+                                    convertCardToIssue(oldCard, issue);
+                                }
 
-                                        @Override
-                                        public void creationError(APIHandler.APIError error) {
+                                @Override
+                                public void creationError(APIHandler.APIError error) {
 
-                                        }
-                                    }, mParent.mProject.getRepoPath(), issue.getTitle(), issue.getBody(), assignees,
-                        labels
+                                }
+                        },
+                        mParent.mProject.getRepoPath(), issue.getTitle(), issue.getBody(), assignees, labels
                 );
                 break;
         }
@@ -22543,72 +22513,36 @@ public class ColumnFragment extends ViewSafeFragment {
     void newCard(Card card) {
         mParent.mRefresher.setRefreshing(true);
         mEditor.createCard(new Editor.CreationListener<Pair<Integer, Card>>() {
-            int createAttempts = 0;
 
             @Override
             public void created(Pair<Integer, Card> pair) {
                 addCard(pair.second);
                 mParent.mRefresher.setRefreshing(false);
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                mAnalytics.logEvent(Analytics.TAG_CARD_CREATION, bundle);
             }
 
             @Override
             public void creationError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-
-                } else {
-                    if(createAttempts < 5) {
-                        createAttempts++;
-                        mEditor.createCard(this, mColumn.getId(), card.getNote());
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_CARD_CREATION, bundle);
+                mParent.mRefresher.setRefreshing(false);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
             }
         }, mColumn.getId(), card.getNote());
     }
 
     void editCard(Card card) {
-        Logger.i(TAG, "editCard: Updating card: " + card.toString());
         mParent.mRefresher.setRefreshing(true);
         mEditor.updateCard(new Editor.UpdateListener<Card>() {
-            int updateAttempts = 0;
 
             @Override
             public void updated(Card card) {
                 mAdapter.updateCard(card);
                 resetLastUpdate();
                 mParent.mRefresher.setRefreshing(false);
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                mAnalytics.logEvent(Analytics.TAG_CARD_EDIT, bundle);
             }
 
             @Override
             public void updateError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                } else {
-                    if(updateAttempts < 5) {
-                        updateAttempts++;
-                        mEditor.updateCard(this, card.getId(), card.getNote());
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_CARD_EDIT, bundle);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                mParent.mRefresher.setRefreshing(false);
             }
         }, card.getId(), card.getNote());
 
@@ -22616,47 +22550,17 @@ public class ColumnFragment extends ViewSafeFragment {
 
     private void toggleIssueState(Card card) {
         final Editor.UpdateListener<Issue> listener = new Editor.UpdateListener<Issue>() {
-            int stateChangeAttempts = 0;
 
             @Override
             public void updated(Issue issue) {
                 card.setFromIssue(issue);
                 mAdapter.updateCard(card);
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                mAnalytics.logEvent(
-                        issue.isClosed() ? Analytics.TAG_ISSUE_CLOSED : Analytics.TAG_ISSUE_OPENED,
-                        bundle
-                );
             }
 
             @Override
             public void updateError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-
-                } else {
-                    if(stateChangeAttempts < 5) {
-                        if(card.getIssue().isClosed()) {
-                            stateChangeAttempts++;
-                            mEditor.openIssue(this, mParent.mProject.getRepoPath(),
-                                    card.getIssueId()
-                            );
-                        } else {
-                            mEditor.closeIssue(this, mParent.mProject.getRepoPath(),
-                                    card.getIssueId()
-                            );
-                        }
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_ISSUE_EDIT, bundle);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                mParent.mRefresher.setRefreshing(false);
             }
         };
 
@@ -22710,7 +22614,6 @@ public class ColumnFragment extends ViewSafeFragment {
     public void editIssue(Card card, Issue issue, @Nullable String[] assignees, @Nullable String[] labels) {
         mParent.mRefresher.setRefreshing(true);
         mEditor.updateIssue(new Editor.UpdateListener<Issue>() {
-            int issueCreationAttempts = 0;
 
             @Override
             public void updated(Issue issue) {
@@ -22718,67 +22621,29 @@ public class ColumnFragment extends ViewSafeFragment {
                 mAdapter.updateCard(card);
                 mParent.mRefresher.setRefreshing(false);
                 resetLastUpdate();
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                mAnalytics.logEvent(Analytics.TAG_ISSUE_EDIT, bundle);
             }
 
             @Override
             public void updateError(APIHandler.APIError error) {
-                Logger.i(TAG, "updateError: " + error.toString());
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                } else {
-                    if(issueCreationAttempts < 5) {
-                        issueCreationAttempts++;
-                        mEditor.updateIssue(this, issue.getRepoFullName(), issue, assignees,
-                                labels
-                        );
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_ISSUE_EDIT, bundle);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                mParent.mRefresher.setRefreshing(false);
             }
         }, card.getIssue().getRepoFullName(), issue, assignees, labels);
     }
 
     private void convertCardToIssue(Card oldCard, Issue issue) {
         mEditor.deleteCard(new Editor.DeletionListener<Card>() {
-            int cardDeletionAttempts = 0;
 
             @Override
             public void deleted(Card card) {
                 createIssueCard(issue, oldCard.getId());
                 resetLastUpdate();
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                mAnalytics.logEvent(Analytics.TAG_CARD_DELETION, bundle);
             }
 
             @Override
             public void deletionError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                } else {
-                    if(cardDeletionAttempts < 5) {
-                        cardDeletionAttempts++;
-                        mEditor.deleteCard(this, oldCard);
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_CARD_DELETION, bundle);
+                mParent.mRefresher.setRefreshing(false);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
             }
         }, oldCard);
     }
@@ -22790,7 +22655,6 @@ public class ColumnFragment extends ViewSafeFragment {
     private void createIssueCard(Issue issue, int oldCardId) {
         mParent.mRefresher.setRefreshing(true);
         mEditor.createCard(new Editor.CreationListener<Pair<Integer, Card>>() {
-            int issueCardCreationAttempts = 0;
 
             @Override
             public void created(Pair<Integer, Card> val) {
@@ -22801,28 +22665,12 @@ public class ColumnFragment extends ViewSafeFragment {
                     mAdapter.updateCard(val.second, oldCardId);
                 }
                 resetLastUpdate();
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_SUCCESS);
-                mAnalytics.logEvent(Analytics.TAG_CARD_TO_ISSUE, bundle);
             }
 
             @Override
             public void creationError(APIHandler.APIError error) {
-                if(error == APIHandler.APIError.NO_CONNECTION) {
-                    mParent.mRefresher.setRefreshing(false);
-                    Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                } else {
-                    if(issueCardCreationAttempts < 5) {
-                        issueCardCreationAttempts++;
-                        mEditor.createCard(this, mColumn.getId(), issue.getId());
-                    } else {
-                        Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
-                        mParent.mRefresher.setRefreshing(false);
-                    }
-                }
-                final Bundle bundle = new Bundle();
-                bundle.putString(Analytics.KEY_EDIT_STATUS, Analytics.VALUE_FAILURE);
-                mAnalytics.logEvent(Analytics.TAG_CARD_TO_ISSUE, bundle);
+                Toast.makeText(getContext(), error.resId, Toast.LENGTH_SHORT).show();
+                mParent.mRefresher.setRefreshing(false);
             }
         }, mColumn.getId(), issue.getId());
     }
@@ -22976,7 +22824,6 @@ import com.tpb.projects.common.NetworkImageView;
 import com.tpb.projects.flow.IntentHandler;
 import com.tpb.projects.markdown.Formatter;
 import com.tpb.projects.util.Analytics;
-import com.tpb.projects.util.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23027,12 +22874,6 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
         mNavListener = navListener;
         mRefresher = refresher;
         mRefresher.setRefreshing(true);
-        mRefresher.setOnRefreshListener(() -> {
-            mPage = 1;
-            mMaxPageReached = false;
-            notifyDataSetChanged();
-            loadCards(true);
-        });
     }
 
     void setColumn(int columnId) {
@@ -23104,7 +22945,6 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
     }
 
     void addCardFromDrag(int pos, Card card) {
-        Logger.i(TAG, "createCard: Card being added to " + pos);
         mCards.add(pos, Pair.create(card, null));
         notifyItemInserted(pos);
         final int id = pos == 0 ? -1 : mCards.get(pos - 1).first.getId();
@@ -23152,8 +22992,8 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
         return -1;
     }
 
-    ArrayList<Card> getCards() {
-        final ArrayList<Card> cards = new ArrayList<>();
+    List<Card> getCards() {
+        final List<Card> cards = new ArrayList<>();
         for(Pair<Card, SpannableString> p : mCards) cards.add(p.first);
         return cards;
     }
@@ -23471,6 +23311,7 @@ import com.tpb.projects.util.search.ArrayFilter;
 import com.tpb.projects.util.search.FuzzyStringSearcher;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import butterknife.ButterKnife;
 
@@ -23481,11 +23322,11 @@ import butterknife.ButterKnife;
 class ProjectSearchAdapter extends ArrayAdapter<Card> {
     private static final String TAG = ProjectSearchAdapter.class.getSimpleName();
 
-    private final ArrayList<Card> data;
+    private final List<Card> data;
     private ArrayFilter<Card> mFilter;
     private final FuzzyStringSearcher mSearcher;
 
-    public ProjectSearchAdapter(Context context, @NonNull ArrayList<Card> data) {
+    public ProjectSearchAdapter(Context context, @NonNull List<Card> data) {
         super(context, R.layout.viewholder_search_suggestion, data);
         this.data = data;
         final ArrayList<String> strings = new ArrayList<>();
