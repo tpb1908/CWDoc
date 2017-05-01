@@ -1183,6 +1183,7 @@ The client must implement the following features:
                             <li>Display short code blocks as monospaced text blocks within the text body</li>
                             <li>Display large code blocks as placeholders for a separate view</li>
                         </ol>
+                    </li>
                     <li>Parse horizontal rules and create the correct spans </li>
                     <li>Images
                         <ol type="1">
@@ -1902,7 +1903,7 @@ In this case, a ```post``` call is made, which will add a runnable to the UI thr
 
 When the ```NetworkImageView``` is able to set the image, it checks whether the ```Bitmap``` is non null, and sets either the ```Bitmap``` or the default resource accordingly.
 
-The ```NetworkImageView``` is used to display user avatars, in objectives 2.i.b, 2.v, 2.vi, 3.iv.c, 3.v.b.3, 3.v.b.4, 4.i.e, 4.i.i, 4.ii.a, 5.i.c, 5.iii.a.1, and 6.iv.b.6.
+The ```NetworkImageView``` is used to display user avatars, in objectives 2.a.ii, 2.e, 2.f, 3.d.iii, 3.e.ii.3, 3.e.ii.6, 4.a.v, 4.a.vii, 4.a.xi, 4.b.i.1, 5.a.iii, 5.c.i.1, and 6.d.ii.6.
 
 
 #page
@@ -2000,7 +2001,7 @@ The ```expand``` and ```collapse``` methods are used to animate ```Views```.
 ```expand``` animates a ```View``` from no height to its measured height, and ```collapse``` shrinks a ```View``` from its measured height to no height before hiding it. 
 
 ```flashViewBackground``` is a method used to fade the background colour of a ```View``` from its original colour to a highlight colour, and back again.
-This method can be used to highlight an important ```View```, such as when jumping to a search result, such as in objective 6.ix.c.
+This method can be used to highlight an important ```View```, such as when jumping to a search result, such as in objective 6.i.iii.
 
 The next four methods are used for unit conversion, converting pixels to density independent pixels, as well as converting density independent pixels or scale independent pixels to pixels.
 
@@ -2242,7 +2243,7 @@ Otherwise the ```fail``` method is called.
 
 ### Showing a chooser
 
-In the event that the ```Interceptor``` fails to determine an ```Activity``` to handle a particular URL, it should suggest other applications which might be able to handle the URL, objective 7.ii.
+In the event that the ```Interceptor``` fails to determine an ```Activity``` to handle a particular URL, it should suggest other applications which might be able to handle the URL, objective 7.b.
 
 In order to open a link in another app a chooser dialog should be shown.
 This is done by building an implicit ```Intent```, not declaring the class to handle the ```Intent``` but allowing the user to choose from the available applications.
@@ -2358,7 +2359,7 @@ The next three checks deal with formatting GitHub's checkbox lists to use ballot
 The first check is for an upper or lowercase "x" contained between two square braces. The last two two characters are removed from the builder and the unicode "ballot box with check" is added.
 The second two checks are both for ballot boxes without checks, either written as "[]" or "[ ]".
 
-This fulfills objective 9.ii.g.
+This fulfills objective 9.b.vii.
 
 The next check is for image links, which need to be parsed both in order to deal with links relative to the repository and to add spacing around them as they will be displayed as images.
 
@@ -2390,7 +2391,7 @@ Once the name has been added, the counter position is returned.
 
 If the name is not valid, the loop breaks, "@" character is appended, and the original position is returned.
 
-This method completes objective 9.ii.d.
+This method completes objective 9.v.iv.
 
 #### Issue links
 
@@ -2404,7 +2405,7 @@ If we are at the end of the character array the final character must be checked 
 The link is built, and if the counter is not at the end of the array the original whitespace is appended.
 If the character was not a valid issue link, the hash, "#", is appended and the original index is returned.
 
-This method completes objective 9.ii.e.
+This method completes objective 9.b.v.
 
 #### Relative links
 
@@ -2435,7 +2436,7 @@ Finally, the closing bracket and breaks are added.
 
 If the URL does not end with an image extension, it is just added to the builder.
 
-This method completes objective 9.ii.c.1.
+This method completes objective 9.b.iii.1.
 
 #### Emoji
 
@@ -2471,7 +2472,7 @@ The two ```HashMaps``` can later be used to retrieve ```Emojis``` by their tags 
 If another colon is reached, the ```Emoji``` is loaded from ```EmojiLoader``` and if it is non null, the emoji unicode string is added to the parsed text.
 Otherwise the colon is appended and the original position is returned.
 
-This method completes objective 9.ii.f.
+This method completes objective 9.b.vi.
 
 ### Text Utilities and Android Regex patterns
 
@@ -2523,7 +2524,7 @@ The method uses a matcher from the SPACED_MATCH_PATTERN and sets a ```CleanURLSp
 
 The ```Spanned.SPAN_EXCLUSIVE_EXCLUSIVE``` flag means that if a character or another span is inserted at either end of the ```CleanURLSpan``` it will not be viewed as part of the ```CleanURLSpan```.
 
-This method completes objective 9.iii.
+This method completes objective 9.c.
 
 #### Multiple pattern matching and string escaping
 
@@ -2564,7 +2565,7 @@ Each RGB value is then used in the relative luminance formula to determine wheth
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/TextUtils.java $public static int getTextColorForBackground$"
 
-This method completes objective 9.ii.h.
+This method completes objective 9.b.viii.
 
 #### Other utility methods
 
@@ -2891,7 +2892,7 @@ The ```Paint``` colour is then changed to light grey and the new rectangle is dr
 
 The only caveat to this method is that if the span it must be ensured that there is an empty line for the ```HorizontalRuleSpan``` to fill.
 
-This span completes objective 9.ii.b
+This span completes objective 9.b.ii
 
 #### QuoteSpan
 
@@ -3077,7 +3078,7 @@ The background is an opaque grey rectangle which fills the full width of the ```
 
 ![InlineCodeSpan](http://imgur.com/vP5nytU.png)
 
-This span completes objective 9.ii.a.1
+This span completes objective 9.b.i.1
 
 #### Dealing with more complex content
 
@@ -3147,7 +3148,7 @@ This allows the ```BitMap``` to be loaded and the correct strings to be loaded f
 
 ![CodeSpan](http://imgur.com/vC8m9BG.png)
 
-This span completes objective 9.ii.a.2
+This span completes objective 9.b.i.2
 
 ##### TableSpan
 
@@ -3160,7 +3161,7 @@ code and a language.
 
 ![Table span](http://imgur.com/NDA1ydi.png)
 
-This span completes objective 9.ii.i
+This span completes objective 9.b.xi
 
 ##### ClickableImageSpan
 
@@ -3169,7 +3170,7 @@ It also ensures that the actual drawable is returned from a ```URLDrawable```, w
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/views/spans/ClickableImageSpan.java"
 
-This span completes objective 9.ii.c.3, as well as 9.ii.c.5 once click handling is explained below.
+This span completes objective 9.b.iii.3, as well as 9.b.iii.5 once click handling is implemented below.
 
 ##### Handling clicks
 
@@ -3252,7 +3253,7 @@ They can be replaced with any other implementation of their respective interface
 The ```CodeDialog``` creates a dialog to display a ```HighlightJsView```, which is a ```WebView``` with the highlightjs library embedded.
 It also attempts to find the correct language for highlighting the code.
 
-This completes objective 9.ii.a.2
+This completes objective 9.b.i.2
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/ImageDialog.java"
 
@@ -3260,7 +3261,7 @@ The ```ImageDialog``` is used to show an image across the entire screen, while m
 
 It uses a ```FillingImageView``` which overrides the ```onMeasure``` method of ```ImageView``` to ensure that the image aspect ratio is maintained.
 
-This completes objective 9.ii.c.5
+This completes objective 9.b.iii.5
 
 #import "markdowntextview/src/main/java/com/tpb/mdtext/dialogs/FillingImageView.java"
 
@@ -3276,7 +3277,7 @@ height matching the ratio calculated earlier.
 
 The ```TableDialog``` uses the ```MarkdownWebView``` created earlier to display the HTML of the table in a ```WebView``` using the GitHub style CSS.
 
-This dialog completes objective 9.ii.i
+This dialog completes objective 9.b.xi.
 
 ##### Image loading and caching 
 
@@ -3330,7 +3331,7 @@ If the ```DrawableCatcher``` is non-null, the drawable and URL are passed to it.
 
 Finally, in order to draw the ```URLDrawable``` the container is invalidated and its text is set to its current text to force a layout refresh.
 
-This completes objective 9.ii.c.1, 9.ii.c.2, and 9.ii.c.4.
+This completes objective 9.b.iii.1, 9.b.iii.2, and 9.b.iii.4.
 
 ###### Loading images from Assets and Resources
 
@@ -4243,7 +4244,7 @@ Finally, the result ```Intent``` is created, the emoji alias is added as an extr
 
 The ```EditorActivity``` is used across multiple objectives.
 
-3.v.f, 3.v.g, 4.ii.b, 4.ii.c, 4.iii, 5.iii.b, 5.iii.c, 6.v, 6.vi, 6.vii, and 6.viii. 
+3.e.vi, 3.v.vii, 4.b.ii, 4.b.iii, 4.c, 5.c.ii, 5.c.iii, 6.e, 6.f, 6.g, and 6.h. 
 
 The ```EditorActivity``` is used for editing cards, comments, issues, and projects.
 
@@ -4679,7 +4680,7 @@ The ```UserInfoFragment``` completes all objectives in 2.a
 
 ### UserReposFragment
 
-The ```UserReposFragment``` is used to display the repositories which a user has contributed to.
+The ```UserReposFragment``` is used to fullfill objective 2.b, displaying the repositories which a user has contributed to.
 
 As multiple different ```Fragments``` contain only a ```SwipeRefreshLayout``` and a ```RecyclerView``` there is no need to create an individual layout file for each of them.
 Instead they can each use the same layout file:
@@ -4748,7 +4749,7 @@ Otherwise, the ```Repositories``` are added to the end of the array if they do n
 
 ```ensureLoadOfPinnedRepos``` iterates through each of the repository names returned by ```RepoPinChecker.findNonLoadedPinnedRepositories``` (That's a bit of a mouthful), and loads each of the ```Repositories``` individually, inserting them into the array and ```RepoPinChecker``` if they do not already exist there, and calling ```notifyItemInserted(0)```.
 
-#### RepoPinChecker
+#### Objective 2.b.vi: RepoPinChecker
 
 The ```RepoPinChecker``` which has been reference above is a class which controls a ```SharedPreferences``` instance and manages the pinned repositories.
 Each time a user is loaded in ```RepositoriesAdapter``` the ```SharedPreferences``` is opened with the "PINS" key, and from this map a delimited string is loaded using the user login as a key.
@@ -5552,6 +5553,10 @@ The ```CommitCommentsAdapter``` loads and binds each comment, as well as adding,
 
 ```onBindViewHolder``` builds the span with information about the comment, such as the commenter, the comment time, whether the comment has been edited, and reactions to the comment.
 The result is then cached with the ```Comment```.
+
+Comments in the ```CommitCommentAdapter``` are formatted in the same way as any other markdown, using the repository path for the ```Commit```.
+
+![Commit comments](http://imgur.com/GS8kkqi.png)
 
 #import "app/src/main/java/com/tpb/projects/commits/CommitCommentsAdapter.java"
 
@@ -6450,7 +6455,7 @@ The HTML above produced the following set of background and text colours in a ``
 
 The first two objectives are clearly met, and the third is also met as all of the text is legible.
 
-### Objective 9.ii.i: Table placeholders
+### Objective 9.b.i: Table placeholders
 
 Tables are to be displayed as placeholders in the same way as large code blocks.
 They should show a table dialog when clicked, and maintain markdown formatting with in each table element.
@@ -6537,7 +6542,7 @@ The card is displayed as shown below:
 
 
 
-### Objective 9.iii: Link handling
+### Objective 9.c: Link handling
 
 #### Part A- Matching URIs
 
@@ -6680,7 +6685,7 @@ This block contained the test in part A, without any modifications:
 
 ![Code block](http://imgur.com/JEgAYhm.png)
 
-### Objective 9.iv: List formatting
+### Objective 9.d: List formatting
 
 In order to test this objective, I used three different lists declared in different ways.
 
