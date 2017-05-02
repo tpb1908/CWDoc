@@ -5934,9 +5934,13 @@ If they are not the same ```moveCardFromDrag``` is called on the source adapter 
 
 #### ProjectSearchAdapter
 
+The ```ProjectSearchAdapter``` is the adapter for displaying dropdown items when searching the project.
+
 #import "app/src/main/java/com/tpb/projects/project/ProjectSearchAdapter.java"
 
+It retrieves its items from the ```ArrayFilter``` and binds each one with  the first line of the ```Card``` displaying the issue number and state drawable if the ```Card``` contains an ```Issue```.
 
+The searchable information is built from the list of ```Cards``` collected from each ```ColumnFragment``` and contains note text and issue numbers, labels, and bodies.
 
 ## Notifications
 
@@ -7272,7 +7276,7 @@ Throughtout the development process of the app I have added content to the test 
 
 The app opened all of these links succesfully, launching the correct ```Activities``` with the correct state.
 
-Objective 7.ii also states that the app should gracefully reject unsupported links.
+Objective 7.a also states that the app should gracefully reject unsupported links.
 
 | Test | Data | Expected Result | Result | 
 | --- | --- | --- | --- |
