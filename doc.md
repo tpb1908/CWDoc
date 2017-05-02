@@ -5806,6 +5806,8 @@ Of course, this would result in near instantaneous scrolling to the final ```Col
 
 ```dragLeft``` and ```dragRight``` simply check that the movement is possible, and set the ```ViewPager``` position.
 
+At this point it is necessary to explain the structure of the ```ColumnFragment``` and the ```Views``` contained within it prior to any further discussion about drag shadows.
+
 ### ColumnFragment
 
 #import "app/src/main/java/com/tpb/projects/project/ColumnFragment.java"
