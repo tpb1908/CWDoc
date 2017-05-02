@@ -22112,6 +22112,9 @@ At this point it is necessary to explain the structure of the ```ColumnFragment`
 
 ### ColumnFragment
 
+The ```ColumnFragment``` manages displaying the information about a particular column, as well as the cards present in the column.
+It also manages creating, deleting, and moving cards.
+
 **ColumnFragment.java**
 ``` java
 package com.tpb.projects.project;
@@ -22790,7 +22793,32 @@ public class ColumnFragment extends ViewSafeFragment {
 
 ```
 
+```enableAccess``` is called once the access level is determined.
+If the access level is sufficient to allow the authenticated user to edit the project, listeners for drag and drop actions are added.
+
+```addCard``` and ```removeCard``` are called from the ```ProjectActivity``` and add or remove cards from the adapter before calling ```resetLastUpdate``` to display the time that a card was last changed.
+
+```recreateCard``` is called if the user accidentally deletes a card. When a card is deleted, a ```SnackBar``` is shown with an undo button, allowing the card to be recreated.
+
+```attemptMoveTo``` is called in order to scroll the ```RecyclerView``` to a particular position when the ```ProjectActivity``` is launched with a card id.
+The adapter is checked to determine whether it contains the card, and if so the ```View``` is flashed.
+
+As the ```RecyclerView``` is within a ```NestedScrollView``` it cannot scroll by itself. Instead, the ```NestedScrollView``` must be scrolled.
+In order to find the scroll position, the sum of the ```ViewHolders``` below the position of the launched card is found, and the ```NestedScrollView``` is moved to this position.
+
+In ```onActivityResult```, issue cards are managed. In the case of an existing issue card, ```editIssue``` is called. Otherwise, an ```Issue``` is created, and ```convertCardToIssue``` is called.
+
+```editCard``` calls ```Editor.updateCard``` to update the ```Card``` model before notifying the adapter and calling ```resetLastUpdate```.
+
+```newCard``` calls ```createdCard``` with the id of the current column and the note text for the card, calling ```addCard``` with the resulting ```Card```.
+
+```toggleIssueState``` is called when the options menu item to change the state of the issue attached to a particular card.
+
+```convertCardToIssue``` deletes the ```Card```  and then calls ```createIssueCard``` to create the new ```Issue``` from the card.
+
 #### CardAdapter
+
+The ```CardAdapter``` manages the loading and binding of ```Cards``` as well as adding the ```OnDragListeners``` to them for moving cards between columns.
 
 **CardAdapter.java**
 ``` java
@@ -23168,7 +23196,62 @@ class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardHolder> implement
 
 ```
 
-#### CardDragListener
+```listLoadComplete``` performs the usual checks for the page number, and notifies the ```ColumnFragment``` parent that the data has been loaded.
+
+```addcard``` is used for inserting a new card at the sart of the adapter.
+
+The two ```addCardFromDrag``` methods are used to add a card, either to the start of the adapter or to a specific position in the adapter.
+The ```addCardFromDrag``` method which takes a position parameter calls ```Editor.movecard``` with the id of the card being dropped onto, as this is required for inserting the card at a non-zero position.
+
+```moveCardFromDrag``` manages moving a ```Card``` from one position to the other when it is dragged. It moves the ```Pair``` of the ```Card``` and its ```SpannableString``` cache to the new position before calling ```Editor.moveCard```.
+
+In ```onBindviewHolder``` the ```OnLongClickListener``` is added to the itemView to create the ```View``` shadow and begin a drag and drop which will call the ```CardDragListener``` which is attached to the itemView with a reference to the ```NavigationDragListener``` from the parent ```ColumnFragment```
+
+##### Loading issue cards
+
+```Card``` objects which are linked to an issue do not contain the issue, only its id.
+
+As such the ```CardHolder``` layout contains a ```ProgressBar``` spinner which is shown while the request is made to load the ```Issue```.
+The callback once the ```Issue``` has been loaded sets the ```Card``` data at the position and calls ```notifyItemChanged``` which will call ```bindIssueCard``` as the ```Issue``` now exists.
+
+#### CardDragListener and the ACTION_DRAG_ENTERED event
+
+Prelude:
+- The ```ProjectActivity``` contains a single ```NavigationDragListener``` which is attached to:
+    - The column header cards
+    - The ```RecyclerView``` in each ```ColumnFragment```
+    - Each card in each ```ColumnFragment```
+    - The background layout of each ```ColumnFragment```
+- The ```NavigationDragListener``` handles:
+    - Dragging the column header cards to the screen edge to trigger page scrolls
+    - Dragging the ```CardHolder``` cards to the screen edge to trigger page scrolls
+    - Draggint the ```CardHolder``` cards up and down across other cards to trigger ```RecyclerView``` scrolls
+- Each of the ```CardDragListeners``` feed their events to the ```NavigationDragListener```
+
+##### ACTION_DRAG_ENTERED
+
+As was stated before this event is triggered when the ```View``` shadow enters the bounds of another ```View``` with an ```OnDragListener```.
+
+The ```NavigationDragListener``` does the following:
+- Checks that the ```View``` being entered has the viewholder_card id
+- Casts the parent ```RecyclerView``` of the ```View``` being entered
+- Casts the ```CardAdapter``` of the ```RecyclerView```
+
+It then finds the hit rectangle of theparent of the parent of the ```RecyclerView```, which is a ```NestedScrollView```.
+
+Next, it initialises two indices, first and last.
+It iterates through each item in the adapter, using ```getLocalVisibleRect``` with the extracted hit rectangle to check if the ```CardHolder``` is one screen.
+If the ```CardHolder``` is not in the hit rectangle, and the first posiion has been found last is set.
+
+The index of the target ```View``` is then found by searching the ```CardAdapter``` for the tag.
+The relative position in the target ```View``` is then found from the event y position which is relative to the view and the ```View``` y position.
+If the target position in the adapter is the first or last visible item, a scroll may happen.
+
+In either case the actual position on screen is found, and the actual position plus the relative position is checked to see if it is in the outer 10% of the screen, in which case the ```dragUp``` or ```dragDown``` methods are called.
+
+##### CardDragListener
+
+The ```CardDragListener``` manages the drop events when cards are shadowed and dragged around.
 
 **CardDragListener.java**
 ``` java
@@ -23289,6 +23372,35 @@ class CardDragListener implements View.OnDragListener {
 }
 
 ```
+
+It first passes any events to the ```NavigationDragListener```.
+Next, it checks that the ```View``` being dragged over is not a column header tag and is not the source of the shadow ```View```.
+
+##### ACTION_DRAG_ENTERED and ACTION_DRAG_EXITED
+
+When a ```View``` is entered, if it is a ```CardHolder``` or an empty ```RecyclerView```, its background colour is saved and the ```View``` background is then set to the accent colour.
+
+When the ```View``` is exited, the ```View``` background colour is reset to its ```Drawable``` value when it was first entered.
+
+##### ACTION_DROP
+
+When the shadowed ```View``` is dropped, the card is moved.
+The source ```RecyclerView``` is cast from the parent ```View``` of the target.
+The source ```CardAdapter``` is cast from the source ```RecyclerView``` adapter.
+The position of the source is found, and the ```Card``` is extracted from the source adapter.
+If the ```View``` id is viewholder_card the target ```RecyclerView``` is the parent of the ```View```. Otherwise it is the ```View``` itself.
+
+The target ```CardAdapter``` is then cast.
+If the ```View``` is an empty ```RecyclerView```, the movement is easy as the ```Card``` is removed from the source adapter and ```addCardFromDrag``` is called on the target adapter.
+
+Otherwise, the logic is more complex as cards may need to be moved.
+The target position is found from the target adapter.
+If the event has occured in the bottom half of the target ```View```, the target position is the position below. Otherwise, the target position is the positio of the target ```View```.
+
+If the source ```RecyclerView```is not the target ````Recyclerview```, ```addCardFromDrag``` is called on the target, and ```removeCard``` is called on the source.
+Otherwise, the positions are checked.
+If they are not the same ```moveCardFromDrag``` is called on the source adapter to move the ```CardHolder``` within its curent adapter.
+
 
 #### ProjectSearchAdapter
 
