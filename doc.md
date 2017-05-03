@@ -7280,3 +7280,27 @@ Objective 7.a also states that the app should gracefully reject unsupported link
 
 | Test | Data | Expected Result | Result | 
 | --- | --- | --- | --- |
+
+
+
+
+
+
+
+# Evaluation
+
+## Completion of requirements
+
+The project has met each of the sets of the objectives initially set.
+
+| Objective set | Evaluation |
+| --- | --- |
+| 1- Login |  |
+
+## Feedback and reflection
+
+### Evaluation of the project
+
+### Improvements to the project
+
+### Analysis of possible improvements
