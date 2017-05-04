@@ -7479,4 +7479,44 @@ for((name, number, email, age) in listOfContacts) {
 }
 ``` 
 
+Data classes would have greatly increased development speed, and along with Kotlin's null safety reduced most model classes to simple declarations.
+
+##### Co-routines
+
+While some markdown processing was offloaded to a separate thread, the solution was not ideal.
+The thread did remove work which would normally run on the UI thread and cause stutter, but a single thread is not an optimal solution for highly parallel work such as parsing each of the cards in a project.
+
+Coroutines are ideal for this workload.
+On a desktop, millions of simple coroutines can be run at once.
+On a mobile device this number is smaller, but still orders of magnitudes larger than the number required to allow processing each section of markdown in its own coroutine.
+
+Moving parsing to coroutines within the ```MarkdownTextView``` and ```MarkdownEditText``` classes would ensure that no parsing is run on the UI thread, eliminating any latency before animations which is sometimes triggered when an issue or commit with a large body is parsed while the transition animation for the ```Activity``` is running.
+
 ### Analysis of possible improvements
+
+The first suggestion for improvement was to implement a combined view of events and issues relevant to the authenticated user.
+Much of the structure for this is already in place:
+- There are bindings for a list of issues
+- There are bindings for some forms of events
+
+These feeds could be added as ```Fragments``` only displayed for the authenticated user.
+
+The events feed is an area in which Kotlin data classes would be especially useful, as there are 34 different event types with a wide range of data.
+
+The second suggestion for improvement was to add further information to notifications.
+
+There is very little information given via the notifications API, which is expected as it is designed for polling.
+In order to add more information, extra requests would need to be made.
+
+- The user that mentioned the authenticated user in a mentioned event can be found by loading the comments and searching them for the last mention of the authenticated user
+- The latest comments on a comment thread from a comment event can be displayed in a notification in the same way that many email clients display short snippets of emails in their notifications
+- The assign event issue can be loaded by loading the issues for the authenticated user and checking for the event repository, a snippet of the issue content can then be displayed in the notification
+
+
+The user also mentioned making the notifications more clearly actionable.
+This can be quite easily achieved by using the notification builder to add inline buttons, and adding ```PendingIntents``` to perform the read actions.
+These buttons could also be specific to an event type, for example allowing an issue to be dismissed from the notification.
+
+Other than just displaying extra content, Android N brought support for quick replies in notifications.
+![Quick reply](https://developer.android.com/images/android-7.0/inline-type-reply.png)
+This would allow the user to reply to an event on an issue or commit without having to leave their current application.
