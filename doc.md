@@ -7295,12 +7295,38 @@ The project has met each of the sets of the objectives initially set.
 
 | Objective set | Evaluation |
 | --- | --- |
-| 1- Login |  |
+| 1 - Login |  |
+| 2 - Users |  |
+| 3 - Repositories | 
+| 4 - Issues | |
+| 5 - Commits | |
+| 6 - Projects | |
+| 7 - Link handling | |
+| 8 - Notifications | |
+| 9 - Markdown | |
+| 10 - Markdown editing | |
 
 ## Feedback and reflection
 
 ### Evaluation of the project
 
+The app provides a faster and easier to use method for browsing and editing content on GitHub.
+The pagination of content provided a much better experience than the mobile website, as it does not require re-loading the entire page when switching between two different pages.
+
+The markdown editor was particularly useful for formatting messages without having to switch the keyboard layout and look for symbols, and image uploading through the app was much quicker than uploading an image normally which wouuld require moving to another app, copying the link, and then inserting it into the edtior.
+
+The notification service allowed me to be informed of updates to my repositories without having to check the website periodically.
+
 ### Improvements to the project
+
+#### From user feedback
+
+The primary activity displays information about my repositories, however it doesn't show changes to the repositories.
+It would be useful to be able to view all of the notification events that have happened on my repositories as well as issues that I have opened.
+
+While the notification system showed notifications quickly it didn't always provide much information about the event that had happened, requiring it to be opened to view the content.
+It also wasn't clear that notifications had been dismissed, and it would be more useful to have buttons on the notification to mark it as read.
+
+#### Other improvements
 
 ### Analysis of possible improvements
