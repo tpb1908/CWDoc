@@ -25177,4 +25177,154 @@ It also wasn't clear that notifications had been dismissed, and it would be more
 
 #### Other improvements
 
+Given the opportunity to rewrite this product I would have structured it differently, allowing me to implement features much more easily.
+
+The largest change would be writing the project in Kotlin rather than Java.
+
+Kotlin is a language with runs on the Java Virtual Machine and brings various improvements over Java while maintaining performance.
+Kotlin has an increased advantage on Android as Android does not support language features past Java 7 meaning that it does not include support for:
+- The ```forEach``` call in the ```Iterable``` interface.
+- Default and static methods in interfaces
+- Lambda expressions for anonymous interfaces and classes.
+- The stream API:
+    - The stream API brings filter, map, and reduce style operations to collections
+    - It also allows parallel execution
+- The Time API which replaces the broken ```Date``` system
+- Various other improvements
+
+Kotlin brings these features as well as many more useful ones:
+- Null safety:
+    - All types are non-nullable by default
+    - The compiler enforces null checks before accessing nullable variables
+    - This can be done with the chainable safe call operator ```nullable?.methodCall()``` which performs a call if the object is non-null
+- Extension functions
+    - Rather than defining static utility methods, these methods can be directly added to types
+    - An extension function can be added to a type without directly extending it, and this function can then be called as if it were a member function
+- Higher-order functions and lambdas:
+     - Rather than having to define an interface, and pass an instance of an implementation of that interface higher order functions can be used
+     - Functions can be stored for later use, or created within a function
+- Data classes:
+     - Data classes can be used to generate all getters and setters in a single line
+     - The compiler will also generate members for equality, string conversion, and object copying
+- Coroutines:
+    - Coroutines enable operations to be executed without blocking a thread
+    - Coroutines can be suspended without blocking a thread and without any context switching
+- Type aliases:
+    - Type aliases allow simplifying code by removing the need for repeatedly stating types
+
+Particularly useful for this project are data classes and coroutines.
+
+##### Data classes 
+
+Suppose I need a model to hold a simple set of information about a contact.
+This contact model must containt the following information:
+- Name
+- Number
+- Email address
+- Age
+
+In Java this class would be constructed as follows:
+
+``` java
+class Contact {
+
+    private String name;
+    private String number;
+    private String email;
+    private int age;
+
+    Contact(String name, String number, String email, int age) {
+        this.name = name;
+        this.number = number;
+        this.email = email;
+        this.age = age;
+    }
+
+    String getName() {
+        return name;
+    }
+
+    String getNumber() {
+        return number;
+    }
+
+    String getEmail() {
+        return email;
+    }
+
+    int getAge() {
+        int age;
+    }
+
+    void setName(String name) {
+        this.name = name;
+    }
+
+    void setNumber(String number) {
+        this.number = number;
+    }
+
+    void setEmail(String email) {
+        this.email = email;
+    }
+
+    void setAge(int age) {
+        this.age = age;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if(this == o) return true;
+        if(o == null || getClass() != o.getClass()) return false;
+
+        final Contact c = (Contact) o;
+        return (name != null  && name.equals(c.name)) && 
+            (number != null && number.equals(c.number)) && 
+            (email != null && email.equals(c.email)) && 
+            (age == c.age);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = name == null ? 0 : name.hashCode();
+        result = 31 * result + (number == null ? 0 : number.hashCode());
+        result = 31 * result + (email == null ? 0 : email.hashCode());
+        return 31 * result + age;
+    }
+
+    @Override
+    public String toString() {
+        return "Contact{" +
+            "name='" + name + "\'" +
+            ", number='" + number + "\'" +
+            ", email='" + email + "\'" + 
+            ", age=" + age "\'" +
+            "}";
+    }
+}
+```
+75 lines for an object holding 4 values.
+On Android the parcelable interface would also be required in most cases, adding another 2 lines per variable, 3 functions and a static nested class.
+
+In Kotlin this entire class would be declared in 1 line:
+
+``` kotlin
+data class Contact(val name: String, val number: String, val email: String, val age: int)
+```
+
+The ```hashCode```, ```equals```, and ```toString``` methods are automatically generated along with ```copy```.
+
+Variables can be made final by writing val rather than var, and access modifiers can be used.
+
+The model can also be treated as a list.
+
+Suppose we have a list of ```Contact``` data models.
+The items can be iterated as follows:
+
+```kotlin
+for((name, number, email, age) in listOfContacts) {
+    print(name)
+}
+``` 
+
 ### Analysis of possible improvements
